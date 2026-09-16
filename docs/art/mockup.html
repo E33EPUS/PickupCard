@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>PickupCard 美术迭代 v3 — 现状 vs 精修</title>
+<style>
+:root {
+  --card-h: 30px;
+  --icon: 32px;
+  --badge-d: 48px;
+  --r-common:  #9aa4ad;
+  --r-uncommon:#ffd83d;
+  --r-rare:    #55ebff;
+  --r-epic:    #d78bff;
+  --enter-ms: 320ms;
+  --bump-ms: 300ms;
+  --exit-ms: 240ms;
+  --enter-ease: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --exit-ease: cubic-bezier(0.55, 0, 0.55, 0.2);
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+html, body { height: 100%; }
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", sans-serif;
+  background:
+    radial-gradient(1200px 500px at 30% 20%, #2b3a4a 0%, transparent 60%),
+    radial-gradient(900px 500px at 75% 70%, #24344d 0%, transparent 55%),
+    linear-gradient(180deg, #1b2431 0%, #141a24 60%, #0e131b 100%);
+  color: #cfd8e3;
+  overflow: hidden;
+}
+#panel {
+  position: fixed; top: 16px; left: 16px; z-index: 10;
+  background: rgba(10, 13, 18, 0.9);
+  border: 1px solid rgba(255,255,255,0.08);
+  border-radius: 12px; padding: 14px 16px;
+  display: flex; flex-direction: column; gap: 10px; width: 300px; font-size: 13px;
+}
+#panel h1 { font-size: 15px; color: #fff; }
+#panel h1 span { color: #55ebff; }
+#panel .lbl { color: #8a97a8; font-size: 12px; margin-top: 2px; }
+#panel .row { display: flex; gap: 6px; flex-wrap: wrap; }
+button {
+  background: rgba(255,255,255,0.07); color: #dfe7f0;
+  border: 1px solid rgba(255,255,255,0.12); border-radius: 8px;
+  padding: 5px 10px; cursor: pointer; font-size: 12.5px;
+}
+button:hover { background: rgba(255,255,255,0.14); }
+button.on { background: rgba(85,235,255,0.16); border-color: rgba(85,235,255,0.5); color: #aef2ff; }
+#params { font-size: 11.5px; color: #7f8c9d; line-height: 1.7; border-top: 1px dashed rgba(255,255,255,0.1); padding-top: 8px; }
+#hud {
+  position: fixed; right: 24px; bottom: 24px; z-index: 5;
+  display: flex; flex-direction: column; justify-content: flex-end; align-items: flex-end;
+  gap: 14px;
+}
+.card {
+  display: flex; align-items: center;
+  height: var(--card-h);
+  padding: 0 14px 0 12px;
+  border-radius: 999px;
+  position: relative;
+  animation: enter var(--enter-ms) var(--enter-ease) both;
+}
+.card.leaving { animation: leave var(--exit-ms) var(--exit-ease) both; }
+.badge {
+  width: var(--badge-d); height: var(--badge-d); border-radius: 50%;
+  display: grid; place-items: center; font-size: 26px;
+  position: absolute; left: 96px; top: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 2;
+  filter: drop-shadow(0 3px 5px rgba(0,0,0,0.5));
+}
+.info { display: flex; align-items: center; gap: 10px; width: 100%; height: 100%; }
+.count { font-weight: 700; font-size: 14px; letter-spacing: .4px; color: var(--accent); min-width: 34px; }
+.namePill {
+  display: flex; align-items: center; gap: 6px;
+  border-radius: 999px; padding: 3px 12px;
+  font-size: 13.5px; color: rgba(255,255,255,0.93);
+  white-space: nowrap;
+}
+.badge-new {
+  font-size: 9.5px; font-weight: 800; letter-spacing: 1.2px;
+  color: #0d1117; background: #55ebff; border-radius: 4px; padding: 1.5px 5px;
+}
+.endDot { width: 9px; height: 9px; border-radius: 50%; background: var(--accent); margin-left: auto; opacity: .9; }
+.crescent {
+  position: absolute; left: -18px; top: 50%; transform: translateY(-50%);
+  width: 26px; height: 26px; border-radius: 50%;
+  background: var(--accent);
+  -webkit-mask: radial-gradient(circle at 62% 50%, transparent 10px, #000 10.5px);
+          mask: radial-gradient(circle at 62% 50%, transparent 10px, #000 10.5px);
+}
+
+/* ================= 变体 A：现状（草图复刻 v2，环上叠环） ================= */
+.variant-a .card { background: rgba(15,18,26,.82); }
+.variant-a .card::before {  /* 双圈：外圈+内圈 */
+  content: ""; position: absolute; inset: 0; border-radius: 999px;
+  border: 2px solid var(--accent);
+  box-shadow: inset 0 0 0 3px transparent, inset 0 0 0 4.5px color-mix(in srgb, var(--accent) 55%, transparent);
+}
+.variant-a .card::after {   /* 微光 */
+  content: ""; position: absolute; inset: -2px; border-radius: 999px;
+  border: 2px solid color-mix(in srgb, var(--accent) 16%, transparent);
+}
+.variant-a .badge { background: color-mix(in srgb, var(--accent) 45%, rgba(10,13,19,.9)); border: 1.5px solid var(--accent); }
+.variant-a .namePill { border: 1px solid color-mix(in srgb, var(--accent) 60%, transparent); background: color-mix(in srgb, var(--accent) 10%, transparent); }
+
+/* ================= 变体 B：精修（层级重排，噪音砍半） ================= */
+.variant-b .card {
+  background: rgba(12, 15, 22, 0.90);
+  border: 1px solid color-mix(in srgb, var(--accent) 75%, transparent);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+.variant-b .card::after {  /* 顶部高光细线：玻璃感唯一残留 */
+  content: ""; position: absolute; left: 14%; right: 14%; top: 0; height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.18), transparent);
+}
+.variant-b .badge { background: rgba(9, 12, 18, 0.94); border: 1.5px solid color-mix(in srgb, var(--accent) 85%, transparent); }
+.variant-b .namePill { border: 1px solid color-mix(in srgb, var(--accent) 38%, transparent); background: rgba(255,255,255,0.03); }
+.variant-b .crescent { width: 20px; height: 20px; left: -14px;
+  -webkit-mask: radial-gradient(circle at 64% 50%, transparent 8px, #000 8.5px);
+          mask: radial-gradient(circle at 64% 50%, transparent 8px, #000 8.5px); }
+.variant-b .endDot { opacity: .75; }
+.variant-b.r-epic .card { box-shadow: 0 6px 18px rgba(0,0,0,.45), 0 0 16px -6px var(--accent); }
+
+/* 稀有度 */
+.r-common{--accent:var(--r-common)} .r-uncommon{--accent:var(--r-uncommon)}
+.r-rare{--accent:var(--r-rare)} .r-epic{--accent:var(--r-epic)}
+
+@keyframes enter { from { opacity: 0; transform: translateY(18px) scale(0.92); } to { opacity: 1; transform: none; } }
+@keyframes leave { to { opacity: 0; transform: translateY(12px) scale(0.94); } }
+@keyframes bump2 { 0% { transform: scale(1); } 40% { transform: scale(1.06); } 100% { transform: scale(1); } }
+</style>
+</head>
+<body class="variant-b">
+
+<div id="panel">
+  <h1>Pickup<span>Card</span> v3 美术迭代</h1>
+  <div class="lbl">对比</div>
+  <div class="row" id="variantRow">
+    <button data-v="variant-a">A 现状（草图复刻）</button>
+    <button data-v="variant-b" class="on">B 精修（提案）</button>
+  </div>
+  <div class="lbl">稀有度</div>
+  <div class="row">
+    <button onclick="spawn({name:'金苹果',icon:'🍏',r:'r-rare'},1)">稀有·金苹果</button>
+    <button onclick="spawn({name:'附魔金苹果',icon:'🍎',r:'r-epic'},1)">史诗·附魔金苹果</button>
+    <button onclick="spawn({name:'命令方块',icon:'🧱',r:'r-uncommon'},1)">罕见·命令方块</button>
+    <button onclick="spawn({name:'讲解石',icon:'🗿',r:'r-common'},2)">普通·讲解石</button>
+  </div>
+  <div class="row">
+    <button onclick="spawn({name:'钻石',icon:'💎',r:'r-rare'},64)">合并演示 ×64</button>
+    <button id="btnClear">清空</button>
+  </div>
+  <div id="params">
+    B 方案改动：微光默认关（只留史诗微呼吸）、双圈→单圈发丝线、
+    月牙收细、名字胶囊去填充、徽章改深色底。
+    <br>层级：图标 &gt; 名字 &gt; 数量 &gt; 装饰。
+  </div>
+</div>
+
+<div id="hud"></div>
+
+<script>
+const hud = document.getElementById('hud');
+function spawn(item, count = 1) {
+  const existing = [...hud.children].find(c => c.dataset.name === item.name);
+  if (existing) {
+    existing.dataset.count = (+existing.dataset.count) + count;
+    const c = existing.querySelector('.count');
+    c.textContent = 'x' + existing.dataset.count;
+    existing.style.animation = 'none'; void existing.offsetWidth;
+    existing.style.animation = 'bump2 .3s cubic-bezier(.34,1.56,.64,1)';
+    return;
+  }
+  const el = document.createElement('div');
+  el.className = `card ${item.r}`;
+  el.dataset.name = item.name; el.dataset.count = count;
+  el.innerHTML = `
+    <div class="crescent"></div>
+    <div class="badge">${item.icon}</div>
+    <div class="info">
+      <div class="count">x${count}</div>
+      <div class="namePill"><span>${item.name}</span></div>
+      <div class="endDot"></div>
+    </div>`;
+  hud.appendChild(el);
+  while (hud.children.length > 5) removeCard(hud.firstElementChild);
+}
+function removeCard(el) {
+  if (!el || el.classList.contains('leaving')) return;
+  el.classList.add('leaving');
+  setTimeout(() => el.remove(), 260);
+}
+setInterval(() => {
+  const oldest = hud.firstElementChild;
+  if (oldest && Date.now() - (+oldest.dataset.t || 0) > 3500) removeCard(oldest);
+  [...hud.children].forEach(c => { if (!c.dataset.t) c.dataset.t = Date.now(); });
+}, 400);
+document.getElementById('btnClear').onclick = () => [...hud.children].forEach(removeCard);
+document.getElementById('variantRow').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  [...e.currentTarget.children].forEach(x => x.classList.remove('on'));
+  b.classList.add('on');
+  document.body.classList.remove('variant-a', 'variant-b');
+  document.body.classList.add(b.dataset.v);
+});
+spawn({name:'金苹果',icon:'🍏',r:'r-rare'},1);
+spawn({name:'附魔金苹果',icon:'🍎',r:'r-epic'},1);
+spawn({name:'命令方块',icon:'🧱',r:'r-uncommon'},1);
+spawn({name:'讲解石',icon:'🗿',r:'r-common'},2);
+</script>
+</body>
+</html>

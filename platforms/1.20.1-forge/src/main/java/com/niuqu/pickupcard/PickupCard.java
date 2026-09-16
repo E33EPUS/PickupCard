@@ -1,11 +1,11 @@
 package com.niuqu.pickupcard;
 
 import com.niuqu.pickupcard.config.PickupCardConfig;
-import com.niuqu.pickupcard.ui.PickupBoard;
+import com.niuqu.pickupcard.hud.HudRenderer;
+import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
-import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -17,10 +17,11 @@ import org.slf4j.LoggerFactory;
  * Pickup Card 的 Forge 入口。
  * <p>
  * 【这个 mod 是纯客户端的】它不注册任何方块/物品/网络包，只在客户端嗅探原版的拾取包，
- * 然后把结果交给 ApricityUI 画成一张卡。所以：服务端不用装，任何服务器都能用。
+ * 把结果记进账本（{@link Inbox}），渲染层每 tick 来取事件画卡。服务端不用装，任何
+ * 服务器都能用。
  * <p>
- * 【为什么加载期不做任何事】界面是懒创建的：第一次真的捡到东西时才建那张覆盖层。
- * 玩家如果整局没捡东西，AUI 那边一个页面都不会被解析 —— 启动开销为零。
+ * 【为什么加载期不做渲染的事】账本与渲染都是懒活的：第一次真的捡到东西才有卡可画。
+ * 玩家如果整局没捡东西，渲染路径一行都不会跑。
  */
 @Mod(PickupCard.MOD_ID)
 public final class PickupCard {
@@ -38,31 +39,24 @@ public final class PickupCard {
         PickupCardConfig.register(context);
 
         // 配置是懒采样的：每次真的要用时才读，玩家改完配置不用重启
-        PickupBoard.INSTANCE.setSettingsSource(PickupCardConfig::snapshot);
+        Inbox.INSTANCE.setSources(PickupCardConfig::snapshot, PickupCardConfig::filterSnapshot);
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
+        MinecraftForge.EVENT_BUS.register(HudRenderer.INSTANCE);
     }
 
     /**
-     * 客户端生命周期：每 tick 推进一次队列（该退场的退场、退场播完的摘节点），
-     * 断线时把账本与 DOM 清干净。
-     * <p>
-     * 【为什么用 tick 而不是自己起定时器】AUI 的节点操作必须在客户端线程，而且断线/换世界
-     * 时游戏会停 tick —— 挂在 tick 上，这些状态自然就跟着停了，不需要额外的同步。
+     * 客户端生命周期：断线/换世界时把账本清干净。每 tick 的推进与 HUD 渲染都归
+     * {@link HudRenderer} 管（事件消费与绘制必须在同一处才不会错位）。
      */
     @Mod.EventBusSubscriber(modid = MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
     static final class ClientLifecycle {
 
         @SubscribeEvent
-        static void onClientTick(TickEvent.ClientTickEvent event) {
-            if (event.phase != TickEvent.Phase.END) return;
-            PickupBoard.INSTANCE.tick();
-        }
-
-        @SubscribeEvent
         static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
-            // 离开世界：队列、NEW 账本、DOM 一起清。NEW 不落盘是刻意的，这里就是"忘记"的时机。
-            PickupBoard.INSTANCE.reset();
+            // 离开世界：队列、NEW 账本、未取走的事件一起清。NEW 不落盘是刻意的，这里就是"忘记"的时机。
+            Inbox.INSTANCE.reset();
+            HudRenderer.INSTANCE.clear();
         }
     }
 }

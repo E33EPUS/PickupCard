@@ -1,0 +1,40 @@
+{
+  "_comment": "PickupCard 默认主题 v2（草图定稿版：胶囊卡身 + 稀有度双圈 + 左数量 + 圆徽章 + 名字胶囊 + 端点 + 月牙）。cornerRadius=999 表示胶囊（绘制时会夹到卡高一半）。缺键用代码默认值；资源包可整体覆盖；改完一秒内生效。",
+
+  "geometry": {
+    "cornerRadius": 999,
+    "paddingH": 12,
+    "paddingV": 7,
+    "gap": 8,
+    "iconScale": 2.0,
+    "badgeScale": 1.9,
+    "namePillScale": 0.62,
+    "endDotScale": 0.40,
+    "crescentScale": 0.52,
+    "borderInset": 3
+  },
+
+  "material": {
+    "fillTop": "#262B38D1",
+    "fillBottom": "#161A22DB",
+    "border": "#FFFFFF2E",
+    "highlight": "#FFFFFF3C",
+    "shadowAlpha": 70,
+    "shadowOffsetY": 3,
+    "glowAlpha": 40
+  },
+
+  "text": {
+    "nameColor": "#EBEFF6F0",
+    "newBadgeBg": "#55EBFF",
+    "newBadgeText": "#0D1117"
+  },
+
+  "animation": {
+    "enterMs": 320,
+    "bumpMs": 300,
+    "enterEnabled": true,
+    "bumpEnabled": true,
+    "glowPulseEnabled": true
+  }
+}

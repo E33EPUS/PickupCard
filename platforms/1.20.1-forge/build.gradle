@@ -67,12 +67,14 @@ mixin {
 repositories {
     mavenCentral()
 
-    // ApricityUI（渲染引擎）。我们【不】把它打进 jar —— 它是玩家侧的硬前置，
-    // 由加载器在启动时校验（见 META-INF/mods.toml 里的 mandatory 依赖）。
-    // 内嵌一份也不会更省事：它自带原生资源与全局资源树，两份反而会打架。
+    // RarityCore（稀有度联动，可选软依赖）。只编译期依赖它的 API，不打进 jar；
+    // 运行期由 ModList 探测，玩家装没装都不影响本 mod 的其他功能。
     maven {
-        name = 'sighs'
-        url = 'https://maven.sighs.cc/repository/maven-public/'
+        name = "Modrinth"
+        url = "https://api.modrinth.com/maven"
+        content {
+            includeGroup "maven.modrinth"
+        }
     }
 
     // China mirrors last: fallback for local builds; overseas CI resolves from the canonical repos above
@@ -86,8 +88,6 @@ dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     compileOnly 'org.spongepowered:mixin:0.8.5'
-
-    implementation "com.sighs:ApricityUI-forge-${minecraft_version}:${project.apricityui_version}"
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'

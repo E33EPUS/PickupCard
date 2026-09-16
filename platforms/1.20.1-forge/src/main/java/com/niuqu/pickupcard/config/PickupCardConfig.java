@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.config;
 
+import com.niuqu.pickupcard.filter.FilterSettings;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.text.CountFormat;
 import net.minecraftforge.common.ForgeConfigSpec;
@@ -8,15 +9,14 @@ import net.minecraftforge.fml.config.ModConfig;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import org.apache.commons.lang3.tuple.Pair;
 
+import java.util.List;
+
 /**
  * 玩家可见的设置。
  * <p>
- * 【为什么项这么少】上一版有一整套"背景色 / 描边厚度 / 边框厚度 / 圆角半径"——那些是
- * 自己写渲染层时不得不暴露的参数，因为改外观要重新编译。现在外观是 CSS，玩家（和作者）
- * 直接改页面文件就行，配置里只留"真的属于玩家偏好"的东西：停留多久、要不要合并、
- * 同时最多几张、数字怎么写。
- * <p>
- * 【刻意没做的】外观相关的都不放配置：它们有唯一真源（HTML/CSS），放进配置就又变成两处了。
+ * 【外观为什么不在这里】卡面的颜色/圆角/动画参数有唯一真源（styles/default.json，
+ * 资源包可覆盖），放进配置就变成两处真源——改了配置不生效、改了主题又被配置盖掉，
+ * 都比没有这个配置项更糟。这里只放"行为偏好"：停留多久、怎么合并、过滤谁、要不要音。
  */
 public final class PickupCardConfig {
 
@@ -47,7 +47,16 @@ public final class PickupCardConfig {
                 VALUES.countFormat.get()).sanitized();
     }
 
-    /** 配置项的定义。与 {@link PickupCardSettings} 一一对应。 */
+    /** 采样过滤三表。列表元素不做校验——坏规则由 FilterRule.parse 静默跳过。 */
+    public static FilterSettings filterSnapshot() {
+        return new FilterSettings(
+                List.copyOf(VALUES.blacklist.get()),
+                List.copyOf(VALUES.whitelist.get()),
+                List.copyOf(VALUES.muteList.get()),
+                VALUES.useDefaultIgnoreList.get());
+    }
+
+    /** 配置项的定义。行为偏好与 {@link PickupCardSettings}/{@link FilterSettings} 对应。 */
     static final class Values {
 
         final ForgeConfigSpec.LongValue holdMs;
@@ -56,6 +65,10 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.LongValue mergeWindowMs;
         final ForgeConfigSpec.IntValue maxOnScreen;
         final ForgeConfigSpec.EnumValue<CountFormat> countFormat;
+        final ForgeConfigSpec.BooleanValue useDefaultIgnoreList;
+        final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
+        final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
+        final ForgeConfigSpec.ConfigValue<List<? extends String>> muteList;
 
         Values(ForgeConfigSpec.Builder builder) {
             builder.comment("Pickup Card —— 拾取卡片提示（纯客户端）").push("notice");
@@ -66,8 +79,7 @@ public final class PickupCardConfig {
                     .defineInRange("holdMs", 2_600L, 200L, 60_000L);
 
             exitMs = builder
-                    .comment("退场动画时长（毫秒）。必须和 CSS 里退场动画的时长一致，",
-                            "否则节点会在动画播完之前被摘掉，看起来就是\"卡突然消失\"。")
+                    .comment("退场动画时长（毫秒）。渲染层按它决定退场动画播多久。")
                     .defineInRange("exitMs", 320L, 0L, 5_000L);
 
             builder.pop();
@@ -94,6 +106,26 @@ public final class PickupCardConfig {
                     .comment("数量的写法。PLUS = +64（默认），X_PREFIX = ×64，",
                             "PLAIN = 64，ABBREVIATED = +1.2K。")
                     .defineEnum("format", CountFormat.PLUS);
+            builder.pop();
+
+            builder.comment("过滤。规则写法：minecraft:stone = 物品，#forge:ores = tag，@somebotania = 整个 mod")
+                    .push("filter");
+            useDefaultIgnoreList = builder
+                    .comment("内置默认忽略表（泥土/圆石/沙子类刷屏物品），整体开关。",
+                            "白名单永远压过黑名单与内置表。")
+                    .define("useDefaultIgnoreList", true);
+
+            blacklist = builder
+                    .comment("黑名单：命中则不弹卡。")
+                    .defineList("blacklist", List.of(), o -> o instanceof String);
+
+            whitelist = builder
+                    .comment("白名单：命中则永远弹卡并强调（含内置表忽略的物品）。")
+                    .defineList("whitelist", List.of(), o -> o instanceof String);
+
+            muteList = builder
+                    .comment("静音名单：命中照常弹卡，但没有稀有提示音，原版拾取音也压掉。")
+                    .defineList("muteList", List.of(), o -> o instanceof String);
             builder.pop();
         }
     }

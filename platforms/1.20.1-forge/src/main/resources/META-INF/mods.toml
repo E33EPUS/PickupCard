@@ -27,11 +27,5 @@ issueTrackerURL = "https://github.com/E33EPUS/PickupCard/issues"
     ordering = "NONE"
     side = "BOTH"
 
-# ApricityUI 是硬前置：卡片本身就画在它上面。它不在的话这个 mod 什么都显示不出来，
-# 所以这里必须 mandatory —— 让加载器在启动时就说清楚，而不是进游戏后默默没有提示。
-[[dependencies."${mod_id}"]]
-    modId = "apricityui"
-    mandatory = true
-    versionRange = "[1.2.0,)"
-    ordering = "AFTER"
-    side = "CLIENT"
+# 无必需前置：渲染自绘（RenderGuiEvent + GuiGraphics），不依赖任何 UI 框架 mod。
+# 稀有度联动（RarityCore）是可选软依赖，运行期探测，不在这里声明。
