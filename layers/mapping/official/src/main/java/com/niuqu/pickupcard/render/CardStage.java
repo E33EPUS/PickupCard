@@ -52,6 +52,10 @@ public final class CardStage {
     /** 画法。换 UI 方案就是换这一个字段。 */
     private CardPainter painter = new BaselineCardPainter();
 
+    /** 上一帧的排布结果与耗时，只给 harness 读。 */
+    private List<CardSlot> lastSlots = List.of();
+    private long layoutMicros;
+
     private CardStage() {
     }
 
@@ -67,6 +71,8 @@ public final class CardStage {
         live.clear();
         pending.clear();
         styles.invalidate();
+        lastSlots = List.of();
+        layoutMicros = 0L;
     }
 
     // ------------------------------------------------------------------
@@ -84,17 +90,24 @@ public final class CardStage {
     public void onHudRender(RenderGuiEvent.Post event) {
         Minecraft mc = Minecraft.getInstance();
         if (mc.options.hideGui) return;
+        renderInto(event.getGuiGraphics(), mc);
+    }
 
+    /**
+     * 消费事件 → 排布 → 交给 painter。**HUD 与 dev harness 共用这一条路径。**
+     * <p>
+     * 【为什么抽出来而不是让 harness 自己画一遍】harness 的全部价值在于它看到的东西
+     * 与玩家看到的是同一份。如果 harness 自己走一条渲染路径，它就只能证明"那条路径"对，
+     * 而上一版正是死在"harness 里没有的东西上了真机才现形"。
+     */
+    public void renderInto(GuiGraphics gui, Minecraft mc) {
         long now = System.currentTimeMillis();
-        if (!pending.isEmpty()) {
-            for (Inbox.Event e : pending) {
-                absorb(e, now);
-            }
-            pending.clear();
+        pump(now);
+        if (live.isEmpty()) {
+            lastSlots = List.of();
+            return;
         }
-        if (live.isEmpty()) return;
 
-        GuiGraphics gui = event.getGuiGraphics();
         StyleModel style = styles.current(now).sanitized();
         PickupCardSettings settings = Inbox.INSTANCE.settingsSnapshot();
         CardCanvas canvas = new CardCanvas(now,
@@ -104,9 +117,41 @@ public final class CardStage {
         // 退场播完的摘掉，剩下的才参与排布
         live.values().removeIf(view -> view.exiting()
                 && CardTimeline.exit(now, view.exitStartAt(), settings.exitMs()) >= 1f);
-        if (live.isEmpty()) return;
+        if (live.isEmpty()) {
+            lastSlots = List.of();
+            return;
+        }
 
-        painter.paint(gui, canvas, layout(canvas, mc));
+        long t0 = System.nanoTime();
+        List<CardSlot> slots = layout(canvas, mc);
+        layoutMicros = (System.nanoTime() - t0) / 1_000L;
+        lastSlots = List.copyOf(slots);
+        painter.paint(gui, canvas, slots);
+    }
+
+    /** 消费积压的账本事件。 */
+    private void pump(long now) {
+        if (pending.isEmpty()) return;
+        for (Inbox.Event e : pending) {
+            absorb(e, now);
+        }
+        pending.clear();
+    }
+
+    /**
+     * 上一帧画了哪些卡、量了多久。**只读遥测，没有写入口**——它存在是为了让 harness 能把
+     * "看不见的状态"（每张卡的实际位置与尺寸）变成可读的，而不是为了让别处改渲染。
+     */
+    public record Stats(int live, int painted, long layoutMicros) {
+    }
+
+    public Stats stats() {
+        return new Stats(live.size(), lastSlots.size(), layoutMicros);
+    }
+
+    /** 上一帧参与绘制的卡。辅助线要按这个画，才保证画的是"真的画了的那批"。 */
+    public List<CardSlot> lastSlots() {
+        return lastSlots;
     }
 
     // ------------------------------------------------------------------

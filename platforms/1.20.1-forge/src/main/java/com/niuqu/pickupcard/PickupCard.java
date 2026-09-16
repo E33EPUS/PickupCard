@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard;
 
 import com.niuqu.pickupcard.config.PickupCardConfig;
+import com.niuqu.pickupcard.dev.DevHarness;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraftforge.api.distmarker.Dist;
@@ -43,6 +44,14 @@ public final class PickupCard {
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
         MinecraftForge.EVENT_BUS.register(CardStage.INSTANCE);
+
+        // 调试屏只活在开发环境：正式 jar 里这些类存在，但注册路径根本不会走到
+        if (!FMLEnvironment.production) {
+            DevHarness.register(context.getModEventBus());
+            // 打这一行是为了"它到底注册上没有"在日志里可查——静默注册失败过一次的话，
+            // 症状只是"按 F9 没反应"，没有任何线索
+            LOGGER.info("调试屏已启用：F9 或 /pickupcarddev");
+        }
     }
 
     /**
