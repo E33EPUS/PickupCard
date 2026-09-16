@@ -1,7 +1,7 @@
 package com.niuqu.pickupcard;
 
 import com.niuqu.pickupcard.config.PickupCardConfig;
-import com.niuqu.pickupcard.hud.HudRenderer;
+import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
@@ -42,12 +42,12 @@ public final class PickupCard {
         Inbox.INSTANCE.setSources(PickupCardConfig::snapshot, PickupCardConfig::filterSnapshot);
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
-        MinecraftForge.EVENT_BUS.register(HudRenderer.INSTANCE);
+        MinecraftForge.EVENT_BUS.register(CardStage.INSTANCE);
     }
 
     /**
      * 客户端生命周期：断线/换世界时把账本清干净。每 tick 的推进与 HUD 渲染都归
-     * {@link HudRenderer} 管（事件消费与绘制必须在同一处才不会错位）。
+     * {@link CardStage} 管（事件消费与绘制必须在同一处才不会错位）。
      */
     @Mod.EventBusSubscriber(modid = MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
     static final class ClientLifecycle {
@@ -56,7 +56,7 @@ public final class PickupCard {
         static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {
             // 离开世界：队列、NEW 账本、未取走的事件一起清。NEW 不落盘是刻意的，这里就是"忘记"的时机。
             Inbox.INSTANCE.reset();
-            HudRenderer.INSTANCE.clear();
+            CardStage.INSTANCE.clear();
         }
     }
 }

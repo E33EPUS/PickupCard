@@ -34,30 +34,30 @@ tools/verify_targets.py    ← 结构守卫（CI 第一道闸）
 - 物品类型只出现在映射层，将来 Fabric 那份 Yarn 名副本不必重写队列；
 - "队列说该有哪些卡"与"卡片怎么画"彻底解耦。
 
-## 渲染：为什么是 ApricityUI 而不是自绘
+## 渲染层：画法是一个插槽
 
-老版本（`D:\pickupnotice`）自己写 SDF 着色器 + 用 Edge 把 CSS 烘成位图贴图。两个问题：
+渲染是需求变得最快的一层（换风格、换引擎、加特效），而拾取管线几乎不动。所以"怎么画"
+被收口成一个接口，其余各管一件事——上一版把这五件事连同绘制全塞进一个 436 行的类里，
+改任意一处都要先读懂全部：
 
-1. **位图会被拉伸。** 卡宽跟物品名走，而贴图是固定宽度的，中间段只能横拉 —— 圆角、
-   铆钉、符文虚线全都被双线性重采样糊掉，非整倍 GUI scale 下尤其明显；
-2. **两套真源。** 卡面归 PNG（改它要跑烘焙脚本）、描边与扫光归 shader，状态职责被割开，
-   于是出现了"混合状态泄漏"这类补丁（SDF 要记住进入时的混合状态再还原）。
+| 问题 | 答案在哪 | 性质 |
+| --- | --- | --- |
+| 一张卡怎么画 | `render/CardPainter` | 插槽，可整体替换 |
+| 卡多大 | `render/CardMetrics` | 要字体，所以量文字宽度 |
+| 卡在哪 | `shared/layout/StackLayout` | 纯数学，有单测 |
+| 主题从哪来 | `render/StyleSource` | 懒加载 + 一秒热重读 |
+| 动画进度 | `shared/style/CardTimeline` + `render/CardCanvas` | 纯函数 + 每帧上下文 |
+| 事件 → 屏上的卡 | `render/CardStage` | 只调度，**不画一笔** |
 
-现在外观是 CSS，卡宽定死，装饰是画出来的而不是拉出来的。**"糊"这个问题的类别不再存在。**
-代价是玩家侧必须装 ApricityUI（`mods.toml` 里声明为 mandatory 前置）。
+骨架期挂的是 `render/painter/BaselineCardPainter`：一块卡面 + 图标 + 名字 + 数量。
+它故意长得朴素 —— 职责只是证明管线是通的，不带任何"已经定下来的风格"。
 
-## 一个 AUI 的坑（写在代码注释里，也记在这）
-
-`Element#append` / `insertBefore` 内部会调 `Element.init` 把通用 `Element` 换成注册类
-（`SPAN`→`Span`、`ITEM`→`Item`…），换出来的是**另一个实例**。所以凡是插进 DOM 之后还要
-继续操作的节点，必须先自己 `Element.init(...)` 拿到最终实例 —— 否则你手里的引用指向一个
-不在树上的对象，改它没有任何效果，而且**不报错**。
+**渲染方案本身尚未定案**，取舍与推荐见 [`decision-rendering.md`](decision-rendering.md)。
 
 ## 已知约束
 
-- **AUI 的 CSS 不解析 `radial-gradient`**，用了会静默不画（不报错）。四角铆钉因此改用
-  `box-shadow` 点出来。CSS 注释里记了这条。
-- **`transform` 只支持 translate/rotate/scale**，没有 skew/matrix/perspective。
-- **页面的资源根是 AUI 的全局命名空间**：页面必须放在
-  `assets/apricityui/apricity/<路径>`，或被玩家放到实例的 `<游戏目录>/apricity/<路径>`。
-- **`transform` 不走 `calc()` 的乘除**（`calc` 只支持加减）。
+- **纯客户端**：任何原版/别的 mod 的服务器都能用。代价是拿不到只有服务端知道的信息
+  （物品实体上的改名与 NBT 例外——注入点在实体移除之前，能捞到真身）。
+- **卡宽跟名字走**：`CardMetrics` 现量现算，所以画法必须适配可变宽度。
+  "定宽贴图横拉"是上一版走不通的路（见 `decision-rendering.md`）。
+- **同屏上限由账本管**：`maxOnScreen` 满员时淘汰最久没被碰过的那张，渲染层不参与取舍。

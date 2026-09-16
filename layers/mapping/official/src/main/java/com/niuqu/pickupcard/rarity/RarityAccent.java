@@ -1,13 +1,13 @@
-package com.niuqu.pickupcard.hud;
+package com.niuqu.pickupcard.rarity;
 
 import net.minecraft.world.item.ItemStack;
-import net.minecraft.world.item.Rarity;
 
 /**
- * 稀有度 → 强调色（ARGB）。vanilla 四档兜底取色，色值与 mockup 的 CSS 变量一致。
+ * 稀有度 → 强调色（ARGB）。vanilla 四档取色，色值与 docs/art/mockup.html 的 CSS 变量一致。
  * <p>
- * RarityCore 联动（七档 + 玩家自定义取色）将在下一步接入：检测到 raritycore 时
- * 本类的解析结果被 {@code RarityCoreBridge} 覆盖——接入点只有这一个方法。
+ * RarityCore 联动（七档 + 玩家自定义取色）将来在这里接入：检测到 raritycore 时
+ * 本类的解析结果被 {@code RarityCoreBridge} 覆盖 —— 外部 API 的接触面只有这一个方法，
+ * 联动出问题或要下架时，删掉那个 bridge 就完全解除了。
  */
 public final class RarityAccent {
 

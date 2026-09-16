@@ -5,11 +5,9 @@
     "【矩阵是规则，不是清单】每个 Minecraft 版本都要有 Fabric / NeoForge / Forge 三个条目。缺了哪个",
     "应该在这里看得见（buildable: false + note 写明卡在哪儿或为什么不做），而不是想不起来。这条由 CI 校验。",
     "",
-    "【本仓的额外约束：AUI 得先有你才画得出来】界面全部由 ApricityUI 渲染，所以一个目标能不能做，",
-    "先看 AUI 有没有发对应的产物（判断依据是 maven.sighs.cc 上有没有同名 artifact，不是猜）。",
-    "实测（2026-09-16，AUI 1.2.4-hotfix）：forge-1.20.1 / fabric-1.20.1 / fabric-1.21.1 /",
-    "neoforge-1.21.1 都有；forge-1.21.1 没有。这正好解释了为什么 forge-1.21.1 这一格是空的 ——",
-    "不是我们不想做，是前置不存在。",
+    "【目标的可行性由原版 GUI API 决定，不再由第三方前置决定】渲染走自己的插槽",
+    "（render/CardPainter），所以一个目标能不能做，看的是它那一版的原版绘制 API 面，",
+    "而不是某个渲染 mod 有没有发版。渲染方案本身待定，见 docs/decision-rendering.md。",
     "",
     "【mappings：本仓刻意保留两个家族】Fabric 用 Yarn，NeoForge / Forge 用 Mojang 官方名。",
     "拾取嗅探要 Mixin 进 ClientPacketListener，那个类名/方法名在两套映射里不一样，所以那份 Mixin",
@@ -50,7 +48,7 @@
     "buildable": false,
     "layers": ["1.21+", "fabric"],
     "unverified": ["loader_version", "java", "gradle"],
-    "note": "M2 目标：AUI 有 fabric-1.21.1 产物（已查证），所以能做。唯一用 Yarn 映射的目标 —— 不挂 layers/mapping/official/，自己保留同路径的 Yarn 名副本（ClientPacketListener 在 Yarn 里是另一个名字）。"
+    "note": "M2 目标。唯一用 Yarn 映射的目标 —— 不挂 layers/mapping/official/，自己保留同路径的 Yarn 名副本（ClientPacketListener 在 Yarn 里是另一个名字）。"
   },
 
   "1.21.1-neoforge": {
@@ -64,7 +62,7 @@
     "buildable": false,
     "layers": ["1.21+", "official", "neoforge"],
     "unverified": ["loader_version", "java", "gradle"],
-    "note": "M2 目标：AUI 有 neoforge-1.21.1 产物（已查证）。ModDevGradle；与 Forge 共用 official 映射层，差异收在 neoforge 加载器层。"
+    "note": "M2 目标。ModDevGradle；与 Forge 共用 official 映射层，差异收在 neoforge 加载器层。"
   },
 
   "1.21.1-forge": {
@@ -78,7 +76,7 @@
     "buildable": false,
     "layers": ["1.21+", "official", "forge"],
     "unverified": ["loader_version", "java", "gradle"],
-    "note": "做不了，不是不做：AUI 没有发 forge-1.21.1 的产物（2026-09-16 查 maven.sighs.cc 确认），没有渲染前置。等上游发版后这一格才能翻绿。"
+    "note": "阻塞理由已随渲染路线变更为自绘而消失（原先卡在第三方渲染前置没有 1.21.1 的 Forge 产物）。但还没真正建起来，暂保持 false —— 翻绿的前提是工程存在且能编过，不是「理由没了」。"
   },
 
   "1.20.1-fabric": {
@@ -92,7 +90,7 @@
     "buildable": false,
     "layers": ["fabric"],
     "unverified": ["loader_version", "java", "gradle"],
-    "note": "备选：AUI 有 fabric-1.20.1 产物（已查证），技术上可做。排在 1.21.1 两格之后 —— 1.20.1 的玩家主要走 Forge。它同样走 Yarn 家族，因此也不挂 official 映射层。"
+    "note": "备选：排在 1.21.1 两格之后 —— 1.20.1 的玩家主要走 Forge。它同样走 Yarn 家族，因此也不挂 official 映射层。"
   },
 
   "1.20.1-neoforge": {
@@ -106,6 +104,6 @@
     "buildable": false,
     "layers": ["official", "neoforge"],
     "unverified": ["loader_version", "java", "gradle"],
-    "note": "不做：1.20.1 的 NeoForge 是 20.4 线，与 1.21.1 的 NeoForge 不是一批 API。AUI 也没发对应产物（上面 neoforge 只查了 1.21.1）。要做时先把这个目标的 layers 重新量一遍。"
+    "note": "不做：1.20.1 的 NeoForge 是 20.4 线，与 1.21.1 的 NeoForge 不是一批 API。要做时先把这个目标的 layers 重新量一遍。"
   }
 }
