@@ -1,0 +1,5 @@
+* text=auto eol=lf
+
+# 构建产物与二进制由各自的目标产出，仓库里不留
+*.jar binary
+gradle/wrapper/gradle-wrapper.jar binary

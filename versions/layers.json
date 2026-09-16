@@ -1,0 +1,49 @@
+{
+  "_comment": [
+    "共享层的声明。【一个层就是对目标的一个谓词】：满足它的目标，才把这一层的代码编进去。",
+    "",
+    "【三个轴】",
+    "  since      钉住版本：Minecraft 版本不低于它的目标才挂",
+    "  loader     钉住加载器：这个加载器的目标才挂",
+    "  mappings   钉住映射家族：用这套映射名的目标才挂",
+    "至少写一个。一个都不写就是「全部目标」，那是 shared/，不是层。",
+    "",
+    "【目录是推出来的，不是声明的】",
+    "  只写一个轴 → layers/<轴名>/<层名>/      例如 layers/mapping/official、layers/loader/forge",
+    "  写了多个轴 → layers/<轴名按字母序用 + 连接>/<层名>/",
+    "声明得出来、编不过去的那种矛盾，就是靠「目录由声明推出来」消掉的 ——",
+    "没有第二处可以互相矛盾。",
+    "",
+    "【层名是「哪套映射」「哪个加载器」「这套 API 从哪个版本起」，不是某一个具体版本】",
+    "",
+    "【populated：这一层现在该不该有内容】",
+    "true 时层里一个文件都没有就红；声明为 false 却扫到内容也红。层可以先声明后填，",
+    "但「空」要是显式声明的状态，不能默认容忍。"
+  ],
+
+  "official": {
+    "mappings": "official",
+    "populated": true,
+    "note": "映射层：写给 Mojang 官方名的那一份。拾取嗅探要 Mixin 进 ClientPacketListener#handleTakeItemEntity，这个类名/方法名在 Yarn 里不一样，所以那份 Mixin 进这一层 —— 由 Forge / NeoForge 目标挂载，Fabric 不挂、保留自己那份 Yarn 名副本。两边的文件路径一一对应，由 tools/verify_targets.py 的孪生副本检查盯着（少一个就红）。"
+  },
+  "fabric": {
+    "loader": "Fabric",
+    "populated": false,
+    "note": "加载器层：Fabric API / loader 专有（入口、fabric.mod.json、mixin 注册方式）。M2 待填。"
+  },
+  "neoforge": {
+    "loader": "NeoForge",
+    "populated": false,
+    "note": "加载器层：ModDevGradle + neoforged 专有（载荷注册、事件总线、配置目录来源）。M2 待填。"
+  },
+  "forge": {
+    "loader": "Forge",
+    "populated": false,
+    "note": "加载器层：ForgeGradle + minecraftforge 专有（事件总线、SRG 运行时名、mods.toml 里的前置声明）。M1 里这些还很少，够不上成层，先留空占位 —— Forge 特有的那点东西暂时进平台目录。"
+  },
+  "1.21+": {
+    "since": "1.21",
+    "populated": false,
+    "note": "版本层：1.21 起才有的原版 API（例如 ItemStack 的组件与 getHoverName 的变化）。1.20.1 不挂载这一层。M2 待填。"
+  }
+}

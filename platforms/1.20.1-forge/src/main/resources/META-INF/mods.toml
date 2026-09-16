@@ -1,0 +1,37 @@
+modLoader = "javafml"
+loaderVersion = "${loader_version_range}"
+license = "${mod_license}"
+issueTrackerURL = "https://github.com/E33EPUS/PickupCard/issues"
+
+[[mods]]
+    modId = "${mod_id}"
+    version = "${mod_version}"
+    displayName = "${mod_name}"
+    authors = "${mod_authors}"
+    description = '''${mod_description}'''
+    # 纯客户端：这个 mod 不注册任何服务端内容，装了也不会让服务器拒绝原版客户端
+    clientRequired = true
+    displayTest = "IGNORE_ALL_VERSION"
+
+[[dependencies."${mod_id}"]]
+    modId = "forge"
+    mandatory = true
+    versionRange = "${forge_version_range}"
+    ordering = "NONE"
+    side = "BOTH"
+
+[[dependencies."${mod_id}"]]
+    modId = "minecraft"
+    mandatory = true
+    versionRange = "${minecraft_version_range}"
+    ordering = "NONE"
+    side = "BOTH"
+
+# ApricityUI 是硬前置：卡片本身就画在它上面。它不在的话这个 mod 什么都显示不出来，
+# 所以这里必须 mandatory —— 让加载器在启动时就说清楚，而不是进游戏后默默没有提示。
+[[dependencies."${mod_id}"]]
+    modId = "apricityui"
+    mandatory = true
+    versionRange = "[1.2.0,)"
+    ordering = "AFTER"
+    side = "CLIENT"

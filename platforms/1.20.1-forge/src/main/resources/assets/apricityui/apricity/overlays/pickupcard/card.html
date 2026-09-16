@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+    <meta charset="utf-8">
+    <!-- Overlay 的视口跟随窗口：卡片锚在屏幕右上，用百分比定位即可随分辨率走 -->
+    <meta name="aui-viewport" content="mode=browser">
+    <!-- 纯展示：不写 intercept，鼠标事件穿透到游戏，捡东西时不会突然抢走准星 -->
+    <link rel="stylesheet" href="card.css">
+</head>
+<body>
+<!-- 卡片从下往上排：DOM 里越靠后越靠上（Java 侧把最新的插在最前面，所以最新在最下）。
+     这里只声明容器，内容是 Java 侧按拾取事件插入的。 -->
+<div id="pickupcard-list"></div>
+</body>
+</html>

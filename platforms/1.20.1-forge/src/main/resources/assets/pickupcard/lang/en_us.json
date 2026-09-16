@@ -1,0 +1,5 @@
+{
+  "pickupcard.config.notice.holdMs": "Hold time",
+  "pickupcard.config.merge.enabled": "Merge consecutive pickups",
+  "pickupcard.config.format": "Count format"
+}

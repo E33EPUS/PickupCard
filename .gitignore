@@ -1,0 +1,21 @@
+# build 输出与本地环境
+build/
+.gradle/
+run/
+run-data/
+logs/
+out/
+mcmodsrepo/
+*.log
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.eclipse/
+.settings/
+bin/
+
+# 系统
+.DS_Store
+Thumbs.db

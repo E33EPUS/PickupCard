@@ -1,0 +1,272 @@
+plugins {
+    id 'eclipse'
+    id 'idea'
+    id 'maven-publish'
+    id 'net.minecraftforge.gradle' version '[6.0,6.2)'
+    id 'org.spongepowered.mixin' version '0.7.+'
+    id 'com.modrinth.minotaur' version '2.8.7'
+    id 'net.darkhax.curseforgegradle' version '1.1.28'
+}
+
+// 共享层装配：读仓库级身份 + 把 shared/ 与本目标挂载的层接进源集。
+// 判定依据在 versions/*.json，本平台不做任何目标名硬编码。
+apply from: '../../gradle/pickupcard-layers.gradle'
+
+version = project.mod_version
+group = project.mod_group_id
+
+base {
+    archivesName = "${project.mod_id}-Forge-${project.minecraft_version}"
+}
+
+// Forge 1.20.1 runs on Java 17.
+java.toolchain.languageVersion = JavaLanguageVersion.of(17)
+
+println "Java: ${System.getProperty 'java.version'}, JVM: ${System.getProperty 'java.vm.version'} (${System.getProperty 'java.vendor'}), Arch: ${System.getProperty 'os.arch'}"
+
+minecraft {
+    mappings channel: mapping_channel, version: mapping_version
+
+    runs {
+        configureEach {
+            workingDirectory project.file('run')
+
+            property 'forge.logging.markers', 'REGISTRIES'
+            property 'forge.logging.console.level', 'debug'
+
+            // Forge's production runtime names are SRG, so the refmap has to be
+            // remapped against the SRG file ForgeGradle generates.
+            jvmArg '-Dmixin.env.remapRefMap=true'
+            jvmArg "-Dmixin.env.refMapRemappingFile=${projectDir}/build/createSrgToMcp/output.srg"
+
+            mods {
+                "${mod_id}" {
+                    source sourceSets.main
+                }
+            }
+        }
+
+        client {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'mixin.configs', 'pickupcard.mixins.json'
+        }
+
+        server {
+            property 'forge.enabledGameTestNamespaces', mod_id
+            property 'mixin.configs', 'pickupcard.mixins.json'
+            args '--nogui'
+        }
+    }
+}
+
+mixin {
+    add sourceSets.main, 'mixins.pickupcard.refmap.json'
+    config 'pickupcard.mixins.json'
+}
+
+repositories {
+    mavenCentral()
+
+    // ApricityUI（渲染引擎）。我们【不】把它打进 jar —— 它是玩家侧的硬前置，
+    // 由加载器在启动时校验（见 META-INF/mods.toml 里的 mandatory 依赖）。
+    // 内嵌一份也不会更省事：它自带原生资源与全局资源树，两份反而会打架。
+    maven {
+        name = 'sighs'
+        url = 'https://maven.sighs.cc/repository/maven-public/'
+    }
+
+    // China mirrors last: fallback for local builds; overseas CI resolves from the canonical repos above
+    maven {
+        url 'https://mirrors.cloud.tencent.com/nexus/repository/maven-public/'
+        allowInsecureProtocol = true
+    }
+}
+
+dependencies {
+    minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
+    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+    compileOnly 'org.spongepowered:mixin:0.8.5'
+
+    implementation "com.sighs:ApricityUI-forge-${minecraft_version}:${project.apricityui_version}"
+
+    testImplementation platform('org.junit:junit-bom:5.11.4')
+    testImplementation 'org.junit.jupiter:junit-jupiter'
+    testImplementation 'org.junit.platform:junit-platform-launcher'
+}
+
+tasks.named('processResources', ProcessResources).configure {
+    filteringCharset = 'UTF-8'
+    var replaceProperties = [
+            minecraft_version      : minecraft_version, minecraft_version_range: minecraft_version_range,
+            forge_version          : forge_version, forge_version_range: forge_version_range,
+            loader_version_range   : loader_version_range,
+            mod_id                 : mod_id, mod_name: mod_name, mod_license: mod_license, mod_version: mod_version,
+            mod_authors            : mod_authors, mod_description: mod_description,
+    ]
+    inputs.properties replaceProperties
+    filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
+        expand replaceProperties + [project: project]
+    }
+}
+
+tasks.named('jar', Jar).configure {
+    // refmap 会同时出现在 build/resources/main（copyRefmap 放的）与加工输出里；
+    // 不设策略 Gradle 8 会直接以 "duplicate entry" 失败。两份内容一致，留一份即可。
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'pickupcard.mixins.json'
+        ])
+    }
+
+    finalizedBy 'reobfJar'
+}
+
+tasks.withType(JavaCompile).configureEach {
+    options.encoding = 'UTF-8'
+}
+
+// The mixin annotation processor writes the refmap into build/tmp/compileJava,
+// so copy it into the resources output where Mixin looks for it.
+//
+// An incremental compile can wipe build/tmp/compileJava without re-running the
+// AP, and the refmap then disappears silently: the shipped jar dies at startup
+// with "No refMap loaded" for every mixin. The guard for that lives in
+// verifyRefmap, NOT here — a Copy whose source is missing is reported as
+// NO-SOURCE and Gradle then skips every action on the task, so a doFirst check
+// in this task would never run in exactly the case it must catch.
+tasks.register('copyRefmap', Copy) {
+    from "${buildDir}/tmp/compileJava"
+    into "${buildDir}/resources/main"
+    include 'mixins.pickupcard.refmap.json'
+}
+
+// Runs unconditionally (no declared outputs, so it can never be up to date) and
+// fails the build when the refmap did not make it into the resources output.
+tasks.register('verifyRefmap') {
+    dependsOn 'copyRefmap'
+    doLast {
+        def refmap = file("${buildDir}/resources/main/mixins.pickupcard.refmap.json")
+        if (!refmap.isFile()) {
+            throw new GradleException(
+                "打出来的 jar 里没有 mixins.pickupcard.refmap.json（${refmap.path} 不存在）。\n" +
+                "Mixin 注解处理器没有产出它 —— 增量编译会清掉 build/tmp/compileJava 而不重跑 AP。\n" +
+                "这样的 jar 启动时会以 'No refMap loaded' 崩掉，所以在这里直接失败。\n" +
+                "解决：./gradlew clean build")
+        }
+    }
+}
+compileJava.finalizedBy 'copyRefmap'
+
+tasks.register('writeDevManifest') {
+    doLast {
+        def mfDir = file("${buildDir}/resources/main/META-INF")
+        mfDir.mkdirs()
+        file("${mfDir}/MANIFEST.MF").text =
+            'Manifest-Version: 1.0\n' +
+            'MixinConfigs: pickupcard.mixins.json\n'
+        logger.lifecycle('Generated MANIFEST.MF with MixinConfigs for dev environment')
+    }
+}
+processResources.finalizedBy 'writeDevManifest'
+jar.dependsOn 'verifyRefmap'
+compileTestJava.dependsOn 'copyRefmap'
+
+// 共享层的单测（NoticeQueue / MergeWindow / CountFormat）在这里跑。
+// 它们不碰 MC，所以这个任务不需要启动游戏。
+tasks.withType(Test).configureEach {
+    useJUnitPlatform()
+    testLogging {
+        events 'passed', 'failed', 'skipped'
+    }
+}
+
+publishing {
+    publications {
+        register('mavenJava', MavenPublication) {
+            artifact jar
+        }
+    }
+    repositories {
+        maven {
+            url "file://${project.projectDir}/mcmodsrepo"
+        }
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Release publishing (Modrinth + CurseForge)
+// ---------------------------------------------------------------------------
+
+def storeVersion = "Forge-${project.minecraft_version}-${project.mod_version}"
+
+def changelogFor(version) {
+    // 单仓库之后 RELEASE_NOTES.md 只有仓库根那一份，各平台不再各存一份
+    def notes = new File(pickupcardRepoRoot, 'RELEASE_NOTES.md')
+    if (!notes.isFile()) {
+        return "Pickup Card ${version}"
+    }
+    def text = notes.getText('UTF-8')
+    def start = text.indexOf("## v${version}")
+    if (start < 0) {
+        return "Pickup Card ${version}"
+    }
+    def end = text.indexOf('\n## ', start + 1)
+    def section = end > start ? text.substring(start, end) : text.substring(start)
+    // Store changelog convention: the trailing English block of the version
+    // section in RELEASE_NOTES.md (Chinese summary first, English last).
+    def trimmed = section.trim()
+    def idx = trimmed.lastIndexOf('\n\n')
+    return idx >= 0 ? trimmed.substring(idx).trim() : trimmed
+}
+
+modrinth {
+    token = System.getenv("MODRINTH_TOKEN") ?: ""
+    projectId = (project.findProperty('modrinth_project_id') ?: '').toString()
+    versionNumber = storeVersion
+    versionType = "release"
+    uploadFile = tasks.named('jar').get()
+    gameVersions = [project.minecraft_version]
+    loaders = ["forge"]
+    changelog = changelogFor(project.version)
+}
+
+def mrProjectId = (project.findProperty('modrinth_project_id') ?: '').toString()
+tasks.named('modrinth') {
+    onlyIf { System.getenv("MODRINTH_TOKEN") && !mrProjectId.isEmpty() && mrProjectId != 'UNSET' }
+}
+
+def cfProjectId = (project.findProperty('curseforge_project_id') ?: '').toString()
+def cfConfigured = cfProjectId ==~ /\d+/
+
+tasks.register('curseforge', net.darkhax.curseforgegradle.TaskPublishCurseForge) {
+    apiToken = System.getenv("CURSEFORGE_TOKEN") ?: ""
+    onlyIf { cfConfigured && System.getenv("CURSEFORGE_TOKEN") }
+
+    if (cfConfigured) {
+        def main = upload(cfProjectId as int, tasks.named('jar').get())
+        main.changelogType = 'markdown'
+        main.changelog = changelogFor(project.version)
+        main.releaseType = 'release'
+        main.displayName = storeVersion
+        main.addGameVersion project.minecraft_version
+        main.addModLoader 'Forge'
+        main.addJavaVersion 'Java 17'
+        // CurseForge rejects uploads without an environment tag (error 1021).
+        main.addEnvironment 'Client', 'Server'
+    }
+}
+
+tasks.register('publishMods') {
+    group = 'publishing'
+    description = 'Publish the mod to Modrinth and CurseForge.'
+    dependsOn 'modrinth', 'curseforge'
+}
