@@ -2,41 +2,53 @@
 <html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
-<title>PickupCard · 入场动画草稿</title>
+<title>PickupCard · 入场动画草稿（火车出隧道）</title>
 <link rel="stylesheet" href="theme.css">
 <style>
 /* 草稿页面自身，不进 token 转换 */
 body { margin:0; padding:24px 28px 48px; background:#101014; color:#BFC6D4;
        font:13px/1.6 "Segoe UI", system-ui, sans-serif; }
 h1 { font-size:17px; margin:0 0 4px; color:#EBEFF6; }
-p.hint { margin:0 0 16px; color:#6E7686; font-size:12px; max-width:760px; }
+p.hint { margin:0 0 14px; color:#6E7686; font-size:12px; max-width:820px; }
 .controls { display:flex; gap:18px; align-items:center; flex-wrap:wrap;
             margin:0 0 16px; font-size:12px; }
 .controls label { color:#8E96A6; cursor:pointer; }
 button { background:#262B38; color:#BFC6D4; border:1px solid #FFFFFF1F;
          border-radius:4px; padding:4px 10px; font:inherit; cursor:pointer; }
 button:hover { border-color:#55EBFF66; color:#EBEFF6; }
-input[type=range] { width:170px; vertical-align:middle; }
+input[type=range] { width:160px; vertical-align:middle; }
 
 /* MC 逻辑分辨率 427x240，放大 2 倍显示 */
 .frame { width:854px; height:480px; position:relative; }
 .frame .stage { width:427px; height:240px; transform:scale(2); transform-origin:top left;
                 border-radius:6px; outline:1px solid #FFFFFF1F; }
 
-/* 一张卡在屏上的位置由 transform 驱动，位移有过渡 —— "旧卡被挤下去"就是它 */
+/* 一张卡在屏上的位置由 transform 驱动 —— "旧卡被挤下去"就是它 */
 .slot { position:absolute; left:0; top:0; will-change:transform;
         transition: transform .34s cubic-bezier(.22,.9,.28,1), opacity .28s ease; }
 .slot.leaving { opacity:0; }
-.body { transition: width .40s cubic-bezier(.22,.9,.28,1); }
+
+/* ===== 隧道口 ===== 竖条右侧的裁剪窗。尺寸由 JS 定死，动画期间不变形。 */
+.tunnel { overflow:hidden; display:flex; }
+.tunnel > .body { flex: none; }
+
+/* 模式一「火车」：窗口固定，卡整体从竖条后面平移到最终位置（内容尺寸全程不变） */
+:root[data-exit="train"] .body { transform: translateX(-100%); }
+:root[data-exit="train"] .body.out { transform: translateX(0);
+        transition: transform .46s cubic-bezier(.22,.9,.28,1); }
+
+/* 模式二「拉幕」：卡不动，窗口宽度从 0 展开，把它一点点露出来 */
+:root[data-exit="wipe"] .tunnel { width:0 !important;
+        transition: width .42s cubic-bezier(.22,.9,.28,1); }
+:root[data-exit="wipe"] .tunnel.out { width: var(--w) !important; }
 </style>
 </head>
 <body>
 
-<h1>PickupCard · 入场动画草稿</h1>
+<h1>PickupCard · 入场动画（竖条是隧道口，卡片是火车）</h1>
 <p class="hint">
-  要的效果：<b>稀有度竖条是锚点，内容从竖条向右长出来</b>（像一根不断变长的条）；
-  新卡出现时把旧卡<b>往下挤</b>。
-  拖动下面的锚点滑杆可以挪竖条的位置 —— 顺便能看出它什么时候会把卡片顶出屏幕。
+  竖条<b>原地出现</b>，其余部分从它右侧<b>滑出来</b>；卡片自身尺寸全程不变 ——
+  是位移，不是拉伸。新卡从上方插入，把旧卡往下挤。
 </p>
 
 <div class="controls">
@@ -44,39 +56,51 @@ input[type=range] { width:170px; vertical-align:middle; }
   <button id="btn-spawn">手动来一张</button>
   <button id="btn-clear">清空</button>
   <button id="btn-theme">切浅色</button>
-  <label>锚点 X <input type="range" id="anchor" min="0" max="400" value="320"><span id="anchor-v">320</span></label>
-  <label><input type="checkbox" id="rightalign"> 右边缘对齐（忽略锚点）</label>
-  <label>速度 <input type="range" id="speed" min="0.25" max="2" step="0.25" value="1"><span id="speed-v">1×</span></label>
+  <div class="sep"></div>
+  <span>出隧道方式</span>
+  <label><input type="radio" name="exit" value="train" checked> 火车（数字端先出）</label>
+  <label><input type="radio" name="exit" value="wipe"> 拉幕（名字端先出）</label>
+  <div class="sep"></div>
+  <label>锚点 X <input type="range" id="anchor" min="0" max="380" value="320"><span id="anchor-v">320</span></label>
+  <label><input type="checkbox" id="rightalign"> 右边缘对齐</label>
 </div>
 
 <div class="frame"><div class="stage" id="stage"></div></div>
 
+<style>
+  .controls .sep { width:1px; align-self:stretch; background:#FFFFFF1A; }
+</style>
+
 <script>
 const FIXTURES = [
-  { n:'石头',      i:'stone.png',           c:'common',   q:'+64'  },
-  { n:'鞘翅',      i:'elytra.png',          c:'uncommon', q:'+1'   },
-  { n:'信标',      i:'beacon.png',          c:'rare',     q:'+1'   },
-  { n:'龙蛋',      i:'dragon_egg.png',      c:'epic',     q:'+1'   },
-  { n:'经验',      i:'nether_star.png',     c:'xp',       q:'+137' },
+  { n:'石头',       i:'stone.png',           c:'common',   q:'+64'    },
+  { n:'鞘翅',       i:'elytra.png',          c:'uncommon', q:'+1'     },
+  { n:'信标',       i:'beacon.png',          c:'rare',     q:'+1'     },
+  { n:'龙蛋',       i:'dragon_egg.png',      c:'epic',     q:'+1'     },
+  { n:'经验',       i:'nether_star.png',     c:'xp',       q:'+137'   },
   { n:'下界合金锭', i:'netherite_ingot.png', c:'rare',     q:'+99999' },
 ];
 
-const stage   = document.getElementById('stage');
-const PITCH   = 38;      // 卡高 32 + 间隙 6（逻辑 px）
-const TOP_Y   = 16;
-const MARGIN  = 16;
-const MAX     = 5;
-let slots = [];          // [0] = 最新（在最上面）
+const stage  = document.getElementById('stage');
+const PITCH  = 38;    // 卡高 32 + 间隙 6（逻辑 px）
+const TOP_Y  = 16;
+const MARGIN = 16;
+const MAX    = 5;
+let slots = [];       // [0] = 最新，在最上面
 let next = 0;
 let playing = true;
 let timer = null;
 
+const mode = () => document.querySelector('input[name=exit]:checked').value;
+
 function cardHtml(f) {
   return `<div class="card" style="--accent: var(--pc-accent-${f.c})">
     <div class="bar"></div>
-    <div class="body">
-      <div class="box icon"><img src="icons/${f.i}" alt=""></div>
-      <div class="box info"><span class="name">${f.n}</span><span class="count">${f.q}</span></div>
+    <div class="tunnel">
+      <div class="body">
+        <div class="box icon"><img src="icons/${f.i}" alt=""></div>
+        <div class="box info"><span class="name">${f.n}</span><span class="count">${f.q}</span></div>
+      </div>
     </div>
   </div>`;
 }
@@ -91,42 +115,44 @@ function layout() {
   });
 }
 
-function attachBody(slot) {
-  const body = slot.querySelector('.body');
-  if (body.dataset.expanded) return;
-  body.dataset.expanded = '1';
-  const natural = body.offsetWidth;          // 布局时是 max-content，量得到自然宽
-  body.style.width = '0px';
-  void body.offsetWidth;                     // 强制 reflow，让过渡有起点
-  requestAnimationFrame(() => { body.style.width = natural + 'px'; });
-}
-
 function spawn() {
   const f = FIXTURES[next++ % FIXTURES.length];
   const slot = document.createElement('div');
   slot.className = 'slot';
   slot.innerHTML = cardHtml(f);
   stage.appendChild(slot);
-  slots.unshift(slot);                       // 新的插到最上面，旧的被往下挤
+
+  // 量出内容自然宽：此时 body 还停在起始态，但 transform / 父窗口宽度都不影响它的布局宽
+  const tunnel = slot.querySelector('.tunnel');
+  const body = slot.querySelector('.body');
+  tunnel.style.setProperty('--w', body.offsetWidth + 'px');
+
+  // 【竖条必须原地出现】新槽位要直接落在最终位置，不能复用车位过渡，
+  // 否则整张卡会从左边滑进来，看起来像"卡片在移动"而不是"从隧道口长出来"。
+  slot.style.transition = 'none';
+  slots.unshift(slot);                 // 新的插到最上面，旧的被往下挤
   if (slots.length > MAX) {
     const gone = slots.pop();
     gone.classList.add('leaving');
-    setTimeout(() => gone.remove(), 300);
+    setTimeout(() => gone.remove(), 320);
   }
   layout();
-  requestAnimationFrame(() => attachBody(slot));
+  void slot.offsetWidth;               // 强制 reflow，让"直接就位"这一帧生效
+  slot.style.transition = '';          // 之后被别的卡往下挤时，才走过渡
+
+  // 两帧后再触发过渡：一帧让浏览器确认起始态，一帧让它开始动
+  requestAnimationFrame(() => requestAnimationFrame(() => {
+    body.classList.add('out');
+    tunnel.classList.add('out');
+  }));
 }
 
-function clear() {
-  slots.forEach(s => s.remove());
-  slots = [];
-}
+function clear() { slots.forEach(s => s.remove()); slots = []; }
 
 function tick() {
   clearTimeout(timer);
   if (!playing) return;
-  const speed = +document.getElementById('speed').value;
-  timer = setTimeout(() => { spawn(); tick(); }, 1300 / speed);
+  timer = setTimeout(() => { spawn(); tick(); }, 1250);
 }
 
 document.getElementById('btn-play').onclick = e => {
@@ -146,11 +172,10 @@ document.getElementById('anchor').oninput = e => {
   layout();
 };
 document.getElementById('rightalign').onchange = layout;
-document.getElementById('speed').oninput = e => {
-  document.getElementById('speed-v').textContent = e.target.value + '×';
-  tick();
-};
+document.querySelectorAll('input[name=exit]').forEach(r =>
+  r.onchange = () => { document.documentElement.dataset.exit = r.value; });
 
+document.documentElement.dataset.exit = 'train';
 spawn(); tick();
 setTimeout(spawn, 400);
 setTimeout(spawn, 900);
