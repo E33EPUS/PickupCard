@@ -58,6 +58,21 @@ public final class NvgCanvas implements AutoCloseable {
         }
     }
 
+    private static NvgCanvas shared;
+    private static boolean sharedTried;
+
+    /**
+     * 全局共享的上下文：每帧都要用，不能每帧建一个。不可用时返回 null（调用方回退 SDF），
+     * 而且<b>只尝试一次</b> —— 每帧重试的代价是每帧一条错误日志，日志会没法看。
+     */
+    public static NvgCanvas shared() {
+        if (!sharedTried) {
+            sharedTried = true;
+            shared = create();
+        }
+        return shared;
+    }
+
     public boolean valid() {
         return ctx != 0L;
     }

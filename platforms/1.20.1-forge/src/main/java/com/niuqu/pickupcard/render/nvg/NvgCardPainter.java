@@ -45,10 +45,12 @@ public final class NvgCardPainter {
      * @param cardW   卡片总宽
      * @param cardH   卡片总高
      * @param accent  稀有度强调色（ARGB）
-     * @param barFill 竖条高度比例 0~1（入场动画用）
+     * @param barFill   竖条高度比例 0~1（入场动画用）
+     * @param bodyShift 两个框整体的横向偏移（入场时内容从竖条后面滑出来用）。竖条自己不动 ——
+     *                  它是"洞口"，内容从它后面走，所以只有内容框偏移。
      */
     public static void paintCard(long vg, StyleModel style, float x, float y, float cardW, float cardH,
-                                 int accent, float barFill) {
+                                 int accent, float barFill, float bodyShift) {
         float gap = style.gap();
         float barW = style.barWidth();
         float bodyX = barW + gap;
@@ -66,9 +68,10 @@ public final class NvgCardPainter {
             NVGColor accentColor = color(stack, accent);
 
             box(vg, stack, top, bottom, border, highlight, useHighlight,
-                    x + bodyX, y, iconW, cardH, radius);
+                    x + bodyX + bodyShift, y, iconW, cardH, radius);
             if (infoW > 0f) {
-                box(vg, stack, top, bottom, border, highlight, useHighlight, infoX, y, infoW, cardH, radius);
+                box(vg, stack, top, bottom, border, highlight, useHighlight,
+                        infoX + bodyShift, y, infoW, cardH, radius);
             }
 
             float inset = style.barInsetY();

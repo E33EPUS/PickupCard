@@ -11,6 +11,8 @@ import com.niuqu.pickupcard.render.CardPainter;
 import com.niuqu.pickupcard.render.CardSlot;
 import com.niuqu.pickupcard.render.CardView;
 import com.niuqu.pickupcard.render.shape.ShapeBatch;
+import com.niuqu.pickupcard.render.nvg.NvgCanvas;
+import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.style.Easing;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
@@ -18,6 +20,8 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import org.lwjgl.nanovg.NanoVG;
+
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -80,9 +84,16 @@ public final class TrioCardPainter implements CardPainter {
     @Override
     public void paint(GuiGraphics gui, CardCanvas canvas, List<CardSlot> slots) {
         Font font = Minecraft.getInstance().font;
-        for (CardSlot slot : slots) {
-            paint(gui, canvas, slot, font);
+        NvgCanvas nvg = NvgCanvas.shared();
+        if (nvg == null) {
+            // 引擎不可用（native 没打进来 / GL3 后端初始化失败）就整条退回 SDF 层。
+            // 这里没有"报错并跳过"这个选项：卡难看一点可以接受，HUD 不画不行。
+            for (CardSlot slot : slots) {
+                paint(gui, canvas, slot, font);
+            }
+            return;
         }
+        paintViaNvg(gui, canvas, slots, font, nvg);
     }
 
     private void paint(GuiGraphics gui, CardCanvas canvas, CardSlot slot, Font font) {
@@ -140,13 +151,7 @@ public final class TrioCardPainter implements CardPainter {
 
         // 1) 影子：同一个圆角矩形，边缘按 shadowBlur 软化（SDF 软化，不新增 pass）。
         //    soft 取"想要的实际模糊半径的一半"，有效区间约 0~4。
-        if (style.shadowAlpha() > 0) {
-            float spread = SHADOW_SPREAD;
-            batch.shadow(boxX - spread, style.shadowOffsetY() - spread,
-                    bodyW + spread * 2f, h + spread * 2f,
-                    radius + spread, style.shadowBlur() / 2f,
-                    withAlpha(0x000000, style.shadowAlpha()));
-        }
+        cardShadow(batch, style, boxX, 0f, bodyW, h, radius);
 
         // 2) 两个框：渐变底 → 顶部高光 → 描边。
         //    顺序跟 CSS 的叠法对齐（box-shadow: inset 在底色之上、outline 之下），
@@ -172,10 +177,149 @@ public final class TrioCardPainter implements CardPainter {
         }
 
         // 入场时的稀有度微光：只在高档位浅浅铺一层，不占布局
-        if (rise > 0.5f && style.glowAlpha() > 0 && isHighlighted(card)) {
-            batch.shadow(boxX - 2f, -2f, bodyW + 4f, h + 4f, radius + 2f, 3f,
-                    withAlpha(accent, style.glowAlpha()));
+        cardGlow(batch, style, accent, isHighlighted(card), boxX, 0f, bodyW, h, radius, rise);
+    }
+
+    /**
+     * 引擎路径，四趟：影子(SDF) -> 外壳(NanoVG) -> 微光(SDF) -> 内容(原版)。
+     * <p>
+     * 【外壳为什么能一趟画完所有卡】NanoVG 的 begin/endFrame 是全局的，而卡与卡之间不重叠，
+     * 所以"先画完所有卡的外壳，再统一画内容"与逐张画视觉等价；唯一跨卡的东西是影子。
+     * <p>
+     * 【影子为什么还留在 SDF】NanoVG 没有模糊，而 SDF 那条 soft 软化是现成且量过的。
+     * 混两套不漂亮，但比"为了统一把投影做丢"务实 —— 真要统一，等有对照再收口。
+     * <p>
+     * 【已知顺序差异】影子现在统一在外壳之前，旧版是"上一张的影子 -> 这张的框"。差别只在
+     * 相邻两张之间那圈 3px 软边的叠色上；像素门禁若判超差就回头修。
+     */
+    private void paintViaNvg(GuiGraphics gui, CardCanvas canvas, List<CardSlot> slots, Font font, NvgCanvas nvg) {
+        StyleModel style = canvas.style();
+
+        ShapeBatch batch = new ShapeBatch(gui);
+        for (CardSlot slot : slots) {
+            float rise = canvas.contentOf(slot.view());
+            pushCardPose(gui, canvas, slot, rise);
+            cardShadow(batch, style, boxXOf(canvas, slot, style, rise), 0f, bodyWOf(slot, style),
+                    slot.height(), Math.min(style.cornerRadius(), slot.height() / 2f));
+            gui.pose().popPose();
         }
+        batch.flush();
+
+        // 原版批次必须先上 GPU：NanoVG 是直接 GL
+        gui.flush();
+        float guiScale = (float) Minecraft.getInstance().getWindow().getGuiScale();
+        nvg.begin(gui.guiWidth(), gui.guiHeight(), guiScale);
+        try {
+            long vg = nvg.handle();
+            for (CardSlot slot : slots) {
+                float rise = canvas.contentOf(slot.view());
+                NanoVG.nvgSave(vg);
+                motionToNvg(vg, canvas, slot, rise);
+                NvgCardPainter.paintCard(vg, style, slot.x(), slot.y(), slot.width(), slot.height(),
+                        accentOf(slot.view().notice().payload()), canvas.barOf(slot.view()),
+                        bodyShiftOf(canvas, slot, style, rise));
+                NanoVG.nvgRestore(vg);
+            }
+        } finally {
+            nvg.end();
+        }
+
+        ShapeBatch glow = new ShapeBatch(gui);
+        for (CardSlot slot : slots) {
+            float rise = canvas.contentOf(slot.view());
+            Inbox.Card card = slot.view().notice().payload();
+            pushCardPose(gui, canvas, slot, rise);
+            cardGlow(glow, style, accentOf(card), isHighlighted(card), boxXOf(canvas, slot, style, rise),
+                    0f, bodyWOf(slot, style), slot.height(),
+                    Math.min(style.cornerRadius(), slot.height() / 2f), rise);
+            gui.pose().popPose();
+        }
+        glow.flush();
+
+        for (CardSlot slot : slots) {
+            contentOnly(gui, canvas, slot, font);
+        }
+    }
+
+    /** 只画原版那部分（物品图标 + 名字 + 数量），带入场裁剪。外壳已经不在这趟里了。 */
+    private void contentOnly(GuiGraphics gui, CardCanvas canvas, CardSlot slot, Font font) {
+        StyleModel style = canvas.style();
+        float h = slot.height();
+        float gap = style.gap();
+        float bodyX = style.barWidth() + gap;
+        float bodyW = Math.max(0f, slot.width() - bodyX);
+        float rise = canvas.contentOf(slot.view());
+        boolean clip = canvas.layout().appearMode() == LayoutSettings.Appear.CLIP;
+        float windowW = clip ? bodyW * rise : bodyW;
+        float shift = clip ? 0f : -(1f - rise) * bodyW;
+
+        pushCardPose(gui, canvas, slot, rise);
+        boolean revealing = rise < 1f;
+        if (revealing) {
+            scissor(gui, gui.pose(), bodyX + windowW, h);
+        }
+        body(gui, canvas, slot, font, style, h, gap, bodyX, shift);
+        if (revealing) {
+            // 原版内容还在 bufferSource 里排队：不在这里冲掉，它会在裁剪失效之后才画出来
+            gui.bufferSource().endBatch();
+            gui.disableScissor();
+        }
+        gui.pose().popPose();
+    }
+
+    /** 入场位移/缩放：先到卡中心缩放、再按 dy 平移、最后落到卡的左上角。 */
+    private static void pushCardPose(GuiGraphics gui, CardCanvas canvas, CardSlot slot, float rise) {
+        PoseStack pose = gui.pose();
+        pose.pushPose();
+        motion(pose, canvas, slot, rise);
+        pose.translate(slot.x(), slot.y(), 0f);
+    }
+
+    private static float bodyWOf(CardSlot slot, StyleModel style) {
+        return Math.max(0f, slot.width() - style.barWidth() - style.gap());
+    }
+
+    /** 内容横向滑动量：CLIP 是"窗口变宽、内容不动"，另一模式是内容从竖条后面平移出来。 */
+    private static float bodyShiftOf(CardCanvas canvas, CardSlot slot, StyleModel style, float rise) {
+        if (canvas.layout().appearMode() == LayoutSettings.Appear.CLIP) {
+            return 0f;
+        }
+        return -(1f - rise) * bodyWOf(slot, style);
+    }
+
+    private static float boxXOf(CardCanvas canvas, CardSlot slot, StyleModel style, float rise) {
+        return style.barWidth() + style.gap() + bodyShiftOf(canvas, slot, style, rise);
+    }
+
+    /**
+     * 卡片投影：一个比卡略大的圆角矩形，边缘按 soft 软化。
+     * <p>
+     * 【为什么抽出来】它有两条调用路径：SDF 整条回退、以及引擎版里单独那一趟"影子"。
+     * 各写一遍的话，改一处忘一处 = 回退之后忽然变丑，而且没人会注意到。
+     */
+    private static void cardShadow(ShapeBatch batch, StyleModel style, float boxX, float y,
+                                   float bodyW, float h, float radius) {
+        if (style.shadowAlpha() <= 0) {
+            return;
+        }
+        float spread = SHADOW_SPREAD;
+        batch.shadow(boxX - spread, y + style.shadowOffsetY() - spread,
+                bodyW + spread * 2f, h + spread * 2f,
+                radius + spread, style.shadowBlur() / 2f,
+                withAlpha(0x000000, style.shadowAlpha()));
+    }
+
+    /**
+     * 稀有度微光：叠在外壳<b>之上</b>的一层强调色柔光（经验卡、白名单强调的卡）。
+     * 顺序不能挪到外壳之前 —— 那样会被框底色盖掉，看起来就是"没画"。
+     */
+    private static void cardGlow(ShapeBatch batch, StyleModel style, int accent, boolean highlighted,
+                                 float boxX, float y, float bodyW, float h, float radius, float rise) {
+        if (rise <= 0.5f || style.glowAlpha() <= 0 || !highlighted) {
+            return;
+        }
+        batch.shadow(boxX - 2f, y - 2f, bodyW + 4f, h + 4f, radius + 2f, 3f,
+                withAlpha(accent, style.glowAlpha()));
     }
 
     /**
@@ -230,18 +374,39 @@ public final class TrioCardPainter implements CardPainter {
     // 公共
     // ------------------------------------------------------------------
 
-    /** 入场上升 + 退场下沉。两趟绘制共用，否则文字会和外壳错位。 */
-    private static void motion(PoseStack pose, CardCanvas canvas, CardSlot slot, float rise) {
+    /**
+     * 入场上升 + 退场下沉。外壳（NanoVG）与内容（原版）必须用同一组数，否则文字会和框错位，
+     * 所以数只算一处：{@link Motion}。两条路径各取所需 —— 一条写进 PoseStack，
+     * 一条写进 NanoVG 的矩阵（NanoVG 有自己的栈，pose 里的它看不见）。
+     */
+    private record Motion(float dy, float scale) {
+    }
+
+    private static Motion motionOf(CardCanvas canvas, CardSlot slot, float rise) {
         float exit = canvas.exitOf(slot.view());
         float dy = (1f - Easing.easeOutBack(rise)) * ENTER_RISE + Easing.easeInQuad(exit) * EXIT_DROP;
         float scale = (0.94f + 0.06f * Easing.easeOutBack(rise)) * (1f - 0.06f * exit);
+        return new Motion(dy, scale);
+    }
 
+    private static void motion(PoseStack pose, CardCanvas canvas, CardSlot slot, float rise) {
+        Motion m = motionOf(canvas, slot, rise);
         float cx = slot.centerX();
         float cy = slot.centerY();
         pose.translate(cx, cy, 0f);
-        pose.scale(scale, scale, 1f);
+        pose.scale(m.scale(), m.scale(), 1f);
         pose.translate(-cx, -cy, 0f);
-        pose.translate(0f, dy, 0f);
+        pose.translate(0f, m.dy(), 0f);
+    }
+
+    private static void motionToNvg(long vg, CardCanvas canvas, CardSlot slot, float rise) {
+        Motion m = motionOf(canvas, slot, rise);
+        float cx = slot.centerX();
+        float cy = slot.centerY();
+        NanoVG.nvgTranslate(vg, cx, cy);
+        NanoVG.nvgScale(vg, m.scale(), m.scale());
+        NanoVG.nvgTranslate(vg, -cx, -cy);
+        NanoVG.nvgTranslate(vg, 0f, m.dy());
     }
 
     /**

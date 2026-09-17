@@ -48,6 +48,7 @@ public final class DevCardScreen extends Screen {
     /** 形状层 spike：只画矢量图元，不画卡。用来回答"形状到底画得出来吗"。 */
     private boolean spike;
     private NvgCanvas nvg;
+    private boolean ownsNvg;
 
     public DevCardScreen() {
         super(Component.literal("PickupCard Harness"));
@@ -170,7 +171,11 @@ public final class DevCardScreen extends Screen {
     private void paintNvgProbe(GuiGraphics gui) {
         gui.flush();
         if (nvg == null) {
-            nvg = NvgCanvas.create();
+            // 用共享上下文：探针和真卡面是同一套 GL 状态纪律。
+            // 各建一个的话，第一帧会看见两条"上下文已建立"，而且两个上下文的
+            // 状态恢复互相不知道 —— 那种 bug 只在特定顺序下出现。
+            nvg = NvgCanvas.shared();
+            ownsNvg = false;
         }
         if (nvg == null || !nvg.valid()) {
             gui.drawString(font, "nvg: no context (see log)", 8, 176, 0xFFFF4D6D, true);
@@ -181,8 +186,8 @@ public final class DevCardScreen extends Screen {
         Minecraft mc = Minecraft.getInstance();
         nvg.begin(width, height, (float) mc.getWindow().getGuiScale());
         try {
-            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f);
-            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f);
+            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f, 0f);
+            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f, 0f);
         } finally {
             nvg.end();
         }
@@ -193,7 +198,8 @@ public final class DevCardScreen extends Screen {
 
     @Override
     public void removed() {
-        if (nvg != null) {
+        // 共享上下文不归这个屏幕管：它活得比屏幕久
+        if (nvg != null && ownsNvg) {
             nvg.close();
             nvg = null;
         }
