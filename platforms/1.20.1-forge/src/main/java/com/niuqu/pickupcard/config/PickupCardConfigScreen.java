@@ -168,8 +168,8 @@ public final class PickupCardConfigScreen extends Screen {
                 "100% 原样。「自动」= 一摞卡塞不进 HUD 带之上就按比例缩，最多缩到 60%");
         cell("同屏上限", number(v.maxOnScreen, settings.maxOnScreen(), 1, 16, 1, " 张"),
                 "同时在屏最多几张。GUI 缩放越大、画布越小，放得下的越少");
-        cell("排队上限", new NvgButton("排队上限", () -> "暂未实现", null),
-                "现在超出同屏上限的那张会被挤掉，不做排队");
+        cell("排队上限", number(v.queueSize, settings.queueSize(), 0, 32, 1, " 张"),
+                "屏上满了就先排队（先来先上屏）；0 = 不排队，屏满之后的拾取直接丢掉");
     }
 
     /**

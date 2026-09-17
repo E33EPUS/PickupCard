@@ -1,7 +1,9 @@
 package com.niuqu.pickupcard.notice;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.Deque;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -25,7 +27,11 @@ public final class NoticeQueue<T> {
         /** 并进了已有卡：只需要把数量与代数写回 DOM。 */
         MERGED,
         /** 已有卡被挤掉（超出同时在屏数量）：需要播退场后移除。 */
-        EVICTED
+        EVICTED,
+        /** 屏上满了：这次拾取排到队尾，等有卡退场再上屏（此刻屏幕上什么都不会发生）。 */
+        QUEUED,
+        /** 屏上满了、队也排满了：这次拾取被丢掉（屏幕上什么都不会发生）。 */
+        DROPPED
     }
 
     /**
@@ -54,16 +60,20 @@ public final class NoticeQueue<T> {
      */
     private final Map<String, Notice<T>> leaving = new LinkedHashMap<>();
 
+    /** 等上屏的那些拾取，<b>先来先上屏</b>（FIFO）。出处：0.1.0 的 NoticeQueue#enqueue 用的就是 addLast/pollFirst。 */
+    private final Deque<Notice<T>> pending = new ArrayDeque<>();
+
     /**
      * 收下一次拾取。
      *
      * @param mergeMode    合并粒度（哪些拾取算同一件东西）；{@link MergeMode#NEVER} = 从不合并
-     * @param maxOnScreen  同时在屏上限；超出的按"最久没被碰过"淘汰
+     * @param maxOnScreen  同时在屏上限；满了就排队，不再顶掉别人
+     * @param queueSize    排队上限；0 = 不排队（超出的直接丢）
      * @return 发生的改动；被淘汰的那张卡会作为结果返回（调用方据此让 DOM 播退场）
      */
     public Outcome<T> absorb(String key, String lookKey, T payload, int amount,
                              boolean firstTime, long now,
-                             MergeMode mergeMode, int maxOnScreen) {
+                             MergeMode mergeMode, int maxOnScreen, int queueSize) {
         List<Notice<T>> evicted = new ArrayList<>();
         Notice<T> existing = alive.get(key);
         if (existing == null) {
@@ -93,38 +103,54 @@ public final class NoticeQueue<T> {
             evicted.add(existing);
             leaving.put(key, existing);
         }
+        // 排队里已经有同一个物品：并进排队那张，而不是再排一个 ——
+        // 不然"连捡 10 个钻石"会在队里排出 10 个各自为政的拾取
+        for (Notice<T> queued : pending) {
+            if (queued.key().equals(key)
+                    && MergeWindow.shouldMerge(true, queued.lookKey().equals(lookKey), mergeMode)) {
+                Notice<T> merged = queued.mergeInto(amount, now);
+                replaceQueued(queued, merged);
+                return new Outcome<>(Change.MERGED, merged, evicted);
+            }
+        }
+
         Notice<T> fresh = new Notice<>(key, lookKey, payload, amount, firstTime, now, now, 0);
+        if (alive.size() >= maxOnScreen) {
+            // 屏上满了：排到队尾。排队也满 → 丢掉这次拾取（0.1.0 的语义就是这样）。
+            if (queueSize > 0 && pending.size() < queueSize) {
+                pending.addLast(fresh);
+                return new Outcome<>(Change.QUEUED, fresh, evicted);
+            }
+            return new Outcome<>(Change.DROPPED, fresh, evicted);
+        }
         alive.put(key, fresh);
-        evicted.addAll(evictOverflow(maxOnScreen));
         return new Outcome<>(Change.ADDED, fresh, evicted);
     }
 
-    /**
-     * 淘汰超出上限的卡。淘汰顺序 = 最久没被碰过的先走（LinkedHashMap 的插入序不够，
-     * 因为合并会刷新一张老卡，它应该重新排到活着的末尾）。
-     *
-     * @return 被淘汰的卡，按淘汰先后排列；调用方按顺序让它们退场
-     */
-    private List<Notice<T>> evictOverflow(int maxOnScreen) {
-        List<Notice<T>> evicted = new ArrayList<>();
-        if (maxOnScreen <= 0) return evicted;
-        while (alive.size() > maxOnScreen) {
-            String victim = null;
-            long oldest = Long.MAX_VALUE;
-            for (Map.Entry<String, Notice<T>> entry : alive.entrySet()) {
-                if (entry.getValue().touchedAt() < oldest) {
-                    oldest = entry.getValue().touchedAt();
-                    victim = entry.getKey();
-                }
-            }
-            if (victim == null) break;
-            Notice<T> removed = alive.remove(victim);
-            if (removed != null) {
-                evicted.add(removed);
-                leaving.put(victim, removed);       // 屏幕上还要淡出几百毫秒，这段时间它还能被救回
-            }
+    /** 队列里换掉一张（并了数量之后）。ArrayDeque 不能按位置改，只能重建。 */
+    private void replaceQueued(Notice<T> old, Notice<T> merged) {
+        List<Notice<T>> all = new ArrayList<>(pending);
+        pending.clear();
+        for (Notice<T> notice : all) {
+            pending.addLast(notice == old ? merged : notice);
         }
-        return evicted;
+    }
+
+    /**
+     * 腾出位子就补位（先来先上屏）。上屏的那张**从此刻重新起算**停留期。
+     *
+     * @return 轮到上屏的那些卡，按上屏先后排列；调用方给它们发 Added 事件
+     */
+    public List<Notice<T>> promote(long now, int maxOnScreen) {
+        List<Notice<T>> promoted = new ArrayList<>();
+        while (!pending.isEmpty() && alive.size() < maxOnScreen) {
+            Notice<T> next = pending.pollFirst();
+            if (next == null) break;
+            Notice<T> reborn = next.reborn(now);
+            alive.put(reborn.key(), reborn);
+            promoted.add(reborn);
+        }
+        return promoted;
     }
 
     /** 到点该退场的卡（停留超时），从账本里摘掉并返回。 */
@@ -168,8 +194,14 @@ public final class NoticeQueue<T> {
         return alive.size();
     }
 
+    /** 排队里有几张（诊断与单测用）。 */
+    public int pendingSize() {
+        return pending.size();
+    }
+
     public void clear() {
         alive.clear();
         leaving.clear();
+        pending.clear();
     }
 }

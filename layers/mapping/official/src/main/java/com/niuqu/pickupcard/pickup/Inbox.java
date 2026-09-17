@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.pickup;
 
+import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.filter.FilterRules;
 import com.niuqu.pickupcard.notice.MergeMode;
 import com.niuqu.pickupcard.filter.FilterSettings;
@@ -137,7 +138,7 @@ public final class Inbox {
         boolean firstTime = seen.markAndCheckFirst(seenKey);
         Card card = new Card(content, emphasized);
         NoticeQueue.Outcome<Card> outcome = queue.absorb(key, look, card, count, firstTime, now,
-                settings().mergeMode(), settings().maxOnScreen());
+                settings().mergeMode(), settings().maxOnScreen(), settings().queueSize());
 
         for (Notice<Card> evicted : outcome.evicted()) {
             pending.add(new Event.Evicted(evicted));
@@ -149,6 +150,12 @@ public final class Inbox {
                 // absorb 的顶替淘汰走上面那个列表；这个分支只在协议变动时才会出现
                 pending.add(new Event.Evicted(outcome.notice()));
             }
+            // 排队与丢弃在屏幕上都"什么都不发生"：排队的会在补位时变成 Added，
+            // 丢弃的（屏满 + 队满）只能靠日志说明白 —— 玩家看到的是"这次没弹"。
+            case QUEUED -> PickupCard.LOGGER.info("[排队] key={} 屏上已经 {} 张，等位子",
+                    outcome.notice().key(), settings().maxOnScreen());
+            case DROPPED -> PickupCard.LOGGER.info("[丢弃] key={}：屏满且队满（同屏 {} / 排队 {}）",
+                    outcome.notice().key(), settings().maxOnScreen(), settings().queueSize());
         }
         return false;
     }
@@ -172,6 +179,10 @@ public final class Inbox {
 
         for (Notice<Card> expired : queue.sweep(now, settings().holdMs())) {
             events.add(new Event.Expired(expired));
+        }
+        // 空出位子就补位（先来先上屏）。补上的那张算"新的卡"：入场动画照播。
+        for (Notice<Card> promoted : queue.promote(now, settings().maxOnScreen())) {
+            events.add(new Event.Added(promoted));
         }
         return events;
     }

@@ -36,6 +36,17 @@ public record Notice<T>(String key,
                 bornAt, now, generation + 1);
     }
 
+    /**
+     * 排队的那张轮到上屏了：从这一刻重新出生。
+     * <p>
+     * 【为什么必须重新起算】排队里的 Notice 出生时间是"被捡到那一刻"，而 {@code expiredAt} 是拿
+     * {@code touchedAt} 与停留时长比的 —— 不重算的话，排了几秒才轮到的卡可能刚上屏就到点。
+     * 0.1.0 的补位也是这么做的（它补位时直接 new 一张）。
+     */
+    public Notice<T> reborn(long now) {
+        return new Notice<>(key, lookKey, payload, count, firstTime, now, now, generation);
+    }
+
     /** 这张卡在 {@code now} 这一刻该不该退场。 */
     public boolean expiredAt(long now, long holdMs) {
         if (holdMs <= 0L) return true;

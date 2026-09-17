@@ -13,7 +13,8 @@ import com.niuqu.pickupcard.text.CountFormat;
  * @param exitMs        退场动画时长；DOM 要等它播完才移除节点
  * @param mergeMode     哪些拾取算同一件东西（同名同 NBT / 同名 / 同名但改名的不并 / 从不合并）
  *                      四档见 {@link MergeMode}
- * @param maxOnScreen   同时在屏上限，超出的淘汰最久没被碰过的
+ * @param maxOnScreen   同时在屏上限；满了就排队（不再顶掉别人）
+ * @param queueSize     排队上限；0 = 不排队（超出的直接丢）
  * @param countFormat   数量怎么写
  * @param enabled       总开关。关掉之后捡东西不再弹卡（屏上已有的也立刻清掉）
  * @param showItemName  显示物品名。关掉只剩"竖条 + 图标 + 数量" —— 卡会明显变窄
@@ -24,6 +25,7 @@ public record PickupCardSettings(long holdMs,
                                  long exitMs,
                                  MergeMode mergeMode,
                                  int maxOnScreen,
+                                 int queueSize,
                                  CountFormat countFormat,
                                  boolean enabled,
                                  boolean showItemName,
@@ -31,7 +33,7 @@ public record PickupCardSettings(long holdMs,
                                  int nameMaxWidth) {
 
     public static PickupCardSettings defaults() {
-        return new PickupCardSettings(2_600L, 320L, MergeMode.defaults(), 5, CountFormat.PLUS,
+        return new PickupCardSettings(2_600L, 320L, MergeMode.defaults(), 5, 9, CountFormat.PLUS,
                 true, true, false, 0);
     }
 
@@ -42,6 +44,7 @@ public record PickupCardSettings(long holdMs,
                 Math.max(0L, exitMs),
                 mergeMode == null ? MergeMode.defaults() : mergeMode,
                 Math.max(1, maxOnScreen),
+                Math.max(0, Math.min(128, queueSize)),
                 countFormat == null ? CountFormat.PLUS : countFormat,
                 enabled,
                 showItemName,

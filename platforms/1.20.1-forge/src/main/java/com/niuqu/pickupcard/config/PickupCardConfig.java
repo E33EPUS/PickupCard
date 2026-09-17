@@ -54,6 +54,7 @@ public final class PickupCardConfig {
                 VALUES.exitMs.get(),
                 VALUES.mergeMode.get(),
                 VALUES.maxOnScreen.get(),
+                VALUES.queueSize.get(),
                 VALUES.countFormat.get(),
                 VALUES.enabled.get(),
                 VALUES.showItemName.get(),
@@ -179,6 +180,7 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.LongValue exitMs;
         final ForgeConfigSpec.EnumValue<com.niuqu.pickupcard.notice.MergeMode> mergeMode;
         final ForgeConfigSpec.IntValue maxOnScreen;
+        final ForgeConfigSpec.IntValue queueSize;
         final ForgeConfigSpec.EnumValue<CountFormat> countFormat;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
@@ -253,8 +255,13 @@ public final class PickupCardConfig {
             builder.comment("布局").push("layout");
 
             maxOnScreen = builder
-                    .comment("同时在屏最多几张。超出的会挤掉最久没被碰过的那张。")
+                    .comment("同时在屏最多几张。满了之后新的拾取先排队，不再顶掉别人。")
                     .defineInRange("maxOnScreen", 5, 1, 16);
+
+            queueSize = builder
+                    .comment("排队上限：屏满时最多先排几张（先来先上屏）。",
+                            "0 = 不排队 —— 这时屏满之后的拾取会直接丢掉（0.1.0 的语义）。")
+                    .defineInRange("queueSize", 9, 0, 128);
 
             scalePercent = builder
                     .comment("卡片缩放（百分比）。0 = 自动：一摞卡塞不进 HUD 带之上就按比例缩小，",

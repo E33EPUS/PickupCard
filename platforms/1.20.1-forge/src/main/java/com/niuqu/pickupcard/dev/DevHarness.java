@@ -101,7 +101,15 @@ public final class DevHarness {
         /** 开屏后等入场动画播完再拍。 */
         private static final int SHOT_AFTER_OPEN = 40;
         /** 截图是异步落盘的，给它足够时间再退出。 */
-        private static final int QUIT_AFTER_SHOT = 40;
+        /**
+         * 拍完基础那张之后还跑多少 tick 再退出。
+         * <p>
+         * 【为什么是 70 而不是 40】卡的自然退场由 holdMs 决定（默认 4000ms = 80 tick），
+         * 而 ③a 之后「屏满」只排队、不再淘汰旧卡 —— 从前是「推第 6 张」制造退场，现在退场
+         * 只剩自然到点这一条路。窗口必须把这 80 tick 那一下包进去，否则「看见退场」永远不成立
+         * （第一版就是这么空跑的：日志里 `退场/淡回` 一行都没有）。
+         */
+        private static final int QUIT_AFTER_SHOT = 70;
         /**
          * 退场淡出：稳态那张拍完之后再推一张把最老的挤掉，隔 3 tick（约 150ms）拍中段。
          * <p>
@@ -111,9 +119,17 @@ public final class DevHarness {
          */
         private static final int EXIT_PUSH_AFTER = SHOT_AFTER_OPEN + 2;
         private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
-        /** 淡出播到一半（480ms 里约 250ms 处）再捡一个同样的物品：合并会把退场撤销。 */
-        private static final int EXIT_REVIVE_AFTER = EXIT_SHOT_AFTER + 2;
-        private static final int EXIT_REVIVE_SHOT_AFTER = EXIT_REVIVE_AFTER + 2;
+        /** 看见第一帧退场之后，再过几帧才算"淡到一半"（那时再捡同一个物品触发淡回）。 */
+        private static final int REVIVE_AFTER_EXIT_SEEN = 3;
+        /** 淡回开始之后再过几帧拍一张。 */
+        private static final int REVIVE_SHOT_AFTER = 2;
+
+        /** 探针状态：退场与淡回各只做一次，靠"看见"驱动而不是靠固定 tick。 */
+        private static boolean exitSeen;
+        private static boolean exitShotDone;
+        private static boolean reviveDone;
+        private static int ticksSinceExitSeen;
+        private static int ticksSinceRevive;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
         /** 卡样例页之后的矢量 spike 页（不画卡，只画图元与外壳探针）。 */
@@ -348,35 +364,47 @@ public final class DevHarness {
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
                                 m.getString()));
             } else if (age == EXIT_PUSH_AFTER) {
-                // 再推一张：账本上限 5，这一张会挤掉最老的那张 —— 正好把"退场淡出"拍下来。
-                // 挑的是别页的样例（钻石），跟这一页那五件都不是同一样东西：同一样东西会被
-                // 合并窗口并进已有的卡里，那就根本轮不到淘汰，等着看退场只会拍到一张没动静的图。
+                // 再推一张（钻石，跟这一页那五件都不是同一样东西）：③a 之后屏满**不再顶掉旧卡**
+                // 而是排队 —— 这一步因此从"触发淘汰"变成了"验证排队"。
                 CardFixtures.Fixture extra = CardFixtures.all().get(6);
                 CardFixtures.inject(extra);
-                PickupCard.LOGGER.info("[harness-auto] 推第 6 张（{}）触发退场", extra.label());
-            } else if (age == EXIT_SHOT_AFTER) {
-                CardStage.Stats s = CardStage.INSTANCE.stats();
-                PickupCard.LOGGER.info("[harness-auto] 退场中读数 cards={} painted={}",
-                        s.live(), s.painted());
-                PickupCard.LOGGER.info("[harness-auto] HUD 在屏: {}", CardStage.INSTANCE.lastSlots()
-                        .stream().map(slot -> slot.view().key())
-                        .collect(java.util.stream.Collectors.joining(", ")));
-                Screenshot.grab(mc.gameDirectory, "pickupcard-hud-exit", mc.getMainRenderTarget(),
-                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-exit -> {}",
-                                m.getString()));
-            } else if (age == EXIT_REVIVE_AFTER) {
-                // 【为什么要推这一下】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。
-                // 逐帧 alpha 探针证明退场曲线本身是单调的（不再有第二种可能），那剩下的解释
-                // 只有一种：淡出被"救回来"了 —— 合并会把退场撤销（CardView#absorbMerge）。
-                // 这里就在淡出播到一半时再捡一个同样的石头，把它复现出来。
-                CardFixtures.inject(PAGES.get(0).get(0));
-                PickupCard.LOGGER.info("[harness-auto] 淡出中再捡一次石头（同一样例：最老那张就是它）");
-            } else if (age == EXIT_REVIVE_SHOT_AFTER) {
-                PickupCard.LOGGER.info("[harness-auto] 救回后读数 cards={}",
-                        CardStage.INSTANCE.stats().live());
-                Screenshot.grab(mc.gameDirectory, "pickupcard-hud-revive", mc.getMainRenderTarget(),
-                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-revive -> {}",
-                                m.getString()));
+                PickupCard.LOGGER.info("[harness-auto] 推第 6 张（{}）：屏满，应该排队", extra.label());
+            } else if (!exitSeen && anyExiting()) {
+                // 【为什么不再用固定 tick】退场什么时候发生取决 holdMs / 同屏上限 / 排队上限，
+                // 写死 tick 就会在改了配置之后拍空。改成"看见第一帧退场就记录"，之后按帧数推进。
+                exitSeen = true;
+                ticksSinceExitSeen = 0;
+                PickupCard.LOGGER.info("[harness-auto] 看见退场：cards={} painted={}",
+                        CardStage.INSTANCE.stats().live(), CardStage.INSTANCE.stats().painted());
+            } else if (exitSeen) {
+                // 【计数必须在每一 tick 自增】上一版把 ++ 写在"还没拍过"的条件里，拍完就冻住了，
+                // 于是后面那个"淡到一半再捡一次"的门槛永远到不了 —— 救回那一步从没跑过。
+                ticksSinceExitSeen++;
+                if (!exitShotDone && ticksSinceExitSeen == 1) {
+                    exitShotDone = true;
+                    PickupCard.LOGGER.info("[harness-auto] 退场中读数 cards={} painted={}",
+                            CardStage.INSTANCE.stats().live(), CardStage.INSTANCE.stats().painted());
+                    Screenshot.grab(mc.gameDirectory, "pickupcard-hud-exit", mc.getMainRenderTarget(),
+                            m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-exit -> {}",
+                                    m.getString()));
+                } else if (exitShotDone && !reviveDone && anyExiting()
+                        && ticksSinceExitSeen >= REVIVE_AFTER_EXIT_SEEN) {
+                    // 【为什么要推这一下】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。
+                    // 逐帧 alpha 探针证明退场曲线本身是单调的（不再有第二种可能），那剩下的解释
+                    // 只有一种：淡出被"救回来"了 —— 合并会把退场撤销（CardView#absorbMerge）。
+                    // 这里就在淡出播到一半时再捡一个同样的石头，把它复现出来。
+                    reviveDone = true;
+                    ticksSinceRevive = 0;
+                    CardFixtures.inject(PAGES.get(0).get(0));
+                    PickupCard.LOGGER.info("[harness-auto] 淡出中再捡一次石头（同一样例：最老那张就是它）");
+                } else if (reviveDone && ++ticksSinceRevive == REVIVE_SHOT_AFTER + 1) {
+                    PickupCard.LOGGER.info("[harness-auto] 救回后读数 cards={}",
+                            CardStage.INSTANCE.stats().live());
+                    Screenshot.grab(mc.gameDirectory, "pickupcard-hud-revive", mc.getMainRenderTarget(),
+                            m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-revive -> {}",
+                                    m.getString()));
+                }
+            } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
             } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
                 PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");
                 mc.stop();
@@ -430,6 +458,12 @@ public final class DevHarness {
                             // 在缩放档下说"放得下 7 张"而排布实际只放得下 5 张
                             CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
                             PickupCardConfig.layoutSnapshot().separation() * effectiveScale(mc)));
+        }
+
+        /** 这一帧有没有卡正在退场（含淡回）：探针靠它决定"什么时候该拍"。 */
+        private static boolean anyExiting() {
+            return CardStage.INSTANCE.lastSlots().stream()
+                    .anyMatch(slot -> slot.view().exiting() || slot.view().reviving());
         }
 
         /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式）。 */
