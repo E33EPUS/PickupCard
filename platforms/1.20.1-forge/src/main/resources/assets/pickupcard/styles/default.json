@@ -1,13 +1,13 @@
 {
   "_comment": "由 tools/css_tokens.py 从 design/tokens.css 生成，不要手改。",
   "geometry": {
-    "cornerRadius": 6,
-    "paddingH": 6,
-    "paddingV": 4,
-    "gap": 4,
-    "iconSize": 24,
-    "barWidth": 5,
-    "barInsetY": 2
+    "cornerRadius": 4,
+    "paddingH": 4,
+    "paddingV": 3,
+    "gap": 3,
+    "iconSize": 16,
+    "barWidth": 4,
+    "barInsetY": 1
   },
   "material": {
     "fillTop": "#262B38D1",
@@ -15,8 +15,8 @@
     "border": "#FFFFFF2E",
     "highlight": "#FFFFFF3C",
     "shadowAlpha": 90,
-    "shadowOffsetY": 3,
-    "shadowBlur": 6,
+    "shadowOffsetY": 2,
+    "shadowBlur": 4,
     "glowAlpha": 46
   },
   "text": {

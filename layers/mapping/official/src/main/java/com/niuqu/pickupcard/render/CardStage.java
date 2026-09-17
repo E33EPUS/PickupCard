@@ -44,7 +44,7 @@ public final class CardStage {
     private static final int MARGIN_X = 16;
     private static final int MARGIN_Y = 16;
     /** 卡与卡之间的间隙。跟卡内间隙（style.gap）不是一回事，刻意分开。 */
-    private static final float STACK_GAP = 6f;
+    private static final float STACK_GAP = 4f;
 
     /** 插入序 = 从老到新，正好是排布要的顺序。 */
     private final Map<String, CardView> live = new LinkedHashMap<>();

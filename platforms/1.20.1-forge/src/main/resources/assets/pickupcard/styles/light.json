@@ -6,8 +6,8 @@
     "border": "#1B1F2724",
     "highlight": "#FFFFFFCC",
     "shadowAlpha": 70,
-    "shadowOffsetY": 3,
-    "shadowBlur": 6,
+    "shadowOffsetY": 2,
+    "shadowBlur": 4,
     "glowAlpha": 46
   },
   "text": {

@@ -87,5 +87,9 @@
   gap: var(--pc-gap);
   padding: 0 var(--pc-pad-h);
 }
+/* 【字号是约束不是旋钮】游戏那边用原版字体，scale 1 的字模高度就是 8px；
+   草稿这边如果不压到 8px，两边永远对不上 —— 之前草稿是继承 body 的 13px，
+   于是"框比字大"的问题在草稿里根本看不见。这个数不能调，除非游戏那边换字体。 */
+.name, .count { font-size: 8px; line-height: 1; }
 .name { color: var(--pc-name); white-space: nowrap; }
 .count { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }

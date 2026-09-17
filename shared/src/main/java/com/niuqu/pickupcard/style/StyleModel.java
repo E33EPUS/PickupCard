@@ -64,9 +64,9 @@ public record StyleModel(int cornerRadius,
 
     public static StyleModel defaults() {
         return new StyleModel(
-                6, 6, 4, 4, 24, 5, 2,
+                4, 4, 3, 3, 16, 4, 1,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
-                0x3CFFFFFF, 90, 3, 6, 46,
+                0x3CFFFFFF, 90, 2, 4, 46,
                 0xF0EBEFF6,
                 320L, 300L, true, true, true);
     }
@@ -108,20 +108,20 @@ public record StyleModel(int cornerRadius,
             JsonObject tex = obj(root, "text");
             JsonObject anim = obj(root, "animation");
             return new StyleModel(
-                    i(geo, "cornerRadius", 6),
-                    i(geo, "paddingH", 6),
-                    i(geo, "paddingV", 4),
-                    i(geo, "gap", 4),
-                    i(geo, "iconSize", 24),
-                    i(geo, "barWidth", 5),
-                    i(geo, "barInsetY", 2),
+                    i(geo, "cornerRadius", 4),
+                    i(geo, "paddingH", 4),
+                    i(geo, "paddingV", 3),
+                    i(geo, "gap", 3),
+                    i(geo, "iconSize", 16),
+                    i(geo, "barWidth", 4),
+                    i(geo, "barInsetY", 1),
                     color(mat, "fillTop", 0xD1262B38),
                     color(mat, "fillBottom", 0xDB161A22),
                     color(mat, "border", 0x2EFFFFFF),
                     color(mat, "highlight", 0x3CFFFFFF),
                     i(mat, "shadowAlpha", 90),
-                    i(mat, "shadowOffsetY", 3),
-                    i(mat, "shadowBlur", 6),
+                    i(mat, "shadowOffsetY", 2),
+                    i(mat, "shadowBlur", 4),
                     i(mat, "glowAlpha", 46),
                     color(tex, "nameColor", 0xF0EBEFF6),
                     i(anim, "enterMs", 320),
