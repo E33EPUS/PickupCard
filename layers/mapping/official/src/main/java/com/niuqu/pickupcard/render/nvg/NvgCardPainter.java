@@ -83,6 +83,9 @@ import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
  */
 public final class NvgCardPainter {
 
+    /** 名字被截断时补的那个字符（跟 {@code CardMetrics#ELLIPSIS} 同一个字符）。 */
+    private static final String ELLIPSIS = "\u2026";
+
     /** 稀有度微光往外扩的量与软边宽度。 */
     private static final float GLOW_SPREAD = 2f;
     private static final float GLOW_FEATHER = 3f;
@@ -404,10 +407,11 @@ public final class NvgCardPainter {
      * @param glow     预览是不是"会被强调的那种卡"（经验卡 / 白名单卡）。样例画的是经验，
      *                 所以预览里看得到那层微光 —— 否则玩家永远调不出它
      * @param showName 关掉"显示物品名"之后预览也必须不画名字，否则预览就成了说谎的那一份
+     * @param alpha    整张卡的不透明度（换样例时的淡入；1 = 不透明）
      */
     public static void paintPreview(GuiGraphics gui, StyleModel style, float x, float y, float cardW,
                                     ItemStack icon, String name, String count, int accent,
-                                    boolean glow, boolean showName, float cardScale) {
+                                    boolean glow, boolean showName, float cardScale, float alpha) {
         float h = style.boxHeight();
         float bodyX = style.barWidth() + style.gap();
         float gap = style.gap();
@@ -425,6 +429,7 @@ public final class NvgCardPainter {
                 // 【预览也要走缩放】预览要是按 100% 画，玩家把缩放调到 60% 时预览还在骗他。
                 long vg = nvg.handle();
                 nvgSave(vg);
+                nvgGlobalAlpha(vg, Easing.clamp01(alpha));
                 nvgTranslate(vg, x, y);
                 nvgScale(vg, cardScale, cardScale);
                 paintShell(vg, style, 0f, 0f, localW, localH, accent, 1f, 0f, 1f, glow,
@@ -440,20 +445,39 @@ public final class NvgCardPainter {
         gui.pose().pushPose();
         gui.pose().translate(x, y, 0f);
         gui.pose().scale(cardScale, cardScale, 1f);
+        boolean fading = alpha < 0.999f;
+        if (fading) {
+            // 图标是原版画的，没有"染色"参数可传 —— 跟真卡淡出走同一个入口（全局色调制），
+            // 同样要先冲一次队列：前面排着的文字要是被这次设色带上了，跟着淡的就是别人。
+            gui.flush();
+            RenderSystem.setShaderColor(1f, 1f, 1f, Easing.clamp01(alpha));
+        }
         gui.pose().pushPose();
         gui.pose().translate(bodyX + localH / 2f, localH / 2f, 0f);
         gui.pose().scale(iconScale, iconScale, 1f);
         gui.renderItem(icon, -8, -8);
         gui.pose().popPose();
+        if (fading) {
+            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
+        }
 
         float textY = (localH - font.lineHeight) / 2f;
         if (showName) {
-            gui.drawString(font, name,
-                    Math.round(bodyX + localH + gap + style.paddingH()), Math.round(textY),
-                    style.nameColor(), true);
+            // 【名字为什么要截】真卡的名字由 CardMetrics#fittedName 按屏宽截；预览这一份从前
+            // 不截，于是"长名字的卡"在窄预览列里会把字画到卡框外面去 —— 真卡不会。
+            // 预览一旦和真卡不一样，"所见即所得"就是假的（而且是静默的假）。
+            float nameX = bodyX + localH + gap + style.paddingH();
+            float room = localW - nameX - style.paddingH() - font.width(count) - gap;
+            String shown = name;
+            if (font.width(name) > room) {
+                shown = font.plainSubstrByWidth(name,
+                        (int) Math.max(0f, room - font.width(ELLIPSIS))) + ELLIPSIS;
+            }
+            gui.drawString(font, shown, Math.round(nameX), Math.round(textY),
+                    fade(style.nameColor(), alpha), true);
         }
         gui.drawString(font, count, Math.round(localW - style.paddingH() - font.width(count)),
-                Math.round(textY), accent, true);
+                Math.round(textY), fade(accent, alpha), true);
         gui.pose().popPose();
     }
 

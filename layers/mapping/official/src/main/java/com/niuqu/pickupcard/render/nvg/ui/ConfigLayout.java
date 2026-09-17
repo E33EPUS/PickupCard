@@ -45,6 +45,10 @@ public record ConfigLayout(boolean tabsOnTop,
     public static final float ITEMS_MAX = 260f;
     /** 预览列的下限：比这窄就干脆收掉（挤成一条的预览比没有更难看）。 */
     public static final float PREVIEW_MIN = 120f;
+    /** 预览面板底下那一行「切样例」按钮的高度。 */
+    public static final float SWITCH_ROW = 14f;
+    /** 卡片本身最少要留的高度：连它都留不出的时候，切换行让位给卡（卡才是主角）。 */
+    public static final float PREVIEW_CARD_MIN = 34f;
 
     private static float clamp(float v, float lo, float hi) {
         return Math.max(lo, Math.min(hi, v));
@@ -103,5 +107,44 @@ public record ConfigLayout(boolean tabsOnTop,
             return new Rect(tabs.x() + index * (w + 4f), tabs.y(), w, tabRow);
         }
         return new Rect(tabs.x() + 2f, tabs.y() + index * (tabRow + 2f), w, tabRow);
+    }
+
+    // ------------------------------------------------------------------
+    // 预览面板内部：标题 + 卡 + 切样例行
+    // ------------------------------------------------------------------
+
+    /** 预览面板的标题占多高（下面才是卡）。 */
+    public static final float PREVIEW_TITLE = 12f;
+
+    /**
+     * 切样例行要不要画。
+     * <p>画布太矮时它让位给卡：卡是主角，四颗按钮挤在一条缝里既点不动也看不清。
+     */
+    public boolean switcherVisible() {
+        return previewVisible && preview.h() - PREVIEW_TITLE - 2f - SWITCH_ROW - 4f >= PREVIEW_CARD_MIN;
+    }
+
+    /** 预览面板里放卡的那块（标题之下、切样例行之上）。 */
+    public Rect previewCard() {
+        if (!previewVisible) {
+            return new Rect(preview.x(), preview.y(), 0f, 0f);
+        }
+        float x = preview.x() + 2f;
+        float w = Math.max(0f, preview.w() - 4f);
+        float y = preview.y() + PREVIEW_TITLE;
+        float bottom = preview.bottom() - 2f - (switcherVisible() ? SWITCH_ROW + 4f : 0f);
+        return new Rect(x, y, w, Math.max(0f, bottom - y));
+    }
+
+    /** 切样例按钮第 index 颗（切换行不画时返回零矩形）。 */
+    public Rect switchRect(int index, int count) {
+        if (!switcherVisible() || count <= 0) {
+            return new Rect(preview.x(), preview.y(), 0f, 0f);
+        }
+        float inset = 2f;
+        float gap = 3f;
+        float w = Math.max(0f, (preview.w() - inset * 2f - gap * (count - 1)) / count);
+        return new Rect(preview.x() + inset + index * (w + gap),
+                preview.bottom() - inset - SWITCH_ROW, w, SWITCH_ROW);
     }
 }

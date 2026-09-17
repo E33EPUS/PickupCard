@@ -328,25 +328,106 @@ public final class DevHarness {
                         before, after);
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 56) {
+            // ---- 第 ④ 步：预览样例 + 短动画 ----
+            // 【为什么点完立刻 dump 一次、过几帧再 dump 一次】动画的"跑了"与"跑到哪"是两件事：
+            // 第一行读数是起点（≈0），第二行是终点（=1）。只看终点的话，硬切（没有动画）
+            // 和"动画播完了"在日志里长得一模一样。
+            if (configTicks == WARMUP_TICKS + 54) {
+                PickupCard.LOGGER.info("[harness-auto] 换样例前: {}", configState(mc));
+                if (!clickByLabel(mc, "稀有")) {
+                    PickupCard.LOGGER.warn("[harness-auto] 这一档画布上没有切样例行（预览收起了）");
+                }
+                PickupCard.LOGGER.info("[harness-auto] 点『稀有』后: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 55) {
+                // 淡入 200ms = 4 tick：第 1 tick 大约是半透明，拍下来才看得见"在淡"
+                capture(mc, "preview-fade");
+                PickupCard.LOGGER.info("[harness-auto] 换样例淡入中: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 62) {
+                capture(mc, "preview");
+                PickupCard.LOGGER.info("[harness-auto] 换样例停稳: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 64) {
+                clickByLabel(mc, "长名");     // 长名字那一档：验截断，也验"预览不越界"
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 66) {
+                // 悬停「停留时长」（动画页上的那一项）：太短的行悬停看不出来，这一页正好有
+                hoverByLabel(mc, "停留时长");
+                PickupCard.LOGGER.info("[harness-auto] 悬停「停留时长」后: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 67) {
+                capture(mc, "hover");
+                PickupCard.LOGGER.info("[harness-auto] 悬停动画中: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 72) {
+                PickupCard.LOGGER.info("[harness-auto] 悬停停稳: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 74) {
+                hoverByLabel(mc, null);       // 松开悬停，接着切到布局页看那一摞卡
+                clickByLabel(mc, "位置与堆叠");
+                PickupCard.LOGGER.info("[harness-auto] 切页那一帧（换页/强调条都该在起点）: {}",
+                        configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 76) {
+                capture(mc, "page-mid");      // 换页 180ms：第 2 tick 正是中段
+                PickupCard.LOGGER.info("[harness-auto] 换页动画中: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 84) {
+                capture(mc, "stack");
+                PickupCard.LOGGER.info("[harness-auto] 布局页（长名样例在摞里）: {}", configState(mc));
+                PickupCard.LOGGER.info("[harness-auto] 配置列: {}", columnDump(mc));
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 88) {
                 PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
                 mc.stop();
             }
         }
 
+        /** 界面自己的状态读数（哪一页、哪个样例、动画走到哪）—— 截图看不出"动画有没有真播"。 */
+        private static String configState(Minecraft mc) {
+            return mc.screen instanceof PickupCardConfigScreen screen ? screen.stateDump()
+                    : "(不是配置界面)";
+        }
+
+        private static String columnDump(Minecraft mc) {
+            return mc.screen instanceof PickupCardConfigScreen screen ? screen.columnDump()
+                    : "(不是配置界面)";
+        }
+
         /**
-         * 按标签找控件、点它的中心。
+         * 按标签找控件、点它的中心，返回是否真的点到。
          * <p>
          * 【为什么不按"屏幕比例"点】第一版写成 {@code height * 1.0}，正好落在按钮下沿之外 ——
          * 点击静默地什么都没发生，日志里只看到"值没变"，跟"功能坏了"长得一模一样。
          * 按标签找 + 用它自己的 bounds，换分辨率、换列宽都不用改，点不中还会现形（找不到就报）。
          */
-        private static void clickByLabel(Minecraft mc, String label) {
-            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return;
+        private static boolean clickByLabel(Minecraft mc, String label) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return false;
             // 【为什么点不到就得报】控件是自绘的，没有原版 children() 可以找 ——
             // 界面自己知道"哪一行叫什么"，找不到时静默点空 = 看起来像功能坏了。
             if (!screen.clickOption(label)) {
-                PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
+                PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件（或这一档画布上它没画出来）",
+                        label);
+                return false;
+            }
+            return true;
+        }
+
+        /** 把"鼠标停在一行上"定住（null = 取消）—— 悬停那一下的读数与截图要靠它。 */
+        private static void hoverByLabel(Minecraft mc, String label) {
+            if (mc.screen instanceof PickupCardConfigScreen screen) {
+                screen.hoverForHarness(label);
             }
         }
 

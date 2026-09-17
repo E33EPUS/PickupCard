@@ -2,6 +2,7 @@ package com.niuqu.pickupcard.render.nvg.ui;
 
 import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.render.nvg.NvgCanvas;
+import com.niuqu.pickupcard.style.Easing;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
@@ -67,6 +68,15 @@ public final class NvgUi implements AutoCloseable {
     /** 当前的裁剪框（null = 没裁）；形状那一套由 NanoVG 的 save/restore 管。 */
     private Clip clip;
     private final List<Clip> clipStack = new ArrayList<>();
+
+    /**
+     * 这一层的不透明度（1 = 不透明）。
+     * <p>
+     * 【为什么形状和文字要共用它】在 {@link #color} 与文字登记两处各乘一次，调用方就只需要
+     * "这一段淡出"一句话 —— 否则"形状淡了、文字还实着"是必然会发生的事（它们本来就是两套
+     * 提交路径）。分成两个开关没有意义：谁也不会想只淡形状。
+     */
+    private float alpha = 1f;
 
     /** 界面配色。 */
     public final NvgPalette palette;
@@ -189,24 +199,73 @@ public final class NvgUi implements AutoCloseable {
     // ------------------------------------------------------------------
 
     public void text(String s, float x, float y, int argb) {
-        register(() -> gui.drawString(font, s, Math.round(x), Math.round(y), argb, true));
+        register(() -> gui.drawString(font, s, Math.round(x), Math.round(y), fade(argb, alpha), true));
     }
 
     /** 居中写一行（x 给中心）。 */
     public void textCentered(String s, float centerX, float y, int argb) {
         register(() -> gui.drawString(font, s, Math.round(centerX - font.width(s) / 2f),
-                Math.round(y), argb, true));
+                Math.round(y), fade(argb, alpha), true));
     }
 
     /** 右对齐写一行（x 给右缘）。 */
     public void textRight(String s, float rightX, float y, int argb) {
         register(() -> gui.drawString(font, s, Math.round(rightX - font.width(s)),
-                Math.round(y), argb, true));
+                Math.round(y), fade(argb, alpha), true));
     }
 
     /** 登记一条文字，连同它此刻所在的裁剪框。 */
     private void register(Runnable draw) {
         texts.add(new Text(draw, clip));
+    }
+
+    // ------------------------------------------------------------------
+    // 不透明度（一段整体的淡入淡出）
+    // ------------------------------------------------------------------
+
+    /**
+     * 设定这一段的不透明度（0..1）。<b>画完记得调回 1</b> —— 它只影响之后画的那些东西。
+     * <p>为什么给整层：换页/换样例是"一整块内容换了"，逐控件改色要把每个颜色乘一遍，
+     * 漏一个就是"有一行没淡"。
+     */
+    public void alpha(float value) {
+        this.alpha = Easing.clamp01(value);
+    }
+
+    /**
+     * ARGB 乘上一个不透明度（纯函数，单测钉住）。
+     * <p>只改 alpha 通道，RGB 一个位都不动 —— 淡出不该顺便变色。
+     */
+    public static int fade(int argb, float alpha) {
+        if (alpha >= 1f) {
+            return argb;
+        }
+        int a = Math.round(((argb >>> 24) & 0xFF) * Easing.clamp01(alpha));
+        return (argb & 0x00FFFFFF) | (a << 24);
+    }
+
+    /**
+     * 两个 ARGB 之间按 {@code t} 插值（0 = 全 {@code from}，1 = 全 {@code to}）。
+     * <p>【为什么需要它】"悬停时标签变亮"本质是<b>颜色的连续变化</b>，而控件里只有"按下的那一档
+     * 颜色"。做成两档会在眼睛看到的一瞬间跳 —— 而跳变正是这些短动画要消掉的东西。
+     */
+    public static int mix(int from, int to, float t) {
+        float k = Easing.clamp01(t);
+        if (k <= 0f) {
+            return from;
+        }
+        if (k >= 1f) {
+            return to;
+        }
+        int a = channel(from, 24) + Math.round((channel(to, 24) - channel(from, 24)) * k);
+        int r = channel(from, 16) + Math.round((channel(to, 16) - channel(from, 16)) * k);
+        int g = channel(from, 8) + Math.round((channel(to, 8) - channel(from, 8)) * k);
+        int b = channel(from, 0) + Math.round((channel(to, 0) - channel(from, 0)) * k);
+        return (a << 24) | (r << 16) | (g << 8) | b;
+    }
+
+    private static int channel(int argb, int shift) {
+        return (argb >>> shift) & 0xFF;
     }
 
     // ------------------------------------------------------------------
@@ -273,9 +332,10 @@ public final class NvgUi implements AutoCloseable {
         }
     }
 
-    /** ARGB -> NanoVG 要的 RGBA 分量。 */
+    /** ARGB -> NanoVG 要的 RGBA 分量（顺带把这一层的不透明度乘进去）。 */
     private NVGColor color(int argb) {
-        return nvgRGBA((byte) (argb >> 16), (byte) (argb >> 8), (byte) argb, (byte) (argb >>> 24),
+        int a = fade(argb, alpha);
+        return nvgRGBA((byte) (a >> 16), (byte) (a >> 8), (byte) a, (byte) (a >>> 24),
                 NVGColor.mallocStack(stack));
     }
 }

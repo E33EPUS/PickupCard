@@ -96,4 +96,45 @@ class ConfigLayoutTest {
                     "顶排第 " + i + " 颗摆到了标签条外面");
         }
     }
+
+    @Test
+    @DisplayName("预览内部：卡区与切样例行都在面板里，四颗按钮等宽不重叠")
+    void previewInternals() {
+        for (float w : WIDTHS) {
+            for (float h : HEIGHTS) {
+                ConfigLayout lo = ConfigLayout.compute(w, h);
+                if (!lo.previewVisible()) continue;
+                String at = (int) w + "x" + (int) h;
+                ConfigLayout.Rect card = lo.previewCard();
+                assertTrue(card.x() >= lo.preview().x() - 0.01f, at + " 卡区跑到面板左边外面");
+                assertTrue(card.right() <= lo.preview().right() + 0.01f, at + " 卡区跑到面板右边外面");
+                assertTrue(card.bottom() <= lo.preview().bottom() + 0.01f, at + " 卡区跑到面板下面");
+                if (!lo.switcherVisible()) continue;
+
+                assertTrue(card.h() >= ConfigLayout.PREVIEW_CARD_MIN - 0.01f,
+                        at + " 切样例行占了卡的地方：" + card.h());
+                float lastRight = Float.NEGATIVE_INFINITY;
+                ConfigLayout.Rect first = lo.switchRect(0, 4);
+                for (int i = 0; i < 4; i++) {
+                    ConfigLayout.Rect r = lo.switchRect(i, 4);
+                    assertEquals(first.w(), r.w(), 0.01f, at + " 样例按钮不等宽");
+                    assertTrue(r.x() >= lastRight - 0.01f, at + " 第 " + i + " 颗样例按钮重叠");
+                    lastRight = r.right();
+                }
+                assertTrue(lastRight <= lo.preview().right() + 0.01f, at + " 样例按钮溢出面板");
+                assertTrue(lo.switchRect(0, 4).y() >= card.bottom() - 0.01f,
+                        at + " 样例按钮压住了卡");
+            }
+        }
+    }
+
+    @Test
+    @DisplayName("预览收起时：切换行与卡区都是零矩形（点了不能命中）")
+    void noSwitcherWhenPreviewCollapsed() {
+        ConfigLayout lo = ConfigLayout.compute(320f, 180f);
+        assertFalse(lo.previewVisible(), "320 宽这一档预览本来就该收起");
+        assertFalse(lo.switcherVisible(), "预览收起了就不能画切样例行");
+        assertEquals(0f, lo.switchRect(0, 4).w(), 0.01f, "收起时按钮宽度为 0");
+        assertEquals(0f, lo.previewCard().w(), 0.01f, "收起时卡区宽度为 0");
+    }
 }
