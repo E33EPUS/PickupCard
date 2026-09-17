@@ -54,6 +54,11 @@ minecraft {
         client {
             property 'forge.enabledGameTestNamespaces', mod_id
             property 'mixin.configs', 'pickupcard.mixins.json'
+
+            // 固定窗口大小。窗口大小决定 GUI 缩放，GUI 缩放决定截图里卡片的像素尺寸 ——
+            // 不固定的话，"这次量出来怎么和上次不一样"有一半的可能是窗口变了。
+            // 1280x720 下自动 GUI 缩放是 3：一张卡 32 逻辑 px -> 96 设备 px，量得比 2 倍时准。
+            args '--width', '1280', '--height', '720'
         }
 
         server {

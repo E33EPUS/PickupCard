@@ -13,15 +13,16 @@
 因为竖条比卡体亮，条件在第一个像素就不成立 —— 间隙恒等于 1px，与真实值无关。
 这个 bug 是 `design/test_measure.py` 拿合成图（已知答案）测出来的，不是看出来的。
 
-现在三层各司其职：
-    design/measure.py     看图算数（纯函数，有已知答案的测试钉着）
-    design/test_measure.py 合成图 → 断言量回来的数就是真值
-    本文件                 拒绝不可信的输入 + 把差打印成人能读的表
+三层各司其职：
+    design/measure.py      看图算数（纯函数，有已知答案的测试钉着）
+    design/probe.py        描述任意一张图里有什么（不产出几何）
+    本文件                  拒绝不可信的输入 + 把差打印成人能读的表
 
 用法：
-    python design/compare.py 设计图.png 游戏截图.png
+    python design/compare.py 设计图.png 游戏截图.png --expect 4
+    python design/compare.py 设计图.png 游戏图.png --out 并排.png
     python design/compare.py --solo 某张图.png
-    python design/compare.py a.png b.png --expect 4
+    python design/compare.py --solo 参考图.png --bg 202028,2C2C36   # 棋盘底
 """
 
 from __future__ import annotations
@@ -49,7 +50,7 @@ TOL = 0.02
 
 # 测量页专用的底色。纯黑不是随便挑的：投影是半透明的黑，叠在纯黑上等于没叠，
 # 于是"卡片之外就是纯底"成立 —— 不用为测量往渲染里加任何开关。
-MEASURE_BG = (0, 0, 0)
+MEASURE_BG = [(0, 0, 0)]
 
 
 def load_accents():
@@ -66,21 +67,26 @@ def load_accents():
     return out
 
 
-def measure_one(path: Path, expect: int | None):
-    """读一张图 → 量它 → 顺手回答"这份输入能不能用"。量不出卡就返回 None。"""
+def measure_one(path: Path, expect: int | None, bg=None):
+    """
+    读一张图 → 量它 → 顺手回答"这份输入能不能用"。
+
+    量不出卡时**也返回一份结果**，因为"量不到"的原因必须报给用户 ——
+    "纯底只占 12%，这是世界画面"比"没量到卡"有用得多。
+    """
     a = np.array(Image.open(path).convert("RGB")).astype(np.int64)
-    flat = measure.flatness(a, MEASURE_BG)
+    bg = MEASURE_BG if bg is None else bg
+    flat = measure.flatness(a, bg)
     problems = []
     if flat < 0.4:
         problems.append(
-            f"纯底只占 {flat:.0%} —— 这不是一张测量页。棋盘格/世界画面/辅助线都会让"
-            f"按底色切段失效。实现侧跑 -PharnessAuto=shot 会出 pickupcard-measure；"
-            f"设计侧跑 python design/shot.py design/measure.html")
-    m = measure.measure_cards(a, load_accents(), bg=MEASURE_BG)
+            f"纯底只占 {flat:.0%} —— 这张图不能用。世界画面/辅助线/渐变底都会让"
+            f"按底色切段失效。实现侧跑 -PharnessAuto=shot 会出 pickupcard-measure，"
+            f"设计侧跑 python design/shot.py design/measure.html；"
+            f"若底色不是纯黑（比如棋盘格），用 --bg RRGGBB[,RRGGBB] 说明")
+    m = measure.measure_cards(a, load_accents(), bg=bg)
     if expect is not None:
         problems += measure.check_card_count(m, expect)
-    # 【为什么没量到卡也返回一份结果】因为"量不到"的原因必须报给用户 ——
-    # "纯底只占 12%，这是世界画面"比"没量到卡"有用得多。
     mm = measure.metrics(m) if m["cards"] else None
     return {
         "m": m,
@@ -88,6 +94,7 @@ def measure_one(path: Path, expect: int | None):
         "fixed": measure.fixed_edge(mm) if mm else None,
         "px": int(round(mm["卡高"])) if mm else None,
         "flat": flat,
+        "bg": bg,
         "problems": problems,
         "notes": m.get("notes", []),
         "path": path,
@@ -129,9 +136,8 @@ def report(label: str, one) -> None:
 def table(first: dict, second: dict) -> int:
     """打印对照表。返回退出码：结构项不一致 = 客观门没过。"""
     a, b = first["metrics"], second["metrics"]
-    head = f"  {'指标':<28}{'设计':>10}{'实现':>10}{'差异':>10}"
     print()
-    print(head)
+    print(f"  {'指标':<28}{first['name']:>10}{second['name']:>10}{'差异':>10}")
     print("  " + "-" * 58)
     bad: list[str] = []
     for kind, name in measure.METRICS:
@@ -173,37 +179,33 @@ def side_by_side(first: dict, second: dict, out: Path) -> None:
     把两边的卡**放到同一个卡高**上，拼成一张图，一张一张对着看。
 
     【为什么要有这个】数字能回答"结构对不对"，回答不了"看着像不像"。而让人两眼在
-    两个文件之间来回切是没有效率的，也容易把注意力放在无关的地方。
-    拼到一张图上、同一个尺度、同一个左缘（都从竖条左缘起裁），差异会自己跳出来。
+    两个文件之间来回切没有效率，也容易把注意力放在无关的地方。拼到一张图上、
+    同一个尺度、同一个左缘（都从竖条左缘起裁），差异会自己跳出来。
 
-    【为什么是缩小而不是放大】把小的那张放大只是插值出并不存在的像素。缩小那张
-    更大的则正好相反 —— 相邻的真实像素取平均，不发明任何东西。
-    这里 128 -> 64 是整数倍，缩出来和原生一比一几乎一致。
+    【为什么是缩小而不是放大】把小的那张放大只是插值出并不存在的像素；缩小那张更大的
+    正好相反 —— 相邻的真实像素取平均，不发明任何东西。这里 128 -> 64 是整数倍。
     """
-    from PIL import Image, ImageDraw
+    from PIL import ImageDraw
 
-    da, ia = first, second
-    img_a = Image.open(da["path"]).convert("RGB")
-    img_b = Image.open(ia["path"]).convert("RGB")
-    target = min(da["px"], ia["px"])
+    img_a = Image.open(first["path"]).convert("RGB")
+    img_b = Image.open(second["path"]).convert("RGB")
+    target = min(first["px"], second["px"])
     margin = max(2, target // 16)
     pad = max(2, target // 8)
 
-    def crop(one, img, card):
-        bx0, _, by0, by1 = card["bar"]
+    def crop(img, card):
+        bx0, _, _, _ = card["bar"]
         _, cx1, cy0, cy1 = card["card"]
         box = (max(0, bx0 - margin), max(0, cy0 - margin),
                min(img.width, cx1 + margin + 1), min(img.height, cy1 + margin + 1))
         c = img.crop(box)
-        if c.height != target + 2 * margin:
-            scale = (target + 2 * margin) / c.height
-            c = c.resize((max(1, round(c.width * scale)), target + 2 * margin), Image.LANCZOS)
+        want = target + 2 * margin
+        if c.height != want:
+            c = c.resize((max(1, round(c.width * want / c.height)), want), Image.LANCZOS)
         return c
 
-    pairs = list(zip(da["m"]["cards"], ia["m"]["cards"]))
-    strips = []
-    for ca, cb in pairs:
-        strips.append((ca["accent"], crop(da, img_a, ca), crop(ia, img_b, cb)))
+    strips = [(ca["accent"], crop(img_a, ca), crop(img_b, cb))
+              for ca, cb in zip(first["m"]["cards"], second["m"]["cards"])]
 
     label_w = 96
     width = label_w + max(max(a.width, b.width) for _, a, b in strips)
@@ -213,23 +215,22 @@ def side_by_side(first: dict, second: dict, out: Path) -> None:
 
     y = pad
     for accent, a, b in strips:
-        for img, tag in ((a, "design"), (b, "game")):
-            canvas.paste(img, (label_w, y))
-            y += img.height
-            if tag == "design":
-                draw.line((0, y + 1, width, y + 1), fill=(60, 60, 70), width=1)
-                y += 4
-        draw.text((6, y - a.height - b.height - 4 + a.height // 2), accent, fill=(180, 190, 210))
-        y += pad
+        draw.text((6, y + a.height // 2), accent, fill=(180, 190, 210))
+        canvas.paste(a, (label_w, y))
+        y += a.height
+        draw.line((0, y + 1, width, y + 1), fill=(60, 60, 70), width=1)
+        y += 4
+        canvas.paste(b, (label_w, y))
+        y += b.height + pad
 
     canvas.save(out)
     print()
     print(f"  并排对照图 -> {out}  （{canvas.width}x{canvas.height}）")
-    print(f"    每张卡上下成对：上=设计 下=游戏，都裁到竖条左缘、都缩放至卡高 {target}px")
+    print(f"    每对卡：上=左图 下=右图，都从竖条左缘裁起，都缩到卡高 {target}px")
 
 
-def solo(path: Path, expect: int | None) -> int:
-    one = measure_one(path, expect)
+def solo(path: Path, expect: int | None, bg=None) -> int:
+    one = measure_one(path, expect, bg)
     print(f"单张测量：{path}")
     print()
     report("实测", one)
@@ -245,32 +246,39 @@ def solo(path: Path, expect: int | None) -> int:
 
 def main() -> int:
     argv = sys.argv[1:]
-    expect = None
-    if "--expect" in argv:
-        k = argv.index("--expect")
-        expect = int(argv[k + 1])
-        del argv[k:k + 2]
-    args = [a for a in argv if not a.startswith("--")]
 
-    out = None
-    if "--out" in argv:
-        k = argv.index("--out")
-        out = Path(argv[k + 1])
-        del argv[k:k + 2]
-        args = [a for a in argv if not a.startswith("--")]
+    def take(flag: str, count: int = 1):
+        if flag not in argv:
+            return None
+        k = argv.index(flag)
+        got = argv[k + 1:k + 1 + count]
+        del argv[k:k + 1 + count]
+        return got[0] if count == 1 else got
+
+    expect = take("--expect")
+    expect = int(expect) if expect is not None else None
+    out = take("--out")
+    out = Path(out) if out is not None else None
+    raw_bg = take("--bg")
+    bg = None
+    if raw_bg is not None:
+        bg = [tuple(int(c[i:i + 2], 16) for i in (0, 2, 4)) for c in raw_bg.split(",")]
+    args = [a for a in argv if not a.startswith("--")]
 
     if "--solo" in argv:
         if not args:
             print(__doc__)
             return 1
-        return solo(Path(args[0]), expect)
+        return solo(Path(args[0]), expect, bg)
 
     if len(args) != 2:
         print(__doc__)
         return 1
 
-    design = measure_one(Path(args[0]), expect)
-    impl = measure_one(Path(args[1]), expect)
+    design = measure_one(Path(args[0]), expect, bg)
+    impl = measure_one(Path(args[1]), expect, bg)
+    design["name"] = "设计"
+    impl["name"] = "实现"
 
     print("输入检查（两边都必须是「卡片之外空无一物」的测量页）")
     print()
@@ -278,7 +286,7 @@ def main() -> int:
     report("实现", impl)
     if design["metrics"] is None or impl["metrics"] is None:
         print()
-        print("量不出卡，先修输入 —— 拿着一堆理由在上面。")
+        print("量不出卡，先修输入 —— 理由都在上面。")
         return 1
 
     nd, ni = len(design["m"]["cards"]), len(impl["m"]["cards"])

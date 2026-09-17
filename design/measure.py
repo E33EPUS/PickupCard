@@ -48,6 +48,32 @@ def _dist(img: np.ndarray, rgb) -> np.ndarray:
     return np.abs(img - np.asarray(rgb, dtype=np.int64)).sum(axis=-1)
 
 
+def bg_list(bg) -> list:
+    """
+    底色允许是**一组颜色**（棋盘格就是两种）。单个颜色也接受，统一成列表。
+    【为什么需要】测量页是纯底，但参考图往往铺着棋盘格 —— 而参考图正是我们要量的东西之一。
+    """
+    if bg is None:
+        return []
+    arr = np.asarray(bg)
+    # 一维的 3 个分量 = 一个颜色；再往上就是一组颜色。
+    # 【别用 isinstance(v, int) 判】numpy 的整数不是 int，会漏。
+    if arr.ndim == 1 and arr.size == 3:
+        return [tuple(int(v) for v in arr)]
+    return [tuple(int(v) for v in row) for row in arr]
+
+
+def _bg_dist(img: np.ndarray, bgs: list) -> np.ndarray:
+    """到"最近的底色"的距离。一组底色时取最小值。"""
+    best = None
+    for c in bgs:
+        d = _dist(img, c).astype(np.int32)
+        best = d if best is None else np.minimum(best, d)
+    if best is None:
+        raise MeasureError("没给底色")
+    return best
+
+
 def _palette_index(img: np.ndarray, palette: list) -> np.ndarray:
     """
     把每个像素归给调色板里**最近**的那个颜色，返回下标。
@@ -58,16 +84,14 @@ def _palette_index(img: np.ndarray, palette: list) -> np.ndarray:
     一张 4 卡的图量出 16 张卡。
     归给"最近的调色板项"就没有这个洞：每个像素只能属于一家。
     """
-    best = None
-    idx = None
-    for i, rgb in enumerate(palette):
+    # 下标 0 固定是"背景"，可能是好几种颜色的并集（棋盘格）
+    best = _bg_dist(img, palette[0])
+    idx = np.zeros(img.shape[:2], dtype=np.int16)
+    for i, rgb in enumerate(palette[1:], start=1):
         d = _dist(img, rgb).astype(np.int32)
-        if best is None:
-            best, idx = d, np.zeros(img.shape[:2], dtype=np.int16)
-        else:
-            closer = d < best
-            best = np.where(closer, d, best)
-            idx = np.where(closer, i, idx)
+        closer = d < best
+        best = np.where(closer, d, best)
+        idx = np.where(closer, i, idx)
     return idx
 
 
@@ -106,7 +130,7 @@ def _runs(flags: np.ndarray) -> list[tuple[int, int]]:
 MIN_BAR_PX = 6
 
 
-def _pick_bar(mask: np.ndarray, bgmask: np.ndarray):
+def _pick_bar(mask: np.ndarray, bgmask: np.ndarray, band_left: int):
     """
     在一个行带里挑出竖条，返回 (x0, x1, y0, y1) 闭区间；这个带里没有竖条就返回 None。
 
@@ -144,6 +168,12 @@ def _pick_bar(mask: np.ndarray, bgmask: np.ndarray):
         # 的竖条状同色块"挡掉 —— 那种块左右都是别的东西，不是底。
         if cx0 > 0 and not bgmask[cy0:cy1 + 1, cx0 - 1].any():
             continue
+        # 更强的一条：**竖条是这张卡最左边的东西**。物品贴图里总有亮到能被
+        # "离强调色比离底色近"判中的像素，它们也能凑出又高又窄的一列 ——
+        # 但它们的左边一定还有别的东西（至少是图标格的边框），而竖条左边只有底。
+        # 少了这条，guiScale=3 上 4 张卡量出 6 张。
+        if cx0 > band_left + 1:
+            continue
         if best is None or h > best[3] - best[2] + 1:
             best = (cx0, cx1, cy0, cy1)
     return best
@@ -162,12 +192,11 @@ def measure_cards(img: np.ndarray, accents: list[tuple[str, tuple[int, int, int]
     a = _colorize(img)
     if bg is None:
         bg = _dominant_bg(a)
-    bg = tuple(int(v) for v in bg)
-    bgmask = _near(a, bg, bg_tol)
+    bgs = bg_list(bg)
+    bgmask = _bg_dist(a, bgs) <= bg_tol
 
     # 调色板分类只做一次：每个像素归给"底色 / 某个强调色"里最近的那个。
-    palette = [bg] + [rgb for _, rgb in accents]
-    idx = _palette_index(a, palette)
+    idx = _palette_index(a, [bgs] + [[rgb] for _, rgb in accents])
 
     cards = []
     notes: list[str] = []
@@ -178,7 +207,9 @@ def measure_cards(img: np.ndarray, accents: list[tuple[str, tuple[int, int, int]
             continue
         # 先按行把各张卡分开（卡之间有 6px 间隙，强调色块不会跨卡连起来）
         for y0, y1 in _runs(mask.any(axis=1)):
-            bar = _pick_bar(mask[y0:y1 + 1], bgmask[y0:y1 + 1])
+            band_nonbg = (~bgmask[y0:y1 + 1]).any(axis=0)
+            band_left = int(np.argmax(band_nonbg)) if band_nonbg.any() else 0
+            bar = _pick_bar(mask[y0:y1 + 1], bgmask[y0:y1 + 1], band_left)
             if bar is None:
                 notes.append(f"{name}: 行 {y0}..{y1} 里没有竖条（只有横着的块），"
                              f"跳过 —— 多半是物品贴图用了同一个颜色")
@@ -211,16 +242,48 @@ def measure_cards(img: np.ndarray, accents: list[tuple[str, tuple[int, int, int]
             cardrows = (~bgmask[:, left:right + 1]).any(axis=1)
             top, bottom = _vertical_extent(cardrows, (by0 + by1) // 2)
 
+            # 竖条正中间那颗像素一定是纯强调色 —— 拿它当"这根条到底属于谁"的判据
+            ccx, ccy = (bx0 + bx1) // 2, (by0 + by1) // 2
+            center = int(_dist(a[ccy:ccy + 1, ccx:ccx + 1], rgb)[0])
+
             cards.append({
                 "accent": name,
+                "center": center,
                 "bar": (bx0, bx1, by0, by1),
                 "icon": icon,
                 "namebox": namebox,
                 "card": (min(bx0, icon[0]), max(namebox[1], icon[1]), top, bottom),
                 "row": (by0 + by1) // 2,
             })
+    cards = _dedupe(cards, notes)
     cards.sort(key=lambda c: c["row"])
-    return {"bg": bg, "size": tuple(a.shape[:2]), "cards": cards, "notes": notes}
+    return {"bg": bgs, "size": tuple(a.shape[:2]), "cards": cards, "notes": notes}
+
+
+def _overlaps(a: tuple, b: tuple) -> bool:
+    """两根竖条是不是同一根（纵向有交集、横向也搭得上）。"""
+    return not (a[3] < b[2] or b[3] < a[2] or a[1] < b[0] or b[1] < a[0])
+
+
+def _dedupe(cards: list[dict], notes: list[str]) -> list[dict]:
+    """
+    同一根竖条会被两个强调色同时认领，去重时留"中心像素更像它"的那个。
+
+    【为什么会撞】抗锯齿。青色 (#55EBFF) 竖条的边缘像素是青色和底色各一半，
+    实测 (43,118,128) —— 它到**灰色** common 的距离是 202，到青色自己却是 286。
+    于是"离谁近就归谁"会把一根青条同时判给 rare 和 common，一张 4 卡的图量出 6 张。
+    这不是调色板分类的 bug，是灰这个颜色本身处在混色路径上；
+    所以判据不能只看"边缘像谁"，得看"**条心**是谁"。
+    """
+    kept: list[dict] = []
+    for c in sorted(cards, key=lambda c: (c["center"], -(c["bar"][3] - c["bar"][2]))):
+        clash = next((k for k in kept if _overlaps(k["bar"], c["bar"])), None)
+        if clash is None:
+            kept.append(c)
+        else:
+            notes.append(f"{c['accent']}: x{c['bar'][0]}..{c['bar'][1]} 这根竖条和 "
+                         f"{clash['accent']} 的重叠，判给它了（条心像素更像它）")
+    return kept
 
 
 def _vertical_extent(rowmask: np.ndarray, y: int) -> tuple[int, int]:
@@ -245,10 +308,13 @@ def _dominant_bg(a: np.ndarray):
 
 def flatness(a: np.ndarray, bg, tol: int = BG_TOL) -> float:
     """
-    背景占比。测量页必须是纯底 —— 棋盘格、世界画面、辅助线都会让"按背景切段"失效。
-    低于 0.4 就直接拒收：宁可不出数，也不要出一个看不懂来源的数。
+    背景占比 —— "卡片之外就是底"的程度。低于 0.4 就直接拒收：
+    宁可不出数，也不要出一个看不懂来源的数。
+
+    底色可以给一组（棋盘格就给两种）。注意别把容差放大到"把不同的颜色也算成底"：
+    那会把卡面底色一起吞掉，间隙就再也找不出来了。
     """
-    return float(_near(a, bg, tol).mean())
+    return float((_bg_dist(a, bg_list(bg)) <= tol).mean())
 
 
 def check_card_count(m: dict, expect: int) -> list[str]:
