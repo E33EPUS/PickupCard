@@ -3,7 +3,7 @@ package com.niuqu.pickupcard.render;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.pickup.Inbox;
-import com.niuqu.pickupcard.render.painter.BaselineCardPainter;
+import com.niuqu.pickupcard.render.painter.TrioCardPainter;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
@@ -50,7 +50,7 @@ public final class CardStage {
     private final StyleSource styles = new StyleSource();
 
     /** 画法。换 UI 方案就是换这一个字段。 */
-    private CardPainter painter = new BaselineCardPainter();
+    private CardPainter painter = new TrioCardPainter();
 
     /** 上一帧的排布结果与耗时，只给 harness 读。 */
     private List<CardSlot> lastSlots = List.of();
