@@ -43,8 +43,19 @@ public final class HudSafeZone {
     public static final int HOTBAR_TOP = 23;
     /** 副手槽右缘：W/2 + 91 + 29。 */
     public static final int OFFHAND_RIGHT = HOTBAR_HALF + 29;
-    /** 手持物品名的行：距屏幕底 H-59 .. H-50。**卡堆必须整个在它上面。** */
-    public static final int HELD_NAME_TOP = 60;
+    /**
+     * 手持物品名的行：pose 在 {@code H-59}，文字画在 {@code -4} 处 → 占 H-63 .. H-54。
+     * 居中，宽度随物品名变化 —— 所以它会横伸进右列。
+     */
+    public static final int HELD_NAME_TOP = 63;
+    /**
+     * <b>动作栏提示语</b>（{@code Gui#renderOverlayMessage}）：pose 在 {@code H-68}，
+     * 文字画在 {@code -4} 处、背后还有一条半透明底 → 整块占 <b>H-73 .. H-62</b>。
+     * 它也居中、宽度不定（"按 F3 打开调试"能有一两百像素宽）。
+     * <p>【为什么要单独记住它】它是那一带<b>最高</b>的一块 —— 卡堆只要让开它，
+     * 就等于让开了下面所有东西。上一版只让到 H-62（照手持物品名算的），还是会压它。
+     */
+    public static final int OVERLAY_TOP = 73;
     /** 状态效果图标：一行 26 高、每列 25 宽。 */
     public static final int EFFECT_ROW_H = 26;
     public static final int EFFECT_COL_W = 25;
@@ -70,24 +81,29 @@ public final class HudSafeZone {
     }
 
     /**
-     * 卡堆底部必须留出的空白（距屏幕底的像素）。
-     * <p>取"手持物品名"那一行的顶端再往上 2px —— 它比护甲行更高，也比快捷栏更高，
-     * 所以让开它就等于让开下面所有行。
+     * 卡堆底部必须留出的空白（距屏幕底的像素）= <b>动作栏提示语那一块之上再留 2px</b>。
+     * <p>它是底部那一带最高的居中块（H-73），让开它就等于让开了手持物品名（H-63）、
+     * 护甲（H-50）、血量（H-40）、经验（H-29）、快捷栏（H-23）—— 整条带一次让完。
      */
     public static int bottomInset() {
-        return HELD_NAME_TOP + PAD;
+        return OVERLAY_TOP + PAD;
     }
 
-    /** 原版底部那些居中带（快捷栏 / 经验 / 血量 / 护甲 / 手持物品名）各自的矩形。只给单测与诊断用。 */
-    public static List<Rect> bottomBands(float guiWidth, float guiHeight, float heldNameWidth) {
+    /**
+     * 原版底部那一带的所有矩形（快捷栏 / 经验 / 血量 / 护甲 / 两块瞬时居中文字）。
+     * <p>【给谁用】单测拿它一条条断言"不相交"；诊断日志也拿它解释"这次为什么让了这么多"。
+     */
+    public static List<Rect> bottomBands(float guiWidth, float guiHeight,
+                                        float overlayWidth, float heldNameWidth) {
         float cx = guiWidth / 2f;
         List<Rect> rects = new ArrayList<>();
         rects.add(fromBottom(guiHeight, cx, HOTBAR_HALF + 1, HOTBAR_TOP, 24f));      // 快捷栏 + 选中框
         rects.add(fromBottom(guiHeight, cx, HOTBAR_HALF, 29, 5f));                   // 经验条
-        rects.add(fromBottom(guiHeight, cx, Math.max(6f, 20f), 36, 9f));             // 等级数字（居中）
+        rects.add(fromBottom(guiHeight, cx, Math.max(6f, 24f), 36, 9f));             // 等级数字（居中）
         rects.add(fromBottom(guiHeight, cx, HOTBAR_HALF, 40, 10f));                  // 血量/食物
         rects.add(fromBottom(guiHeight, cx, HOTBAR_HALF, 50, 10f));                  // 护甲/气泡
         rects.add(fromBottom(guiHeight, cx, Math.max(2f, heldNameWidth / 2f), HELD_NAME_TOP, 10f));
+        rects.add(fromBottom(guiHeight, cx, Math.max(2f, overlayWidth / 2f + 2f), OVERLAY_TOP, 11f));
         return rects;
     }
 

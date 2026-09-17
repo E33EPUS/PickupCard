@@ -23,19 +23,19 @@ class HudSafeZoneTest {
             {426f, 240f}, {320f, 240f}, {256f, 144f}, {640f, 360f}, {854f, 480f},
     };
 
-    /** 手持物品名的宽度：短名字到超长名字。 */
-    private static final float[] NAME_WIDTHS = {8f, 60f, 160f, 320f};
+    /** 两块瞬时居中文字的宽度：从"一个字符"到"很长的一句提示语"。 */
+    private static final float[] TEXT_WIDTHS = {8f, 60f, 160f, 320f};
 
     @Test
     void cardsNeverTouchAnyVanillaBand() {
         for (float[] canvas : CANVASES) {
-            for (float nameWidth : NAME_WIDTHS) {
-                assertNoOverlap(canvas[0], canvas[1], nameWidth);
+            for (float width : TEXT_WIDTHS) {
+                assertNoOverlap(canvas[0], canvas[1], width);
             }
         }
     }
 
-    private void assertNoOverlap(float guiWidth, float guiHeight, float nameWidth) {
+    private void assertNoOverlap(float guiWidth, float guiHeight, float textWidth) {
         float cardWidth = guiWidth * 0.45f;                    // 卡宽上限
         float stackHeight = 5 * 20f + 4 * 4f;                  // 5 张卡 + 间隙
         HudSafeZone.Placement place = HudSafeZone.place(guiWidth, guiHeight, cardWidth, stackHeight, 0f);
@@ -43,15 +43,15 @@ class HudSafeZoneTest {
         float left = Math.max(0f, guiWidth - 16f - cardWidth);
         HudSafeZone.Rect cards = place.cards(left, cardWidth, guiHeight, stackHeight);
 
-        for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, nameWidth)) {
+        for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, textWidth, textWidth)) {
             assertFalse(cards.intersects(band),
-                    canvasLabel(guiWidth, guiHeight, nameWidth) + " 卡堆 " + describe(cards)
+                    canvasLabel(guiWidth, guiHeight, textWidth) + " 卡堆 " + describe(cards)
                             + " 撞上了原版带 " + describe(band));
         }
     }
 
     /**
-     * 反例对照：旧的底部留白（写死的 52）在"手持物品名"那一行上<b>必然相交</b>。
+     * 反例对照：旧的底部留白（写死的 52）在那一带<b>必然相交</b>（先撞动作栏提示语、再撞手持物品名）。
      * <p>这就是用户第三次报的那个 bug —— 如果哪天有人把底部留白又改回一个拍脑袋的数，
      * 这条断言会告诉他那个数错在哪。
      */
@@ -65,19 +65,25 @@ class HudSafeZoneTest {
         HudSafeZone.Rect old = new HudSafeZone.Rect(left, guiHeight - 52f - stackHeight,
                 cardWidth, stackHeight);
         boolean hit = false;
-        for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, 120f)) {
+        for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, 180f, 120f)) {
             hit |= old.intersects(band);
         }
         assertTrue(hit, "旧留白 52 应该会撞上手持物品名那一行 —— 不然这条对照就失效了");
     }
 
-    /** 小画布（guiScale 5 → 256×144）上也必须放得下至少 3 张卡。 */
+    /**
+     * 小画布（guiScale 5 → 256×144）上也必须放得下至少 3 张卡。
+     * <p>【算式为什么是 (A+gap)/perCard】n 张卡占 {@code 20n + 4(n-1)} —— 最后一张后面没有间隙，
+     * 所以可用高度里要多算一条 gap 才除。写错这条会把"刚好放 3 张"算成 2。
+     */
     @Test
     void stillFitsThreeCardsOnTheSmallestCanvas() {
         float guiHeight = 144f;
         int inset = HudSafeZone.bottomInset();
-        float perCard = 20f + 4f;
-        int fits = (int) ((guiHeight - inset) / perCard);
+        float cardHeight = 20f;
+        float gap = 4f;
+        float available = guiHeight - inset;
+        int fits = (int) ((available + gap) / (cardHeight + gap));
         assertTrue(fits >= 3, "256×144 上只放得下 " + fits + " 张（底部留白 " + inset + "）");
     }
 
@@ -112,8 +118,8 @@ class HudSafeZoneTest {
                 "效果图标在右上，x 从 426-50=376 起");
     }
 
-    private static String canvasLabel(float w, float h, float nameWidth) {
-        return "[" + (int) w + "×" + (int) h + " 名字宽 " + (int) nameWidth + "]";
+    private static String canvasLabel(float w, float h, float textWidth) {
+        return "[" + (int) w + "×" + (int) h + " 文字宽 " + (int) textWidth + "]";
     }
 
     private static String describe(HudSafeZone.Rect r) {
