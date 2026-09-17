@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.dev;
 
+import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.render.CardStage;
@@ -11,7 +12,10 @@ import net.minecraft.world.item.Items;
 import net.minecraft.world.item.Rarity;
 
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Locale;
+import java.util.Set;
 
 /**
  * harness 的固定样例卡集。
@@ -49,19 +53,41 @@ public final class CardFixtures {
         List<Fixture> list = new ArrayList<>();
 
         // 四档稀有度：不写死物品名，而是从注册表里按 rarity 找，跨版本不会因为
-        // "某个物品被改了稀有度"而让这一组悄悄少一张
+        // "某个物品被改了稀有度"而让这一组悄悄少一张。
+        // 【必须排掉空气】注册表里第一个 COMMON 就是 minecraft:air，照单全收会得到
+        // 一张空栈样例——它不报错、只是安静地展示成空名字，是最难发现的那种坏样例。
+        Set<Item> used = new HashSet<>();
         for (Rarity rarity : Rarity.values()) {
-            list.add(new Fixture(rarityName(rarity), new ItemStack(itemOf(rarity)), 1));
+            Item item = itemOf(rarity, used);
+            used.add(item);
+            list.add(new Fixture(fixtureLabel(rarity, item), new ItemStack(item), 1));
         }
 
         list.add(new Fixture("xp", ItemStack.EMPTY, 137));
         list.add(new Fixture("long-name",
                 named(Items.DIAMOND_SWORD, "被铁砧改了名字的附魔钻石剑（超长名字边界测试）"), 1));
-        list.add(new Fixture("big-count", new ItemStack(Items.COBBLESTONE), 99_999));
+        // 【别用圆石/泥土类】它们在内置忽略表里，会被过滤掉——而且是不报错地消失，
+        // 于是这一组样例又"悄悄变了"。样例卡要用一定不会被过滤的物品。
+        list.add(new Fixture("big-count", new ItemStack(Items.DIAMOND), 99_999));
         list.add(new Fixture("short-name", named(Items.STONE, "石"), 1));
         list.add(new Fixture("cjk", named(Items.NETHERITE_INGOT, "下界合金锭"), 64));
 
         return List.copyOf(list);
+    }
+
+    /**
+     * 分页的样例集：每页不超过账本的 {@code maxOnScreen}，所以一页注入进去能全部留下。
+     * <p>
+     * 【为什么必须分页】账本上限 5 张、淘汰最老的。把 9 张一次性灌进去，被挤掉的是
+     * <b>最早注入的那 4 张</b>——也就是四档稀有度。结果是"每张卡都注入过，但稀有度
+     * 永远看不到"，而这件事不会报错、只在截图里表现为"怎么少了几张"。
+     * <p>
+     * 第 1 页看颜色（四档强调色 + 经验卡的独立色系），第 2 页看边界
+     * （卡宽上限 / 数量缩写 / 单字下限 / 中文字宽）。
+     */
+    public static List<List<Fixture>> pages() {
+        List<Fixture> all = all();
+        return List.of(all.subList(0, 5), all.subList(5, all.size()));
     }
 
     /** 把一张样例送进账本——走的是和真实拾取完全相同的那条路。 */
@@ -74,7 +100,13 @@ public final class CardFixtures {
     }
 
     public static void injectAll() {
-        for (Fixture fixture : all()) {
+        List<Fixture> fixtures = all();
+        // 打出来是刻意的：fixture 一旦悄悄变了，"这次比上次好看吗"就不再是个能回答的问题，
+        // 而变化的迹象只会在截图里，肉眼看不出来
+        PickupCard.LOGGER.info("[harness] 样例集: {}", fixtures.stream()
+                .map(f -> f.label() + "x" + f.amount())
+                .collect(java.util.stream.Collectors.joining(", ")));
+        for (Fixture fixture : fixtures) {
             inject(fixture);
         }
     }
@@ -85,12 +117,21 @@ public final class CardFixtures {
         CardStage.INSTANCE.clear();
     }
 
-    private static String rarityName(Rarity rarity) {
-        return rarity.name().toLowerCase(java.util.Locale.ROOT);
+    /** 标签带上解析结果（稀有度 + 物品 id），日志里一眼能看出这一组到底是哪几张卡。 */
+    private static String fixtureLabel(Rarity rarity, Item item) {
+        return rarity.name().toLowerCase(Locale.ROOT) + ":" + BuiltInRegistries.ITEM.getKey(item).getPath();
     }
 
-    private static Item itemOf(Rarity rarity) {
+    /**
+     * 取一个该稀有度、且还没被用过的物品。
+     * <p>
+     * 【为什么排空气】见 {@link #all()}。空栈不会让任何东西报错，只会让这一组样例
+     * 悄悄少一张有意义的卡——而"样例悄悄变了"正是这套 fixture 要防的事。
+     */
+    private static Item itemOf(Rarity rarity, Set<Item> exclude) {
         return BuiltInRegistries.ITEM.stream()
+                .filter(item -> item != Items.AIR)
+                .filter(item -> !exclude.contains(item))
                 .filter(item -> item.getRarity(new ItemStack(item)) == rarity)
                 .findFirst()
                 .orElse(Items.STONE);

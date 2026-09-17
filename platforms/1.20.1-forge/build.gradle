@@ -39,6 +39,11 @@ minecraft {
             jvmArg '-Dmixin.env.remapRefMap=true'
             jvmArg "-Dmixin.env.refMapRemappingFile=${projectDir}/build/createSrgToMcp/output.srg"
 
+            // harness 自动驱动：./gradlew runClient -PharnessAuto=shot
+            // 让"开屏 → 注入样例 → 截图 → 退出"跑成一条无人值守的命令，
+            // 验证因此不再依赖有人在机器前按键。
+            jvmArg "-Dpickupcard.harness.auto=${project.findProperty('harnessAuto') ?: 'off'}"
+
             mods {
                 "${mod_id}" {
                     source sourceSets.main
