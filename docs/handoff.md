@@ -25,13 +25,46 @@
 | 换位过渡 | `CardMove`（纯逻辑，5 条测试钉着）：起跑那一帧不许跳、落点精确、走草稿曲线 |
 | 退场 | **淡出 `exitMs`（默认 480ms）**，没有位移：退役那张占堆顶上面那一行、`CardMove` 把它顶上去，这一"格"就是这么来的 |
 | 阴影 / 顶部高光 | **已删**（2026-09-17 用户："直接把影子和高光删了"）。删的是**参数本身**：`tokens.css` → 主题 JSON → `StyleModel`/`StyleOverrides` → 配置界面那 4 行，一路删干净，不留"能调但看不出差别"的键。连带 `design/shadow_probe.py` 一起删（它存在的唯一理由是量影子） |
-| 配置界面 | 键位 **K** 打开。形状照旧版（v0.1.0 / pickupnotice 那一系）：**左侧 4 段（通用 / 动画 / 位置与堆叠 / 外观）+ 右上实时预览 + 每行「左边标签、右边控件」+ 悬停一句人话**。**「跟随主题」这个第三态没有了** —— 界面显示的是生效值，拨过哪一项就写死哪一项（想回主题：TOML 里改回 `-1` / 空串）。几何 token（竖条宽 / 竖条内缩 / 内边距 / 框间距）**不进界面**，归主题 JSON。新增：总开关 / 显示物品名 / 显示物品ID / 名字最大宽度 / 行距（卡片间距）/ 框粗细 + 四个颜色可改。布局页的预览是**真排布函数画的 3 张卡**。**控件是自绘的**（`render/nvg/ui/`：NvgButton / NvgToggle / NvgSlider / NvgTextField，形状全 NanoVG、文字借原版字形）—— 圆形钮、细轨道这些原版九宫格画不出来；harness 因此走 `clickOption`/`dragOption`（自绘控件没有 `children()` 可找） |
+| 配置界面 | 键位 **K** 打开。形状照旧版（v0.1.0 / pickupnotice 那一系）：**三列 = 标签列 / 配置列 / 预览列**（`ConfigLayout`，纯函数 + 9×5 扫描测试），退让顺序**先收预览 → 标签挪到顶上一条 → 配置列永远在**；配置项**一行一项**（标签左、控件右，等宽）、列表可滚、悬停一句人话（底部那行：悬停谁就说谁）。**「跟随主题」这个第三态没有了** —— 界面显示的是生效值，拨过哪一项就写死哪一项（想回主题：TOML 里改回 `-1` / 空串）。几何 token（竖条宽 / 竖条内缩 / 内边距 / 框间距）**不进界面**，归主题 JSON。**预览用真公式画**：宽度 = `CardMetrics#width` 同一条公式、名字按卡宽截断，样例四档（普通 / 稀有 / 经验 / 长名）+ 布局页那一摞走真 `StackLayout`。**控件是自绘的**（`render/nvg/ui/`：NvgButton / NvgToggle / NvgSlider / NvgTextField / Tween，形状全 NanoVG、文字借原版字形）—— 圆形钮、细轨道这些原版九宫格画不出来；harness 因此走 `clickOption`/`dragOption`/`hoverForHarness`（自绘控件没有 `children()` 可找） |
 | 配置存储 | `[style]` 段每项可 `-1` = 跟随主题；主题给默认值，配置只覆盖改过的项（`StyleOverrides`，5 条测试） |
 
 **像素对照这条链路仍然可信**：设计↔实现的结构项全部一致（客观门），且设计稿现在也由
 同一份 token 重新产出（`design/shot.py`）。**锚点现在也在门禁里了**（见"已知缺陷 2"已修）：
 `最新那张下缘距底边 / 卡高` + `强调色自上而下` 两条指标，**都做过反例验证**（把锚翻上去
 → 报 +4.909；把 DOM 顺序倒过来 → 报颜色顺序反了）。
+
+✅ **已部署 2026-09-17 22:2x（配置界面重铸：三列 + 单列行 + 预览样例与短动画）**：
+`D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
+`sha256 79a896360008eef5…`（`mods/` 里仍只有这一份；玩家侧 TOML 已删，本次启动重新生成）。
+提交 `db26096`；上一轮 `f9d125d`（`sha256 f7a992746fca3452…`）也一并算进这一条。
+
+- **harness 现在自己会进世界了**（用户报的"每次都要我手动进世界、你没有任何作为"）。
+  三个根因一起修：① 注入需要 `mc.level != null`，而**没有任何东西让它进过世界** —— 带
+  harness 参数时加 `--quickPlaySingleplayer`；② tick 计数从第一帧就开跑，"世界里 + 无界面"
+  那个窗口被自己错过（`applyGuiScale` 一次都没跑到）；③ 开一次配置界面会被
+  quickPlay 自己的界面盖掉（实测截图拍的是世界）。现在两条流程都**门控在"世界真的进来了"**、
+  配置界面反复开到真的挂上、**挂上之后才动缩放**、跑完自动 `mc.stop()`。
+  **悬案一并结掉**：原版 GUI 缩放选项是 `ClampingLazyMaxIntRange`，上限就是自动档本身
+  —— 玩家侧根本调不出比 320×240 更小的画布（所以早先 `options.txt` 里写 `guiScale:4` 永远不生效）。
+  dev 要验矮画布只能直接写 `Window#setGuiScale`（`-PharnessGuiScale=N`）。
+- **配置界面重铸**（`ConfigLayout` 纯函数 + `ConfigLayoutTest` 9×5 扫描）：**标签列 / 配置列 /
+  预览列**，退让顺序 = 先收预览 → 标签挪到顶上一行 → **配置列永远在**；配置项**一行一项**
+  （标签左、控件右，同宽）；列表可滚（`NvgScroll`/`ScrollMath`）；自绘纹理裁剪由 `NvgUi#pushClip`
+  一次设好**两套**（NanoVG 形状 + 原版文字批次）—— 只设一套的症状是"形状裁了、文字糊在外面"。
+- **预览 = 真公式画的卡**：宽度按 `CardMetrics#width` 同一条公式算，**名字按卡宽截断**
+  （从前不截 → 长名字会画到卡框外面）。样例四档（普通/稀有/经验/长名）覆盖"灰档、稀有度换色、
+  微光、截断"四条路径；布局页那一摞仍走真 `StackLayout`。
+- **短动画全部收进一个纯类 `Tween`**（easeOutCubic，`TweenTest` 4 条）：换页 180ms
+  （淡入 + 上滑 5px）、行悬停 110/150ms、标签强调条 160ms、预览换样例 200ms。
+  `NvgUi` 新增**整层 alpha**（形状与文字一起淡 —— 分开淡就会出现"有一行没淡"）与纯色助手
+  `fade`/`mix`。真机读数（427×240，全自动）：换样例 `0.00 → 0.52 → 1.00`、
+  行悬停 `0.00 → 0.76 → 1.00`、换页 `0.00 → 0.85 → 1.00`、强调条 `1.00 → 1.90 → 2.00`。
+  **起点那一帧也进日志**：只看终点的话，"硬切"和"动画播完"长得一模一样。
+- **「合并粒度」进了界面**（通用页第 7 行）—— ④ 之前它只有 TOML 注释。
+- 真机另一档（`-PharnessGuiScale=4`，画布 320×180）：预览收起 →**点样例走不到会明说**
+  （`界面上找不到『稀有』…（或这一档画布上它没画出来）`），行悬停与换页动画照样跑
+  （`0.00 → 0.75 → 1.00`）。**零尺寸控件算"点不到"**：不然照中心点下去会点在面板角落上，
+  "点了没反应"和"功能坏了"长得一模一样。
 
 ✅ **已部署 2026-09-17 20:3x（缩放适配 + 滑条读活配置 + 救回改「淡回」+ 账本「离开中」名单）**：
 `D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
@@ -121,23 +154,28 @@ native + `THIRD_PARTY_NOTICES.md`）。改完代码必须重新 `build` 再覆�
 ```bash
 cd platforms/1.20.1-forge
 
-# 编译 + 单测（Java 88 个用例）
+# 编译 + 单测（Java 123 个用例）
 ./gradlew build
 
-# 无人值守截图
+# 无人值守截图（**带 harness 参数时会自动进世界**：--quickPlaySingleplayer + 跑完自动退出）
 ./gradlew runClient -PharnessAuto=shot     # 开调试屏 → 每页拍两张 → 退出
 ./gradlew runClient -PharnessAuto=hud      # 不开调试屏，走玩家真正走的那条路（最能说明问题的一条）
-./gradlew runClient -PharnessAuto=config   # 开配置界面 → 截图 → 退出
-#   产物在 run/screenshots/：
+./gradlew runClient -PharnessAuto=config   # 开配置界面 → 切页/切样例/悬停/拖拽 → 截图 → 退出
+#   可选开关：-PharnessGuiScale=4（画布 320×180）、-Pwidth= -Pheight=（窗口尺寸）
+#   产物在 run/screenshots/（截图落盘是异步的，harness 会等够再退）：
 #     pickupcard-harness-p1[-early|-mid]  五档强调色+经验
 #                                       -early = 入场 3 tick（内容才滑 20%）← 验"隧道口"看这张
 #                                       -mid   = 入场 8 tick（曲线前段很陡，这时已 98%）
 #     pickupcard-harness-spike[-mid]   矢量 spike（五个图元 + 两张探针卡）
 #     pickupcard-measure               测量页（纯黑底/无辅助线/无读数）← 像素对照用的就是这张
-#     pickupcard-config                配置界面
-#     pickupcard-hud                   玩家那条路的稳态（右下角锚定看这张）
-#     pickupcard-hud-exit              HUD 收工前再推一张把最老的挤掉，拍淡出中段
-#                                      （只看稳态截图等于没验动画）
+#     pickupcard-config[-p2]           配置界面：通用页 / 布局页（预览是那一摞卡）
+#     pickupcard-config-preview[-fade] 单卡预览：-fade = 换样例淡到一半（验动画不是硬切）
+#     pickupcard-config-hover          悬停一行（高亮带 + 标签变亮）
+#     pickupcard-config-page-mid       换页动画中段（强调条也在滑）
+#     pickupcard-config-stack          布局页 + 长名样例（验截断与不越界）
+#     pickupcard-hud / -hud-exit / -hud-revive
+#                                      HUD 三条：稳态 / 退场中段 / 淡回后（只看稳态等于没验动画）
+#   说明：截图文件**没有扩展名**（原版 Screenshot.grab 的行为）；要交给看图工具先 cp 成 .png
 #   交互调试：./gradlew runClient 然后 F9；游戏里按 K 开配置界面
 #     A=推全部样例 1-9=单张 C=清空 G=辅助线 B=背景 F=读数
 
@@ -365,4 +403,6 @@ opaque=true → `RenderSystem.disableBlend()`；而 `BlendMode.lastApplied` 是 
 - 无头浏览器用系统 Edge（`shot.py` 自动退回 `channel="msedge"`）。
 - 部署实例：`D:\Myworld\.minecraft\versions\1.20.1-main\`（Forge 1.20.1-47.4.1，147 个 mod）。
   该目录里**没有**第二个带 NanoVG 的 mod（整目录扫过），ModernUI 也不带（它 25MB 里 `org/lwjgl` 零条）。
-- 本会话无图像输入能力：`read_image`/`describe_image` 走不通，所有"看"都是数值扫描。
+- 看图这条路**现在是通的**：`vision_describe` / `read_image` 走 modlens 桥（Qwen VL 系），
+  但**它会限流**（`VISION_RATE_LIMITED`，一轮里问多了就全灭）—— 所以数值扫描仍然是主证据，
+  截图是给用户看的。截图没有扩展名，喂给看图工具前先 `cp` 成 `.png`（见"常用命令"）。
