@@ -42,8 +42,15 @@ float sdCircle(vec2 p, vec2 c, float r) {
 
 // 解析抗锯齿 + 可调软化：过渡带宽度取"一个像素的 fwidth"与 u_soft 的较大者。
 // ModernUI 用 0.7071 系数，同 Skia 的 SK_DistanceFieldAAFactor。
+//
+// 【为什么必须给 w 兜一个下限】矩形内部有一片平台区，距离场在那里是常数，
+// 于是 dFdx/dFdy 都是 0 → w = 0 → smoothstep(0, 0, dis) 变成 0/0。
+// GLSL 规定 edge0 >= edge1 时结果未定义，实测就是整片 quad 渲染成不透明黑。
+// 直角矩形和大圆角矩形（阴影就是）平台区最大，症状最明显；
+// 胶囊形状的距离场处处在变，所以看不出问题 —— 这正是它难查的原因。
 float aastep(float dis) {
-    float w = max(u_soft, 0.7071 * length(vec2(dFdx(dis), dFdy(dis))));
+    float fw = 0.7071 * length(vec2(dFdx(dis), dFdy(dis)));
+    float w = max(u_soft, max(fw, 0.5));
     return 1.0 - smoothstep(-w, w, dis);
 }
 

@@ -123,20 +123,14 @@ public final class TrioCardPainter implements CardPainter {
         float nameX = boxX + h + gap;
         float nameW = Math.max(0f, bodyW - h - gap);
 
-        // 1) 影子：一张硬边圆角矩形。
-        //    【为什么是硬边】模糊档试过两条路，都撞在同一个未定位的问题上：
-        //      (a) SDF 软化（把距离场过渡带加宽）
-        //      (b) 多层由淡到浓的硬边矩形叠加
-        //    两者都让阴影区域出现 alpha=1 的纯色块（实测：纯黑像素 16791 / 24411），
-        //    而"只画一张半透明硬边矩形"完全正常（纯黑像素 14）。
-        //    共同点是"同一块形状被多份半透明覆盖"——根因没定位之前先不用模糊，
-        //    宁可要一个正确的硬边投影，也不要一个会糊成黑块的柔和阴影。
-        //    证据与复现步骤见 docs/plan-ui.md。
+        // 1) 影子：同一个圆角矩形，边缘按 shadowBlur 软化（SDF 软化，不新增 pass）。
+        //    soft 取"想要的实际模糊半径的一半"，有效区间约 0~4。
         if (style.shadowAlpha() > 0) {
             float spread = SHADOW_SPREAD;
-            batch.roundRect(boxX - spread, style.shadowOffsetY() - spread,
+            batch.shadow(boxX - spread, style.shadowOffsetY() - spread,
                     bodyW + spread * 2f, h + spread * 2f,
-                    radius + spread, withAlpha(0x000000, style.shadowAlpha()));
+                    radius + spread, style.shadowBlur() / 2f,
+                    withAlpha(0x000000, style.shadowAlpha()));
         }
 
         // 2) 两个框

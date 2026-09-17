@@ -130,6 +130,16 @@ public final class DevCardScreen extends Screen {
         batch.roundRectGradient(20, y + 40, 120, 24, 6, 0xFFFFFFFF, 0xFF3050FF); // 渐变
         batch.flush();
 
+        // ---- 探针：同一个半透明黑，四个位置交替半径 ----
+        // 棋盘底是天然判据：真混合会透出两种格子色，alpha 丢了就是一块纯色。
+        gui.fill(20, 100, 110, 124, 0x5A000000);                      // 原版路径（对照）
+        ShapeBatch probe = new ShapeBatch(gui);
+        probe.roundRect(120, 100, 90, 24, 0f,  0x5A000000);           // #1 直角
+        probe.roundRect(220, 100, 90, 24, 12f, 0x5A000000);           // #2 圆角
+        probe.roundRect(320, 100, 90, 24, 0f,  0x5A000000);           // #3 直角
+        probe.roundRect(20, 140, 90, 24, 12f, 0x5A000000);            // #4 圆角
+        probe.flush();
+
         ShapeBatch.Stats st = batch.stats();
         gui.drawString(font, "shape spike: shapes=" + st.shapes()
                 + " flushes=" + st.flushes() + " merges=" + st.merges(), 8, 8, 0xFFFFFFFF, true);
