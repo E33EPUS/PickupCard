@@ -33,18 +33,21 @@
 `最新那张下缘距底边 / 卡高` + `强调色自上而下` 两条指标，**都做过反例验证**（把锚翻上去
 → 报 +4.909；把 DOM 顺序倒过来 → 报颜色顺序反了）。
 
-**已部署（但不是最新）**：`D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`
-（自包含：51 个绑定类 + 四平台原生 + `THIRD_PARTY_NOTICES.md`）。改完代码必须重新
-`build` 再覆盖过去，**运行中的实例不会热加载**。
+✅ **已部署 2026-09-17 18:33（收口成 NanoVG 单一渲染路径那一版）**：
+`D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
+`sha256 6e5ebdb3…`，与 `build/libs/` 的产物逐字节一致（自包含：51 个绑定类 + 四平台
+native + `THIRD_PARTY_NOTICES.md`）。改完代码必须重新 `build` 再覆盖过去，**运行中的实例
+不会热加载**。
 
-> ⏳ **下面这次部署之后，又改了一轮（影子裁剪 / 竖条左缘锚定 / 三个时长 / 卡高 20），尚未重新部署**
+> **`mods/` 里现在只有这一份 pickupcard**（同 modid 不能共存 —— 两版同放会让"跑的是哪一版"
+> 不可知，这个坑踩过）。部署时那份 legacy 0.1.0 已经不在 `mods/` 里了；想再看"以前那版"：
+> 原件在 `recovered/0.1.0/original-jar.zip`，能编的那份在 `platforms/1.20.1-legacy/`
+> （**只当参照 —— 见该目录 README：不要 build、不要丢进 mods**）。历次部署的旧产物备份在
+> `platforms/1.20.1-forge/build/deployed-backup/`。
 >
-> ✅ **2026-09-17 16:49 那一版**（右下角锚定 + 隧道口裁剪 + 入场曲线那一版）：
-> `sha256 41737e5d…`，与 `build/libs/` 的产物逐字节一致。旧 jar 备份在
-> `platforms/1.20.1-forge/build/deployed-backup/`（**不在 mods 里**，Forge 不会加载它）。
-> **顺带删掉了玩家侧那份 `config/pickupcard-client.toml`**：它是旧构建生成的，带着
-> `stickTo = "LEFT"`，而 **TOML 优先于代码默认值** —— 不删的话锚点根本翻不过来。
-> 里面每一项当时都是默认值，删掉不丢东西，下次启动按新默认重新生成（注释也是新的）。
+> **玩家侧 `config/pickupcard-client.toml` 现在不存在**（这次部署时确认过）：它是旧构建
+> 生成的，而 **TOML 优先于代码默认值** —— 留着会让新默认值（`stickTo` / `leftEdge=-1` /
+> 下边距 52）看起来"改了没反应"。删掉不丢东西，下次启动按新默认重新生成。**这个坑踩过三次。**
 
 ## 跑起来 / 常用命令
 
