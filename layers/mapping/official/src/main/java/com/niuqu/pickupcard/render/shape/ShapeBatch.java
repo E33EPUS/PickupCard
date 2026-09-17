@@ -128,9 +128,6 @@ public final class ShapeBatch {
         if (!ShapeShaders.ready()) {
             return;
         }
-        if (shapes == 0) {
-            warmUp();
-        }
         if (pending == null) {
             applyUniforms(key);
             pending = key;
@@ -143,28 +140,6 @@ public final class ShapeBatch {
         }
         emit(x0, y0, x1, y1, top, bottom);
         shapes++;
-    }
-
-    /**
-     * 丢掉本批的第一次 draw。
-     * <p>
-     * 【为什么要牺牲一次】实测：本批第一次提交的形状渲染成<b>不透明</b>（alpha 被丢掉），
-     * 第二次之后全部正常。触发条件是"这一次 draw 之前发生了一次别的 RenderType 的绘制"
-     * —— 卡片页每张卡的第一个形状是阴影，前面是上一张卡的图标/文字，所以五张卡的阴影全黑。
-     * <p>
-     * 试过并排除：SDF 软化宽度为 0（不是）、未冲刷的原版缓冲（不是）、
-     * 直角/圆角差异（换成顺序实验后推翻）。根因未定位，证据与复现见 docs/plan-ui.md。
-     * <p>
-     * 这里把第一次 draw 丢到屏幕外（坐标 −100000），让它自己去坏，用户提交的形状就不受影响。
-     * 这是权宜之计，不是修复；真修好之后这个方法应当删掉。
-     */
-    private void warmUp() {
-        Key k = new Key(0.5f, 0.5f, 0f, 0f, 0f, 0f, 0f, MODE_RECT_FILL, 0f);
-        applyUniforms(k);
-        pending = k;
-        emit(-100_000f, -100_000f, -99_999f, -99_999f, 0, 0);
-        flushPending();
-        // 不计入 shapes：它不是调用方提交的形状，stats 里不该出现
     }
 
     private void flushPending() {

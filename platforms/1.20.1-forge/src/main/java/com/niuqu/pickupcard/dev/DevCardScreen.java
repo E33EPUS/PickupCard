@@ -154,6 +154,13 @@ public final class DevCardScreen extends Screen {
     /** 由自动驱动切换 spike 页。 */
     public void setSpike(boolean value) {
         this.spike = value;
+        if (value) {
+            // spike 页量的是图元本身的几何，辅助线和读数都会挡住/混进形状里。
+            // 【为什么必须关掉】读数每行 10px 地铺下来，正好压在 y=40..136 那一排形状上 ——
+            // 之前想拿它做"已知尺寸图形"的标定，量出来的覆盖率差了 40px，就是这个原因。
+            guides = false;
+            stats = false;
+        }
     }
 
     /**
