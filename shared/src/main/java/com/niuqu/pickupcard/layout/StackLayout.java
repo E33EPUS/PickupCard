@@ -52,11 +52,11 @@ public final class StackLayout {
      * @param guiHeight 当前 GUI 逻辑高度
      * @param layout    水平对齐设置
      * @param marginX   距屏幕左边的安全留白（同时也是右边固定时的右边距）
-     * @param marginY   距屏幕下边的留白
+     * @param marginY   距屏幕上边的留白
      * @param gap       卡与卡之间的间隙
      * @return 与 {@code sizes} 同序的位置列表
      */
-    public static List<Slot> stack(List<Size> sizes, float guiWidth, float guiHeight,
+    public static List<Slot> stack(List<Size> sizes, float guiWidth,
                                    LayoutSettings layout, int marginX, int marginY, float gap) {
         int n = sizes.size();
         List<Slot> slots = new ArrayList<>(n);
@@ -67,7 +67,10 @@ public final class StackLayout {
         float total = gap * (n - 1);
         for (Size size : sizes) total += size.height();
 
-        float y = guiHeight - marginY - total;
+        // 【锚点在上边】草稿（animation.html）把卡从 TOP_Y 起往下排：最新的一张在最上面，
+        // 旧的被往下挤。旧版是"贴着底边往上长"，方向正好相反 —— 效果是"新的出现在最下面、
+        // 旧的被顶上去"，和草稿完全两回事（这一条用户第一眼就看出来并报回来了）。
+        float y = marginY;
         for (int i = 0; i < n; i++) {
             Size size = sizes.get(i);
             // 放得下的最右位置；再夹到屏幕内，避免超宽卡算出负坐标

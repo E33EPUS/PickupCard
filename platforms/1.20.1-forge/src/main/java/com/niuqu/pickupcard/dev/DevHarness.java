@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.PickupCard;
+import com.niuqu.pickupcard.config.PickupCardConfigScreen;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -122,10 +123,18 @@ public final class DevHarness {
         private static int hudTicks;
         private static boolean hudInjected;
 
+        /** {@code -PharnessAuto=config}：打开配置界面 → 截图 → 退出。界面能不能画出来要能被验。 */
+        private static final boolean CONFIG_ONLY = "config".equalsIgnoreCase(MODE);
+        private static int configTicks;
+
         static void tick(Minecraft mc) {
             if (!enabled()) return;
             if (HUD_ONLY) {
                 tickHud(mc);
+                return;
+            }
+            if (CONFIG_ONLY) {
+                tickConfig(mc);
                 return;
             }
             ticks++;
@@ -151,6 +160,23 @@ public final class DevHarness {
                 capture(mc, null);
             } else if (sinceInject >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
                 advance(mc);
+            }
+        }
+
+        static void tickConfig(Minecraft mc) {
+            configTicks++;
+            if (configTicks == WARMUP_TICKS) {
+                mc.setScreen(new PickupCardConfigScreen(null));
+                PickupCard.LOGGER.info("[harness-auto] 配置界面已打开");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 20) {
+                capture(mc, null);
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 40) {
+                PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
+                mc.stop();
             }
         }
 
@@ -234,7 +260,9 @@ public final class DevHarness {
             // 用 if 而不是 switch：SPIKE_PAGE 是 PAGES.size()，不是编译期常量，
             // 编译不过 —— case 标签要求常量表达式。
             String base;
-            if (page == SPIKE_PAGE) {
+            if (CONFIG_ONLY) {
+                base = "pickupcard-config";
+            } else if (page == SPIKE_PAGE) {
                 base = "pickupcard-harness-spike";
             } else if (page == MEASURE_PAGE) {
                 base = "pickupcard-measure";

@@ -15,6 +15,7 @@ import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -70,6 +71,26 @@ public final class CardStage {
     private float lastFirstRise = 1f;
 
     private CardStage() {
+    }
+
+    /**
+     * 平台侧把主题与"玩家改过的外观项"接进来。配置界面改的就是这两样 ——
+     * 界面不直接碰渲染，只改配置，渲染每秒重读一次。
+     */
+    public void setStyleSources(java.util.function.Supplier<com.niuqu.pickupcard.style.Theme> theme,
+                                java.util.function.Supplier<com.niuqu.pickupcard.style.StyleOverrides> overrides) {
+        styles.setThemeSource(theme);
+        styles.setOverrideSource(overrides);
+    }
+
+    /** 配置界面预览用：当前生效的样式（主题 + 玩家改动过的项）。 */
+    public StyleModel previewStyle() {
+        return styles.current(System.currentTimeMillis());
+    }
+
+    /** 配置改完之后叫一下：下一次绘制立刻用新值，不用等那一秒的重读间隔。 */
+    public void refreshStyle() {
+        styles.invalidate();
     }
 
     /** 平台侧把布局配置接进来。 */
@@ -208,7 +229,10 @@ public final class CardStage {
 
     /** 量尺寸 → 排布 → 把两边按序拼起来。 */
     private List<CardSlot> layout(CardCanvas canvas, Minecraft mc) {
+        // 【最新的排在最上面】草稿里新槽位是 unshift 到队首、旧卡被往下挤。
+        // live 是插入序（老 -> 新），所以这里反过来：index 0 = 最新 = 最上面。
         List<CardView> alive = new ArrayList<>(live.values());
+        Collections.reverse(alive);
         List<StackLayout.Size> sizes = new ArrayList<>(alive.size());
         for (CardView view : alive) {
             sizes.add(new StackLayout.Size(
@@ -219,8 +243,7 @@ public final class CardStage {
         List<CardSlot> slots = new ArrayList<>(alive.size());
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
-                sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
-                MARGIN_X, MARGIN_Y, STACK_GAP)) {
+                sizes, canvas.guiWidth(), canvas.layout(), MARGIN_X, MARGIN_Y, STACK_GAP)) {
             CardView view = alive.get(slot.index());
             slots.add(new CardSlot(view, slot.x(), move.y(view.notice().key(), slot.y(), now),
                     slot.width(), slot.height()));

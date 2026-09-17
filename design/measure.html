@@ -26,7 +26,8 @@ html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden;
 /* 竖排、从下往上堆、**左缘对齐** —— 与 Java 的 StackLayout 同一条规则：
    最新的一张贴底，卡间距 6px，左边距 16px（= LayoutSettings 的默认 leftEdge）。
    左边固定意味着"一摞卡的竖条成一条竖线"，右缘随名字长短伸缩。 */
-.rows { position:absolute; left:16px; bottom:16px;
+/* 顶锚：与 StackLayout 一致（草稿 animation.html 也是 TOP_Y=16 往下排） */
+.rows { position:absolute; left:16px; top:16px;
         display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
 </style>
 </head>

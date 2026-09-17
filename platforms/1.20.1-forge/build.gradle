@@ -94,14 +94,15 @@ repositories {
     }
 }
 
-// 【为什么用 JarJar 而不是 implementation】Forge 1.20.1 的开发环境不走 -cp：
-// 引导阶段用 -DlegacyClassPath.file 指向 build/classpath/runClient_minecraftClasspath.txt，
-// 那个文件只列 MC 与 Forge 的库。所以只写 implementation 时，编译过、单元测试过
-// （测试走 testRuntimeClasspath），但 runClient 里 mod 的类加载器看不到它 ——
-// 症状是 NoClassDefFoundError，且只在真的去画的那一刻才炸。
-// jarJar 是 FG6 的"把库打进 jar 并同时进开发环境"的入口：引导模块路径上已经带着
-// JarJarFileSystems，就是为这件事准备的。顺带把发布要打的 native 也一起办了。
-jarJar.enable()
+// 【打包方式：自包含（把 NanoVG 摊进本 jar），不用 JarJar】
+// 试过 JarJar：它要求依赖写 Maven 风格的版本区间，直接写 3.3.1 会让 :jarJar 在配置期就失败
+// （"The given version specification is invalid: 3.3.1"），得额外调 pin/ranged；
+// 而且"塞进 META-INF/jarjar 之后玩家侧能不能加载"在本机验不了 —— 一个 HUD mod 的 native
+// 加载失败 = HUD 整个不画，不敢用没验过的路。
+// 改成把绑定和四平台 native 直接摊进本 jar：这条路已经在开发环境验过（类加载器从自己的
+// classes 根加载绑定、LWJGL 的 SharedLibraryLoader 从同类路径找 dll），而 jar 里的类
+// 对类加载器来说和 classes 目录是一回事。
+// 【代价】jar 大 ~1 MB；第三方代码进了我们的 jar，所以必须附许可声明（THIRD_PARTY_NOTICES.md）。
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
@@ -121,11 +122,6 @@ dependencies {
     // 【发布前必做】四平台 native 必须 JiJ 进 jar，否则玩家侧第一次画卡就是 UnsatisfiedLinkError。
     runtimeOnly 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-windows'
     // 进开发环境 + 打进 jar（四个平台都要，缺平台的症状是玩家侧 UnsatisfiedLinkError）
-    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1'
-    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-windows'
-    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-linux'
-    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-macos'
-    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-macos-arm64'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
@@ -146,25 +142,15 @@ dependencies {
 // 所以这里做最直白的一件事：FG 写完那个文件之后，我们把该进去的 jar 追加上去。
 // 【失败要响】追加前先确认文件存在，缺文件直接抛，不然会退化成一个"跑起来但没引擎"的
 // 静默失败 —— 那正是这个项目一直在治的病。
-def nvgDevNatives = {
-    def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
-    def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
-    if (os.contains('windows')) {
-        return 'natives-windows'
-    }
-    if (os.contains('mac') || os.contains('darwin')) {
-        return arch.contains('aarch64') || arch.contains('arm') ? 'natives-macos-arm64' : 'natives-macos'
-    }
-    return 'natives-linux'
-}()
-
 configurations {
     nvgDev
 }
 
 dependencies {
     nvgDev 'org.lwjgl:lwjgl-nanovg:3.3.1'
-    nvgDev "org.lwjgl:lwjgl-nanovg:3.3.1:${nvgDevNatives}"
+    ['natives-windows', 'natives-linux', 'natives-macos', 'natives-macos-arm64'].each { classifier ->
+        nvgDev "org.lwjgl:lwjgl-nanovg:3.3.1:${classifier}"
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -180,24 +166,37 @@ dependencies {
 // 【所以走这条】我们的 classes 目录本身就是类加载器的一个根，摊进去就一定能看见 ——
 // 效果等同于 shade，但只在开发期做（发布走 jarJar，不污染 jar）。
 // 【失败要响】找不到 jar 直接抛，不留下一个"能跑但没引擎"的静默状态。
-tasks.register('unpackNvgForDev', Copy) {
+// 摊平：开发期要它（类加载器只认自己的 classes 根），发布也要它（jar 里自带绑定与 native）。
+// 两个消费者同一个动作，所以只有一个家 —— 名字里不带 "ForDev" 就是为这个。
+tasks.register('unpackNvg', Copy) {
     dependsOn 'compileJava'
     def jars = configurations.nvgDev
-    def binding = jars.files.find { it.name.startsWith('lwjgl-nanovg-3.3.1.jar') }
-    def natives = jars.files.find { it.name.contains('natives') }
-    if (binding == null || natives == null) {
-        throw new GradleException("NanoVG 开发期摊平失败：nvgDev 里没有绑定或 native")
+    def binding = jars.files.find { it.name == 'lwjgl-nanovg-3.3.1.jar' }
+    def natives = jars.files.findAll { it.name.contains('natives') }
+    if (binding == null || natives.size() != 4) {
+        throw new GradleException("NanoVG 摊平失败：需要 1 个绑定 + 4 个平台 native，实际 ${jars.files*.name}")
     }
     // 绑定：Java 类；native：各平台目录下的 dll/so/dylib（LWJGL 按 <os>/<arch>/... 的资源路径找）
     from(zipTree(binding)) { include 'org/lwjgl/nanovg/**' }
-    from(zipTree(natives)) { include 'windows/**', 'linux/**', 'macos/**' }
+    natives.each { jar ->
+        from(zipTree(jar)) { include 'windows/**', 'linux/**', 'macos/**' }
+    }
     into layout.buildDirectory.dir('classes/java/main')
     outputs.upToDateWhen { false }
-    doLast { logger.lifecycle("NanoVG 开发期摊平完成 -> build/classes/java/main") }
+    doLast { logger.lifecycle("NanoVG 摊平完成（绑定 + ${natives.size()} 个平台 native）-> build/classes/java/main") }
 }
 
-tasks.matching { it.name == 'runClient' }.configureEach {
-    dependsOn 'unpackNvgForDev'
+// runClient 要它（不然 NoClassDefFoundError），jar 也要它（不然玩家侧 UnsatisfiedLinkError）
+tasks.matching { it.name == 'runClient' || it.name == 'jar' || it.name == 'reobfJar' }.configureEach {
+    dependsOn 'unpackNvg'
+}
+
+// 【为什么这条必须写】摊平是往 compileJava 的输出目录里放文件 —— 这是开发期类加载器逼出来的
+// （它只认我们自己的 classes 根，见上面的长注释）。Gradle 8 的任务依赖校验不允许
+// "某任务的输出被别的任务拿去当输入却不声明关系"，compileTestJava 的类路径就含这个目录，
+// 所以这里显式声明。不声明的话构建会直接失败（不是警告）。
+tasks.matching { it.name == 'compileTestJava' }.configureEach {
+    dependsOn 'unpackNvg'
 }
 
 tasks.named('processResources', ProcessResources).configure {

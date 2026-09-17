@@ -24,7 +24,7 @@ class StackLayoutTest {
     }
 
     private static List<StackLayout.Slot> stack(LayoutSettings layout, StackLayout.Size... sizes) {
-        return StackLayout.stack(List.of(sizes), 427, 240, layout, MARGIN, MARGIN, 6f);
+        return StackLayout.stack(List.of(sizes), 427, layout, MARGIN, MARGIN, 6f);
     }
 
     @Test
@@ -34,11 +34,11 @@ class StackLayoutTest {
     }
 
     @Test
-    @DisplayName("最新的一张贴着底边，旧的在它上方隔着间隙")
-    void newestCardSitsOnBottomEdge() {
+    @DisplayName("最新的一张贴着上边，旧的在它下方隔着间隙")
+    void newestCardSitsOnTopEdge() {
         var s = stack(right(), new StackLayout.Size(100, 40), new StackLayout.Size(100, 40));
-        assertEquals(240 - MARGIN, s.get(1).y() + s.get(1).height(), EPS);
-        assertEquals(s.get(1).y() - 6f, s.get(0).y() + s.get(0).height(), EPS);
+        assertEquals(MARGIN, s.get(0).y(), EPS, "index 0 = 最新 = 最上面");
+        assertEquals(s.get(0).y() + s.get(0).height() + 6f, s.get(1).y(), EPS, "旧的被往下挤一个级差");
     }
 
     @Test

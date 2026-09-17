@@ -3,12 +3,16 @@ package com.niuqu.pickupcard;
 import com.niuqu.pickupcard.config.PickupCardConfig;
 import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.dev.DevHarness;
+import com.niuqu.pickupcard.client.PickupCardKeys;
+import com.niuqu.pickupcard.config.PickupCardConfigScreen;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
+import net.minecraft.client.Minecraft;
+import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
@@ -70,6 +74,8 @@ public final class PickupCard {
         // 被过滤器丢掉的拾取在玩家那边就是"什么都没发生"。接上日志，每个物品只报一次。
         Inbox.INSTANCE.setDropReporter(PickupCard::reportDroppedPickup);
         CardStage.INSTANCE.setLayoutSource(PickupCardConfig::layoutSnapshot);
+        // 主题与外观改动也来自配置：主题给默认值，[style] 段只覆盖玩家改过的项
+        CardStage.INSTANCE.setStyleSources(PickupCardConfig::theme, PickupCardConfig::styleOverrides);
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
         MinecraftForge.EVENT_BUS.register(CardStage.INSTANCE);
@@ -89,6 +95,20 @@ public final class PickupCard {
      */
     @Mod.EventBusSubscriber(modid = MOD_ID, value = Dist.CLIENT, bus = Mod.EventBusSubscriber.Bus.FORGE)
     static final class ClientLifecycle {
+
+        @SubscribeEvent
+        static void onClientTick(TickEvent.ClientTickEvent event) {
+            if (event.phase != TickEvent.Phase.END) {
+                return;
+            }
+            while (PickupCardKeys.CONFIG.consumeClick()) {
+                Minecraft mc = Minecraft.getInstance();
+                // 只在没有别的界面时打开：否则会把玩家正在用的界面（比如背包）压掉
+                if (mc.screen == null) {
+                    mc.setScreen(new PickupCardConfigScreen(null));
+                }
+            }
+        }
 
         @SubscribeEvent
         static void onLoggingOut(ClientPlayerNetworkEvent.LoggingOut event) {

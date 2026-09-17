@@ -3,5 +3,6 @@
   "pickupcard.config.merge.enabled": "合并连续拾取",
   "pickupcard.config.format": "数量写法",
   "pickupcard.xp": "经验",
-  "key.pickupcard.harness": "打开拾取卡调试屏"
+  "key.pickupcard.harness": "打开拾取卡调试屏",
+  "key.pickupcard.config": "打开拾取卡设置"
 }

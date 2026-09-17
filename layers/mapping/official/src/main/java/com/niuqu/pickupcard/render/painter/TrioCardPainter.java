@@ -151,7 +151,8 @@ public final class TrioCardPainter implements CardPainter {
 
         // 1) 影子：同一个圆角矩形，边缘按 shadowBlur 软化（SDF 软化，不新增 pass）。
         //    soft 取"想要的实际模糊半径的一半"，有效区间约 0~4。
-        cardShadow(batch, style, boxX, 0f, bodyW, h, radius);
+        float barFill = canvas.barOf(slot.view());
+        cardShadows(batch, style, bodyX, shift, bodyW, h, radius, barFill);
 
         // 2) 两个框：渐变底 → 顶部高光 → 描边。
         //    顺序跟 CSS 的叠法对齐（box-shadow: inset 在底色之上、outline 之下），
@@ -166,7 +167,7 @@ public final class TrioCardPainter implements CardPainter {
         }
 
         // 3) 竖条最后画、盖在上面 —— 它是挡板，内容从它后面出来
-        float bar = canvas.barOf(slot.view());
+        float bar = barFill;
         if (bar > 0.001f) {
             // 竖条上下各内缩 barInsetY：它比卡片矮一截，是设计稿定的比例
             float inset = style.barInsetY();
@@ -199,8 +200,9 @@ public final class TrioCardPainter implements CardPainter {
         for (CardSlot slot : slots) {
             float rise = canvas.contentOf(slot.view());
             pushCardPose(gui, canvas, slot);
-            cardShadow(batch, style, boxXOf(canvas, slot, style, rise), 0f, bodyWOf(slot, style),
-                    slot.height(), Math.min(style.cornerRadius(), slot.height() / 2f));
+            cardShadows(batch, style, style.barWidth() + style.gap(),
+                    bodyShiftOf(canvas, slot, style, rise), bodyWOf(slot, style), slot.height(),
+                    Math.min(style.cornerRadius(), slot.height() / 2f), canvas.barOf(slot.view()));
             gui.pose().popPose();
         }
         batch.flush();
@@ -292,21 +294,100 @@ public final class TrioCardPainter implements CardPainter {
     }
 
     /**
-     * 卡片投影：一个比卡略大的圆角矩形，边缘按 soft 软化。
+     * 配置界面里的实时预览：画一张样例卡。
+     * <p>
+     * 【为什么必须共用同一段代码】预览要是自己画一遍，它迟早和真卡不一样 ——
+     * 那时候"所见即所得"就是假的，而且是<b>静默</b>的假（改了没用，但界面看着生效了）。
+     * 这里调的正是真卡在用的三样东西：{@link #cardShadows}（SDF 影子）、
+     * {@code NvgCardPainter}（外壳）、以及原版的图标与文字。
+     *
+     * @param cardW 卡片总宽；高度按样式算（图标 + 上下内边距）
+     */
+    public static void paintPreview(GuiGraphics gui, StyleModel style, float x, float y, float cardW,
+                                    ItemStack icon, String name, String count, int accent) {
+        float h = style.boxHeight();
+        float bodyX = style.barWidth() + style.gap();
+        float radius = Math.min(style.cornerRadius(), h / 2f);
+
+        ShapeBatch batch = new ShapeBatch(gui);
+        cardShadows(batch, style, bodyX, 0f, Math.max(0f, cardW - bodyX), h, radius, 1f);
+        batch.flush();
+
+        NvgCanvas nvg = NvgCanvas.shared();
+        if (nvg != null && nvg.valid()) {
+            gui.flush();
+            float guiScale = (float) Minecraft.getInstance().getWindow().getGuiScale();
+            nvg.begin(gui.guiWidth(), gui.guiHeight(), guiScale);
+            try {
+                NvgCardPainter.paintCard(nvg.handle(), style, x, y, cardW, h, accent, 1f, 0f);
+            } finally {
+                nvg.end();
+            }
+        }
+
+        Font font = Minecraft.getInstance().font;
+        float scale = style.iconSize() / CardMetrics.ICON_PX;
+        gui.pose().pushPose();
+        gui.pose().translate(x + bodyX + h / 2f, y + h / 2f, 0f);
+        gui.pose().scale(scale, scale, 1f);
+        gui.renderItem(icon, -8, -8);
+        gui.pose().popPose();
+
+        float textY = y + (h - font.lineHeight) / 2f;
+        gui.drawString(font, name,
+                Math.round(x + bodyX + h + style.gap() + style.paddingH()), Math.round(textY),
+                style.nameColor(), true);
+        gui.drawString(font, count, Math.round(x + cardW - style.paddingH() - font.width(count)),
+                Math.round(textY), accent, true);
+    }
+
+    /**
+     * 卡片投影：<b>按轮廓</b>投，不是一个包住整张卡的大矩形。
+     * <p>
+     * 【为什么必须这样】草稿用的是 CSS {@code filter: drop-shadow(...)}：它投的是
+     * "竖条 + 图标格 + 名字框"这个<b>并集</b>的轮廓，三个框之间那几像素缝是透空的、
+     * 缝里没有影子。旧版画一个覆盖整个内容宽度的大圆角矩形 —— 于是缝里多出一层灰，
+     * 整块看起来就是一片廉价的深色方块（这一条用户直接指着截图问了）。
+     * <p>
+     * 三个形状互不重叠，所以"并集的影子"等于"三个影子并起来"，逐个投就对了。
+     * 相邻两个的影子会在缝里叠一点点色，但 CSS 的模糊本来也会把缝桥接过去，
+     * 所以那不是缺陷，反而更接近草稿。
      * <p>
      * 【为什么抽出来】它有两条调用路径：SDF 整条回退、以及引擎版里单独那一趟"影子"。
      * 各写一遍的话，改一处忘一处 = 回退之后忽然变丑，而且没人会注意到。
      */
-    private static void cardShadow(ShapeBatch batch, StyleModel style, float boxX, float y,
-                                   float bodyW, float h, float radius) {
+    private static void cardShadows(ShapeBatch batch, StyleModel style, float bodyX, float shift,
+                                    float bodyW, float h, float radius, float barFill) {
         if (style.shadowAlpha() <= 0) {
             return;
         }
         float spread = SHADOW_SPREAD;
-        batch.shadow(boxX - spread, y + style.shadowOffsetY() - spread,
-                bodyW + spread * 2f, h + spread * 2f,
-                radius + spread, style.shadowBlur() / 2f,
-                withAlpha(0x000000, style.shadowAlpha()));
+        float soft = style.shadowBlur() / 2f;
+        int color = withAlpha(0x000000, style.shadowAlpha());
+        float dy = style.shadowOffsetY();
+        float boxX = bodyX + shift;
+
+        // 1) 图标格
+        shadowOf(batch, boxX, dy, h, h, radius, spread, soft, color);
+        // 2) 名字框
+        float nameW = Math.max(0f, bodyW - h - style.gap());
+        if (nameW > 0f) {
+            shadowOf(batch, boxX + h + style.gap(), dy, nameW, h, radius, spread, soft, color);
+        }
+        // 3) 竖条（高度跟着入场动画长，影子也跟着长）
+        float inset = style.barInsetY();
+        float full = Math.max(0f, h - inset * 2f);
+        float barH = full * Math.max(0f, Math.min(1f, barFill));
+        if (barH > 0.01f) {
+            float barW = style.barWidth();
+            shadowOf(batch, 0f, dy + inset + (full - barH) / 2f, barW, barH,
+                    Math.min(radius, barW / 2f), Math.min(spread, barW / 2f), soft, color);
+        }
+    }
+
+    private static void shadowOf(ShapeBatch batch, float x, float y, float w, float h, float radius,
+                                 float spread, float soft, int color) {
+        batch.shadow(x - spread, y - spread, w + spread * 2f, h + spread * 2f, radius + spread, soft, color);
     }
 
     /**

@@ -1,10 +1,13 @@
 package com.niuqu.pickupcard.render;
 
 import com.niuqu.pickupcard.style.StyleModel;
+import com.niuqu.pickupcard.style.StyleOverrides;
+import com.niuqu.pickupcard.style.Theme;
 import net.minecraft.client.Minecraft;
 import net.minecraft.resources.ResourceLocation;
 
 import java.nio.charset.StandardCharsets;
+import java.util.function.Supplier;
 
 /**
  * 主题文件的读取与热重读。
@@ -19,22 +22,42 @@ import java.nio.charset.StandardCharsets;
  */
 public final class StyleSource {
 
-    private static final ResourceLocation PATH =
-            new ResourceLocation("pickupcard", "styles/default.json");
+    /** 主题从哪来：平台侧注入（配置里选的那一项）。默认深色，所以渲染层自己也能跑。 */
+    private Supplier<Theme> themeSource = () -> Theme.DARK;
+    /** 玩家的个人改动：平台侧注入。默认一项都没改 = 完全用主题。 */
+    private Supplier<StyleOverrides> overrideSource = StyleOverrides::none;
 
     /** 重读间隔：改 JSON 一秒内生效，又不用每帧都去问资源管理器。 */
     private static final long RECHECK_MS = 1_000L;
 
+
     private StyleModel cached;
+    private Theme cachedTheme;
+    private StyleOverrides cachedOverrides;
     private long nextCheckAt;
 
-    /** 拿当前主题。未到重读点时直接返回缓存。 */
+    public void setThemeSource(Supplier<Theme> source) {
+        this.themeSource = source == null ? () -> Theme.DARK : source;
+        invalidate();
+    }
+
+    public void setOverrideSource(Supplier<StyleOverrides> source) {
+        this.overrideSource = source == null ? StyleOverrides::none : source;
+        invalidate();
+    }
+
+    /** 拿当前设计：主题 + 玩家改动。未到重读点时直接返回缓存。 */
     public StyleModel current(long now) {
-        if (cached != null && now < nextCheckAt) {
+        Theme theme = themeSource.get();
+        StyleOverrides overrides = overrideSource.get();
+        if (cached != null && theme == cachedTheme && overrides.equals(cachedOverrides) && now < nextCheckAt) {
             return cached;
         }
         nextCheckAt = now + RECHECK_MS;
-        cached = read().sanitized();
+        cachedTheme = theme;
+        cachedOverrides = overrides;
+        // 【顺序】主题是默认值，改动只覆盖它改过的项，最后统一夹逼。
+        cached = overrides.apply(read(theme));
         return cached;
     }
 
@@ -44,9 +67,10 @@ public final class StyleSource {
         nextCheckAt = 0L;
     }
 
-    private static StyleModel read() {
+    private static StyleModel read(Theme theme) {
         try {
-            var resource = Minecraft.getInstance().getResourceManager().getResource(PATH);
+            var resource = Minecraft.getInstance().getResourceManager()
+                    .getResource(new ResourceLocation("pickupcard", theme.assetPath()));
             if (resource.isEmpty()) {
                 return StyleModel.defaults();
             }
