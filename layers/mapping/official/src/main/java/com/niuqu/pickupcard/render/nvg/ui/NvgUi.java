@@ -20,6 +20,9 @@ import static org.lwjgl.nanovg.NanoVG.nvgFillPaint;
 import static org.lwjgl.nanovg.NanoVG.nvgLinearGradient;
 import static org.lwjgl.nanovg.NanoVG.nvgRGBA;
 import static org.lwjgl.nanovg.NanoVG.nvgRect;
+import static org.lwjgl.nanovg.NanoVG.nvgRestore;
+import static org.lwjgl.nanovg.NanoVG.nvgSave;
+import static org.lwjgl.nanovg.NanoVG.nvgScissor;
 import static org.lwjgl.nanovg.NanoVG.nvgRoundedRect;
 import static org.lwjgl.nanovg.NanoVG.nvgStroke;
 import static org.lwjgl.nanovg.NanoVG.nvgStrokeColor;
@@ -46,7 +49,24 @@ public final class NvgUi implements AutoCloseable {
     private final Font font;
     private final NvgCanvas canvas;
     private final MemoryStack stack;
-    private final List<Runnable> texts = new ArrayList<>();
+    /** 登记的一条文字：内容 + **登记时所在的裁剪框**。 */
+    private record Text(Runnable draw, Clip clip) {
+    }
+
+    /**
+     * 一个裁剪框（屏幕逻辑坐标）。
+     * <p>
+     * 【为什么文字也要记它】形状在 NanoVG 的帧里当场画掉，文字是 {@link #close()} 里才提交的 ——
+     * 提交时当前裁剪早就变了。不记住登记时那个框，滚出视口的行会在裁剪失效之后才画出来。
+     */
+    record Clip(float x, float y, float w, float h) {
+    }
+
+    private final List<Text> texts = new ArrayList<>();
+
+    /** 当前的裁剪框（null = 没裁）；形状那一套由 NanoVG 的 save/restore 管。 */
+    private Clip clip;
+    private final List<Clip> clipStack = new ArrayList<>();
 
     /** 界面配色。 */
     public final NvgPalette palette;
@@ -169,19 +189,51 @@ public final class NvgUi implements AutoCloseable {
     // ------------------------------------------------------------------
 
     public void text(String s, float x, float y, int argb) {
-        texts.add(() -> gui.drawString(font, s, Math.round(x), Math.round(y), argb, true));
+        register(() -> gui.drawString(font, s, Math.round(x), Math.round(y), argb, true));
     }
 
     /** 居中写一行（x 给中心）。 */
     public void textCentered(String s, float centerX, float y, int argb) {
-        texts.add(() -> gui.drawString(font, s, Math.round(centerX - font.width(s) / 2f),
+        register(() -> gui.drawString(font, s, Math.round(centerX - font.width(s) / 2f),
                 Math.round(y), argb, true));
     }
 
     /** 右对齐写一行（x 给右缘）。 */
     public void textRight(String s, float rightX, float y, int argb) {
-        texts.add(() -> gui.drawString(font, s, Math.round(rightX - font.width(s)),
+        register(() -> gui.drawString(font, s, Math.round(rightX - font.width(s)),
                 Math.round(y), argb, true));
+    }
+
+    /** 登记一条文字，连同它此刻所在的裁剪框。 */
+    private void register(Runnable draw) {
+        texts.add(new Text(draw, clip));
+    }
+
+    // ------------------------------------------------------------------
+    // 裁剪（滚动的列表、预览面板用）
+    // ------------------------------------------------------------------
+
+    /**
+     * 开一个裁剪框。<b>必须配对 {@link #popClip()}</b>。
+     * <p>
+     * 【为什么要一次设两套】形状是 NanoVG 画的（{@code nvgScissor}），文字是原版批次画的
+     * （{@code gui.enableScissor}）—— 只设一套的症状是"形状被裁了、文字糊在外面"，
+     * 而那种半对的样子最难查。所以这里一次把两边都设上。
+     */
+    public void pushClip(float x, float y, float w, float h) {
+        clipStack.add(clip);
+        clip = new Clip(x, y, Math.max(0f, w), Math.max(0f, h));
+        nvgSave(vg());
+        nvgScissor(vg(), clip.x(), clip.y(), clip.w(), clip.h());
+    }
+
+    /** 收掉最近一次 {@link #pushClip}。 */
+    public void popClip() {
+        if (clipStack.isEmpty()) {
+            return;
+        }
+        nvgRestore(vg());
+        clip = clipStack.remove(clipStack.size() - 1);
     }
 
     public int textWidth(String s) {
@@ -198,8 +250,26 @@ public final class NvgUi implements AutoCloseable {
         } finally {
             stack.close();
         }
-        for (Runnable t : texts) {
-            t.run();
+        // 文字按"登记时的裁剪框"分组提交：换框前先把上一段的批次冲掉，否则裁剪会被套到
+        // 先登记的那些行上（原版的 enableScissor 只影响之后提交的东西）
+        Clip active = null;
+        for (Text t : texts) {
+            Clip want = t.clip();
+            boolean same = want == null ? active == null : want.equals(active);
+            if (!same) {
+                if (active != null) {
+                    gui.disableScissor();
+                }
+                active = want;
+                if (active != null) {
+                    gui.enableScissor(Math.round(active.x()), Math.round(active.y()),
+                            Math.round(active.x() + active.w()), Math.round(active.y() + active.h()));
+                }
+            }
+            t.draw().run();
+        }
+        if (active != null) {
+            gui.disableScissor();
         }
     }
 
