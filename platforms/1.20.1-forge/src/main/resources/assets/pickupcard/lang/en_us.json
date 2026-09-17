@@ -2,6 +2,8 @@
   "pickupcard.config.notice.holdMs": "Hold time",
   "pickupcard.config.merge.enabled": "Merge consecutive pickups",
   "pickupcard.config.format": "Count format",
+  "pickupcard.overflow": "%s more",
+  "pickupcard.overflow.many": "and more",
   "pickupcard.xp": "Experience",
   "key.pickupcard.harness": "Open PickupCard Harness",
   "key.pickupcard.config": "Open Pickup Card Settings"

@@ -74,7 +74,10 @@ public final class CardMetrics {
      * 用 {@code Font.plainSubstrByWidth} 按像素而不是按字符截，中英混排才不会截歪。
      */
     public static String fittedName(CardCanvas canvas, Font font, Inbox.Card card, int count) {
-        String name = displayName(card, canvas.settings());
+        // 溢出卡的名字要带上"还有几项"——那个数在 count 里，只有这里拿得到
+        String name = card.content() instanceof CardContent.Overflow
+                ? Component.translatable("pickupcard.overflow", count).getString()
+                : displayName(card, canvas.settings());
         var style = canvas.style();
         float gap = style.gap();
         // 先算"除了名字之外固定要占的宽度"，剩下的才是名字能用的
@@ -108,6 +111,10 @@ public final class CardMetrics {
                 return BuiltInRegistries.ITEM.getKey(item.stack().getItem()).toString();
             }
             return item.stack().getHoverName().getString();
+        }
+        if (card.content() instanceof CardContent.Overflow) {
+            // 不带数的兜底（带数的那条在 fittedName 里，它拿得到 count）
+            return Component.translatable("pickupcard.overflow.many").getString();
         }
         return Component.translatable("pickupcard.xp").getString();
     }

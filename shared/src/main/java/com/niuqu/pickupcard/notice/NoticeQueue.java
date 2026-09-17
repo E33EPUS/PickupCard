@@ -63,6 +63,9 @@ public final class NoticeQueue<T> {
     /** 等上屏的那些拾取，<b>先来先上屏</b>（FIFO）。出处：0.1.0 的 NoticeQueue#enqueue 用的就是 addLast/pollFirst。 */
     private final Deque<Notice<T>> pending = new ArrayDeque<>();
 
+    /** 溢出卡的身份键（{@link #absorbOverflow} 设的）；没有溢出卡时是 null。 */
+    private String overflowKey;
+
     /**
      * 收下一次拾取。
      *
@@ -115,7 +118,7 @@ public final class NoticeQueue<T> {
         }
 
         Notice<T> fresh = new Notice<>(key, lookKey, payload, amount, firstTime, now, now, 0);
-        if (alive.size() >= maxOnScreen) {
+        if (realSize() >= maxOnScreen) {
             // 屏上满了：排到队尾。排队也满 → 丢掉这次拾取（0.1.0 的语义就是这样）。
             if (queueSize > 0 && pending.size() < queueSize) {
                 pending.addLast(fresh);
@@ -125,6 +128,39 @@ public final class NoticeQueue<T> {
         }
         alive.put(key, fresh);
         return new Outcome<>(Change.ADDED, fresh, evicted);
+    }
+
+    /**
+     * 在屏的<b>正常</b>卡数量：溢出卡不算名额。
+     * <p>
+     * 【为什么溢出卡不占名额】它本来就是"名额满了"那一刻诞生的 —— 让它占名额，要么立刻又超限，
+     * 要么得把某张正常的卡挤掉，那就回到"捡一个丢一个"的老毛病。它只在被丢过东西之后存在，
+     * 自己也会到点退场（{@link #sweep} 一视同仁）。
+     */
+    private int realSize() {
+        return alive.size() - (overflowKey != null && alive.containsKey(overflowKey) ? 1 : 0);
+    }
+
+    /**
+     * 溢出：把一次"挤不进去"的拾取并进那张「还有 N 项」的卡（没有就新开一张）。
+     * <p>
+     * 【为什么载荷由调用方给】并成员列表是"内容类型"的事，账本对载荷一无所知（它是泛型的）。
+     * 这里只管身份键、数量与位置。
+     *
+     * @param key     溢出卡的身份键（渲染层按它建档，必须稳定）
+     * @param payload 调用方并好成员之后的新载荷
+     * @return 并进去之后的改动（第一次是 ADDED，之后是 MERGED）
+     */
+    public Outcome<T> absorbOverflow(String key, String lookKey, T payload, int amount, long now) {
+        overflowKey = key;
+        Notice<T> existing = alive.get(key);
+        Notice<T> merged = existing == null
+                ? new Notice<>(key, lookKey, payload, amount, false, now, now, 0)
+                : new Notice<>(key, lookKey, payload, existing.count() + amount, existing.firstTime(),
+                        existing.bornAt(), now, existing.generation() + 1);
+        alive.put(key, merged);
+        return new Outcome<>(existing == null ? Change.ADDED : Change.MERGED, merged,
+                new ArrayList<>());
     }
 
     /** 队列里换掉一张（并了数量之后）。ArrayDeque 不能按位置改，只能重建。 */
@@ -143,7 +179,7 @@ public final class NoticeQueue<T> {
      */
     public List<Notice<T>> promote(long now, int maxOnScreen) {
         List<Notice<T>> promoted = new ArrayList<>();
-        while (!pending.isEmpty() && alive.size() < maxOnScreen) {
+        while (!pending.isEmpty() && realSize() < maxOnScreen) {
             Notice<T> next = pending.pollFirst();
             if (next == null) break;
             Notice<T> reborn = next.reborn(now);
@@ -165,6 +201,9 @@ public final class NoticeQueue<T> {
         });
         for (Notice<T> notice : gone) {
             leaving.put(notice.key(), notice);
+            if (notice.key().equals(overflowKey)) {
+                overflowKey = null;         // 溢出卡自己也会到点退场，退场之后名额还回去
+            }
         }
         return gone;
     }
@@ -203,5 +242,6 @@ public final class NoticeQueue<T> {
         alive.clear();
         leaving.clear();
         pending.clear();
+        overflowKey = null;
     }
 }

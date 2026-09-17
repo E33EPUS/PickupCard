@@ -358,7 +358,11 @@ public final class NvgCardPainter {
         gui.pose().pushPose();
         gui.pose().translate(x + h / 2f, h / 2f, 0f);
         gui.pose().scale(scale, scale, 1f);
-        gui.renderItem(card.content() instanceof CardContent.Item item ? item.stack() : XP_ICON, -8, -8);
+        ItemStack iconStack = card.content() instanceof CardContent.Item item
+                ? item.stack()
+                : card.content() instanceof CardContent.Overflow overflow
+                        ? cycleIcon(overflow, canvas.now()) : XP_ICON;
+        gui.renderItem(iconStack, -8, -8);
         gui.pose().popPose();
         if (fading) {
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
@@ -486,10 +490,27 @@ public final class NvgCardPainter {
     }
 
     private static int accentOf(Inbox.Card card) {
+        // 【为什么用 if 而不是 switch】1.20.1 这一支是 Java 17，模式匹配的 switch 还是预览特性
         if (card.content() instanceof CardContent.Item item) {
             return RarityAccent.of(item.stack());
         }
-        return RarityAccent.XP;
+        return card.content() instanceof CardContent.Overflow
+                ? RarityAccent.OVERFLOW : RarityAccent.XP;
+    }
+
+    /**
+     * 溢出卡的图标轮播：在成员之间轮流显示。
+     * <p>
+     * 【间隔为什么随张数变慢】3 个图标时快点没问题，8 个时再快就成了闪烁。常量是我们自己定的
+     * （下限 1/4 秒、每多一个成员再慢 40ms），只借"成员越多、轮得越慢"这个行为。
+     */
+    private static ItemStack cycleIcon(CardContent.Overflow overflow, long nowMs) {
+        List<ItemStack> stacks = overflow.stacks();
+        if (stacks.isEmpty()) {
+            return ItemStack.EMPTY;
+        }
+        long interval = Math.max(250L, 900L - 40L * stacks.size());
+        return stacks.get((int) ((nowMs / interval) % stacks.size()));
     }
 
     /** 值得给一层稀有度微光的卡：经验卡与白名单强调的卡。 */

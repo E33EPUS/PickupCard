@@ -266,4 +266,54 @@ class NoticeQueueTest {
         assertEquals("old", snap.get(0).key());
         assertEquals("new", snap.get(1).key());
     }
+
+    // ------------------------------------------------------------------
+    // 溢出卡（屏满 + 队满的兜底）
+    // ------------------------------------------------------------------
+
+    @Test
+    @DisplayName("溢出卡不占同屏名额：位子空出来照样补给排队的那个")
+    void overflowCardDoesNotTakeASlot() {
+        NoticeQueue<String> q = queue();
+        add(q, "a", 1, 0L, 1, 0);                        // 屏 1/1，且不排队
+        var spill = q.absorbOverflow("~overflow", "~overflow", "spill", 1, 10L);
+
+        assertEquals(NoticeQueue.Change.ADDED, spill.change());
+        assertEquals(2, q.size(), "溢出卡在屏上");
+        assertEquals(NoticeQueue.Change.QUEUED, add(q, "b", 1, 20L, 1, QUEUE).change(),
+                "名额没被溢出卡占掉：b 仍然排得进队");
+
+        // a（touched=0）到点，溢出卡（touched=10）还没到 —— 只空出一个位子
+        assertEquals(1, q.sweep(60L, 55L).size(), "a 到点退场");
+        var promoted = q.promote(60L, 1);
+        assertEquals(1, promoted.size(), "空出来的名额要补给 b（溢出卡不算名额）");
+        assertEquals("b", promoted.get(0).key());
+    }
+
+    @Test
+    @DisplayName("溢出卡自己也会到点退场，退场之后名额还回去")
+    void overflowCardExpiresLikeAnyOther() {
+        NoticeQueue<String> q = queue();
+        q.absorbOverflow("~overflow", "~overflow", "spill", 1, 0L);
+        assertEquals(1, q.size());
+
+        assertEquals(1, q.sweep(1_000L, 100L).size(), "它没有特权，到点一样退场");
+        assertEquals(0, q.size(), "退场之后名额还回去");
+        assertEquals(NoticeQueue.Change.ADDED, add(q, "a", 1, 1_100L, 1, 0).change(),
+                "名额回来了：新拾取直接上屏");
+    }
+
+    @Test
+    @DisplayName("继续溢出时并进同一张：数量累加、代数 +1")
+    void overflowMerges() {
+        NoticeQueue<String> q = queue();
+        q.absorbOverflow("~overflow", "~overflow", "first", 1, 0L);
+        var again = q.absorbOverflow("~overflow", "~overflow", "second", 1, 50L);
+
+        assertEquals(NoticeQueue.Change.MERGED, again.change());
+        assertEquals(2, again.notice().count(), "「还有 N 项」的 N 在累加");
+        assertEquals(1, again.notice().generation());
+        assertEquals(1, q.size());
+        assertEquals("second", again.notice().payload(), "载荷换成调用方并好的新列表");
+    }
 }

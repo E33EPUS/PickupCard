@@ -34,6 +34,12 @@ public final class Inbox {
     /** 经验卡的身份键：世界里只有一种经验，永远合并进同一张卡。 */
     public static final String XP_KEY = "experience";
 
+    /**
+     * 溢出卡的身份键。物品键一定是 {@code namespace:path} 的形状，这一把不可能撞上；
+     * 前缀是 {@code ~} 也是为了让日志里一眼看出"这不是一件东西"。
+     */
+    public static final String OVERFLOW_KEY = "~overflow";
+
     public static final Inbox INSTANCE = new Inbox();
 
     /** 一张卡的完整载荷：内容本体 + 过滤给的强调标记。 */
@@ -65,6 +71,27 @@ public final class Inbox {
     private Supplier<FilterSettings> filterSource = FilterSettings::defaults;
 
     private Inbox() {
+    }
+
+    /**
+     * 把一次"挤不进去"的拾取并进溢出卡的成员列表。
+     * <p>
+     * 【为什么这一层做合并】账本对内容一无所知（它是泛型的），成员的合并只能在认识
+     * {@link CardContent} 的这一层做：读回当前那张溢出卡的成员、追加、把新列表交回去。
+     * 只留 {@link CardContent.Overflow#MAX_ICONS} 个 —— 再多也看不出区别，白占内存。
+     */
+    private CardContent.Overflow overflowWith(CardContent dropped) {
+        List<net.minecraft.world.item.ItemStack> stacks = new ArrayList<>();
+        queue.find(OVERFLOW_KEY).ifPresent(notice -> {
+            if (notice.payload().content() instanceof CardContent.Overflow old) {
+                stacks.addAll(old.stacks());
+            }
+        });
+        if (dropped instanceof CardContent.Item item
+                && stacks.size() < CardContent.Overflow.MAX_ICONS) {
+            stacks.add(item.stack());
+        }
+        return new CardContent.Overflow(List.copyOf(stacks));
     }
 
     /**
@@ -154,8 +181,18 @@ public final class Inbox {
             // 丢弃的（屏满 + 队满）只能靠日志说明白 —— 玩家看到的是"这次没弹"。
             case QUEUED -> PickupCard.LOGGER.info("[排队] key={} 屏上已经 {} 张，等位子",
                     outcome.notice().key(), settings().maxOnScreen());
-            case DROPPED -> PickupCard.LOGGER.info("[丢弃] key={}：屏满且队满（同屏 {} / 排队 {}）",
-                    outcome.notice().key(), settings().maxOnScreen(), settings().queueSize());
+            case DROPPED -> {
+                // 屏满 + 队满：并进"还有 N 项"那张卡，而不是静默丢掉
+                CardContent.Overflow overflow = overflowWith(content);
+                NoticeQueue.Outcome<Card> spilled = queue.absorbOverflow(OVERFLOW_KEY, OVERFLOW_KEY,
+                        new Card(overflow, false), 1, now);
+                pending.add(spilled.change() == NoticeQueue.Change.ADDED
+                        ? new Event.Added(spilled.notice())
+                        : new Event.Merged(spilled.notice()));
+                PickupCard.LOGGER.info("[溢出] key={}：屏满且队满（同屏 {} / 排队 {}），并进溢出卡（第 {} 项）",
+                        outcome.notice().key(), settings().maxOnScreen(), settings().queueSize(),
+                        spilled.notice().count());
+            }
         }
         return false;
     }

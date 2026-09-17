@@ -25,4 +25,12 @@ public final class RarityAccent {
 
     /** 经验卡的强调色：绿色系，刻意不走稀有度档位。 */
     public static final int XP = 0xFF7DFF8A;
+
+    /**
+     * 溢出卡的强调色：中性灰蓝。
+     * <p>
+     * 【为什么不跟着成员走】它的成员混着各种稀有度，跟着谁都会让"这张卡是什么档"说不清；
+     * 它本来就不是一件东西，而是一个"还有更多"的信号。
+     */
+    public static final int OVERFLOW = 0xFFA8B2C0;
 }
