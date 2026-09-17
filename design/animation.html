@@ -45,11 +45,11 @@ input[type=range] { width:160px; vertical-align:middle; }
      用户真机上"冲得太快"。两边**必须同时换**，否则拿草稿对游戏会量出假差异） */
   --draft-ease-content: cubic-bezier(.4,0,.2,1);
 
-  /* 时长全部由 --pc-enter-ms（800ms）乘出来，跟 Java 的 CardTimeline 同一个比例：
-     竖条占前 30% = 240ms；内容从 18%（144ms）起跑、656ms 走完。 */
+  /* 时长全部由 --pc-enter-ms（480ms）乘出来，跟 Java 的 CardTimeline 同一个比例：
+     竖条占前 50% = 240ms；内容从 20%（96ms）起跑、84%（403ms）走完，末尾 77ms 静止。 */
   --draft-t-bar:   .24s;
-  --draft-t-out:   .66s;
-  --draft-t-delay: .14s;
+  --draft-t-out:   .31s;
+  --draft-t-delay: .10s;
   --draft-t-move:  .34s;
   /* 退场淡出 = 配置里的 exitMs（默认 480）。两边**只有这一个数**：草稿原来写 280、后来
      写 320，都成了"同一个动作两个数"，改了这边忘了那边没有东西拦得住。 */

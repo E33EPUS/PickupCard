@@ -33,19 +33,35 @@ class CardTimelineTest {
      * <p>【这条是给谁钉的】原来 {@link CardTimeline} 只把 t 归一化就交出去，靠一句注释
      * "easing 在渲染层做"顶着 —— 而渲染层从来没做，真机上的评价是"很僵硬，没有曲线"。
      * 曲线是这两条进度的<b>定义</b>，不是画的时候顺手加的装饰，所以钉在这里。
+     *
+     * <p>【为什么窗口也钉在这儿】2026-09-17 把入场从 800ms 压到 480ms，竖条窗口从"前 30%"
+     * 挪到"前 50%"，内容窗口收成 20%→84%。窗口就是节奏本身，所以和曲线一起钉：
+     * {@code TL} 的 enterMs=320 → 50% = 160ms、20% = 64ms、84% = 269ms。
      */
     @Test
     void entranceSegmentsFollowTheDraftCurves() {
-        // 竖条窗口 = 入场的头 30%：enter=0.15 落在窗口中点 → 该走 0.950（匀速只会是 0.5）
-        assertEquals(0.949947f, TL.bar(1_048L, 1_000L), 2e-3, "竖条中段");
-        assertEquals(1f, TL.bar(1_096L, 1_000L), 1e-6, "竖条 30% 处必须已经长满");
+        // 竖条窗口 = 头 50%（0..160ms）：enter=0.25 落在窗口中点 → 该走 0.950（匀速只会是 0.5）
+        assertEquals(0.949947f, TL.bar(1_080L, 1_000L), 2e-3, "竖条中段");
         assertEquals(0f, TL.bar(1_000L, 1_000L), 1e-6);
+        assertEquals(1f, TL.bar(1_160L, 1_000L), 1e-6, "竖条 50% 处必须已经长满");
 
-        // 内容窗口 = 18% → 100%：enter=0.59 落在窗口中点 → 该走 0.776（Material 曲线；
-        // 草稿原来那条是 0.952 —— 换曲线时这条断言必须跟着改，否则它会替旧曲线把关）
-        assertTrue(TL.content(1_057L, 1_000L) < 0.02f, "18% 之前内容不该动");
-        assertEquals(0.775561f, TL.content(1_189L, 1_000L), 2e-3, "内容中段");
+        // 内容窗口 = 20% → 84%（64..269ms）
+        assertTrue(TL.content(1_060L, 1_000L) < 0.02f, "20% 之前内容不该动");
+        float mid = TL.content(1_166L, 1_000L);
+        assertTrue(mid > 0.74f && mid < 0.82f, "内容中段该走 Material 曲线（≈0.78），实际 " + mid);
+        assertEquals(1f, TL.content(1_269L, 1_000L), 1e-6, "84% 处必须已经到位");
+        // 【尾巴要静止】末尾 16% 是留给"到位"被看见的，不许再有动作
+        assertEquals(1f, TL.content(1_300L, 1_000L), 1e-6);
         assertEquals(1f, TL.content(1_320L, 1_000L), 1e-6);
+    }
+
+    /** 总时长与节奏：480ms 那一档的窗口必须真的是 240ms / 403ms（换数字时这条会先红）。 */
+    @Test
+    void entranceBudgetIsWhatTheUserApproved() {
+        CardTimeline tl = new CardTimeline(480L, 300L, true, true);
+        assertEquals(1f, tl.bar(1_240L, 1_000L), 1e-6, "240ms 时竖条长满");
+        assertTrue(tl.content(1_240L, 1_000L) < 1f, "240ms 时内容还在路上（两段重叠，不串行）");
+        assertTrue(tl.content(1_403L, 1_000L) > 0.999f, "403ms 时内容已经到位");
     }
 
     @Test

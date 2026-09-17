@@ -15,13 +15,27 @@ package com.niuqu.pickupcard.style;
 public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, boolean bumpEnabled) {
 
     public static CardTimeline defaults() {
-        return new CardTimeline(560L, 300L, true, true);
+        return new CardTimeline(480L, 300L, true, true);
     }
 
-    /** 竖条展开占入场总时长的比例（前 30%）。 */
-    private static final float BAR_END = 0.30f;
-    /** 内容从入场总时长的 18% 起跑 —— 与竖条尾部留一点重叠，两条动画才不会显得脱节。 */
-    private static final float CONTENT_START = 0.18f;
+    /**
+     * 入场两段的窗口 —— 2026-09-17 定的节奏，配 {@code --pc-enter-ms: 480}：
+     * <pre>
+     *   0 ──── 240ms ───── 403ms ──── 480ms
+     *   │ 竖条长满 │ 内容走出隧道口 │ 静止 77ms
+     *   0        50%             84%      100%
+     * </pre>
+     * 【为什么是这三个数】用户原话"目前太慢了。调快点，处理好竖条和卡片的关系"。
+     * 800ms 的毛病出在后半段：内容要走完一整张卡的宽度，却给了它 656ms 平推，看着像慢慢蹭
+     * 出来。现在竖条占前一半（240ms）就长满，内容 96ms 起跑、403ms 到位，尾巴留 77ms 静止
+     * —— <b>两段仍然重叠</b>（不串行），所以"先开洞、东西再从洞里抽出来"的味道留着，
+     * 只是快了近一倍。
+     */
+    private static final float BAR_END = 0.50f;
+    /** 内容从 20%（96ms）起跑：比竖条长完早，两条动画叠着走，不脱节。 */
+    private static final float CONTENT_START = 0.20f;
+    /** 内容在 84%（403ms）到位；剩下的 77ms 什么都不动，让"到位"这一下能被看见。 */
+    private static final float CONTENT_END = 0.84f;
 
     /**
      * 竖条展开的缓动 = 草稿里 grow 那档的 {@code cubic-bezier(.2,.9,.3,1)}。
@@ -53,7 +67,7 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     }
 
     /**
-     * 竖条自身的展开进度 ∈ [0,1]：在入场的头 30% 里从 0 长到满。
+     * 竖条自身的展开进度 ∈ [0,1]：在入场的头 50%（240ms）里从 0 长到满。
      * <p>
      * 【为什么竖条要单独有一条进度】"竖条先开、内容再出"是两段式，不是一条进度曲线能
      * 表达的。合成一条就会出现"竖条还没长完、内容已经开始挤出来"，看起来像卡在了半路。
@@ -63,11 +77,11 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     }
 
     /**
-     * 内容滑出的进度 ∈ [0,1]：从 18% 起跑，到尾端跑完。
+     * 内容滑出的进度 ∈ [0,1]：从 20% 起跑，84% 跑完（见上面的窗口注释）。
      * 入场位移与缩放也用它——两处必须同源，否则外壳和文字会错位。
      */
     public float content(long now, long bornAt) {
-        return CONTENT_CURVE.at(window(enter(now, bornAt), CONTENT_START, 1f));
+        return CONTENT_CURVE.at(window(enter(now, bornAt), CONTENT_START, CONTENT_END));
     }
 
     /** 把 [0,1] 的总进度映射到子区间 [a,b] 上的 [0,1]。 */

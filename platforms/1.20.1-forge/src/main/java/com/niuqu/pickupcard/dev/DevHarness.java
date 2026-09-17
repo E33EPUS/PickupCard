@@ -88,10 +88,16 @@ public final class DevHarness {
         private static final String MODE = System.getProperty("pickupcard.harness.auto", "off");
         /** 等客户端把加载屏走完再动手；早于这个时刻开屏会拍到半张加载界面。 */
         private static final int WARMUP_TICKS = 80;
-        /** 展开到一半时先拍一张 —— 只看"已经就位"的稳态，等于没验动画。 */
-        private static final int MID_SHOT = 8;
-        /** 刚起步的一帧：内容还大幅偏左，专门用来验"隧道口"有没有真的裁在竖条右侧。 */
-        private static final int EARLY_SHOT = 3;
+        /**
+         * 展开到一半时先拍一张 —— 只看"已经就位"的稳态，等于没验动画。
+         * <p>
+         * 【为什么是 5 tick】入场 2026-09-17 从 800ms 压到 480ms（内容 96→403ms），
+         * 原来那 8 tick（400ms）拍到的**已经是终态**了 —— 一张"验动画"的图拍到终态，
+         * 就等于没验。5 tick ≈ 250ms 落在内容窗口的中段。
+         */
+        private static final int MID_SHOT = 5;
+        /** 刚起步的一帧（2 tick ≈ 100ms）：内容刚起跑，专门验"隧道口"有没有真裁在竖条右侧。 */
+        private static final int EARLY_SHOT = 2;
         /** 开屏后等入场动画播完再拍。 */
         private static final int SHOT_AFTER_OPEN = 40;
         /** 截图是异步落盘的，给它足够时间再退出。 */
