@@ -19,3 +19,7 @@ bin/
 # 系统
 .DS_Store
 Thumbs.db
+
+# Python
+__pycache__/
+*.pyc
