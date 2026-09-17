@@ -168,6 +168,66 @@ def table(first: dict, second: dict) -> int:
     return 0
 
 
+def side_by_side(first: dict, second: dict, out: Path) -> None:
+    """
+    把两边的卡**放到同一个卡高**上，拼成一张图，一张一张对着看。
+
+    【为什么要有这个】数字能回答"结构对不对"，回答不了"看着像不像"。而让人两眼在
+    两个文件之间来回切是没有效率的，也容易把注意力放在无关的地方。
+    拼到一张图上、同一个尺度、同一个左缘（都从竖条左缘起裁），差异会自己跳出来。
+
+    【为什么是缩小而不是放大】把小的那张放大只是插值出并不存在的像素。缩小那张
+    更大的则正好相反 —— 相邻的真实像素取平均，不发明任何东西。
+    这里 128 -> 64 是整数倍，缩出来和原生一比一几乎一致。
+    """
+    from PIL import Image, ImageDraw
+
+    da, ia = first, second
+    img_a = Image.open(da["path"]).convert("RGB")
+    img_b = Image.open(ia["path"]).convert("RGB")
+    target = min(da["px"], ia["px"])
+    margin = max(2, target // 16)
+    pad = max(2, target // 8)
+
+    def crop(one, img, card):
+        bx0, _, by0, by1 = card["bar"]
+        _, cx1, cy0, cy1 = card["card"]
+        box = (max(0, bx0 - margin), max(0, cy0 - margin),
+               min(img.width, cx1 + margin + 1), min(img.height, cy1 + margin + 1))
+        c = img.crop(box)
+        if c.height != target + 2 * margin:
+            scale = (target + 2 * margin) / c.height
+            c = c.resize((max(1, round(c.width * scale)), target + 2 * margin), Image.LANCZOS)
+        return c
+
+    pairs = list(zip(da["m"]["cards"], ia["m"]["cards"]))
+    strips = []
+    for ca, cb in pairs:
+        strips.append((ca["accent"], crop(da, img_a, ca), crop(ia, img_b, cb)))
+
+    label_w = 96
+    width = label_w + max(max(a.width, b.width) for _, a, b in strips)
+    height = pad + sum(a.height + 4 + b.height + pad for _, a, b in strips)
+    canvas = Image.new("RGB", (width, height), (0, 0, 0))
+    draw = ImageDraw.Draw(canvas)
+
+    y = pad
+    for accent, a, b in strips:
+        for img, tag in ((a, "design"), (b, "game")):
+            canvas.paste(img, (label_w, y))
+            y += img.height
+            if tag == "design":
+                draw.line((0, y + 1, width, y + 1), fill=(60, 60, 70), width=1)
+                y += 4
+        draw.text((6, y - a.height - b.height - 4 + a.height // 2), accent, fill=(180, 190, 210))
+        y += pad
+
+    canvas.save(out)
+    print()
+    print(f"  并排对照图 -> {out}  （{canvas.width}x{canvas.height}）")
+    print(f"    每张卡上下成对：上=设计 下=游戏，都裁到竖条左缘、都缩放至卡高 {target}px")
+
+
 def solo(path: Path, expect: int | None) -> int:
     one = measure_one(path, expect)
     print(f"单张测量：{path}")
@@ -191,6 +251,13 @@ def main() -> int:
         expect = int(argv[k + 1])
         del argv[k:k + 2]
     args = [a for a in argv if not a.startswith("--")]
+
+    out = None
+    if "--out" in argv:
+        k = argv.index("--out")
+        out = Path(argv[k + 1])
+        del argv[k:k + 2]
+        args = [a for a in argv if not a.startswith("--")]
 
     if "--solo" in argv:
         if not args:
@@ -221,7 +288,10 @@ def main() -> int:
         print("先把样例集对齐：设计侧 design/measure.html、实现侧 CardFixtures.measure()。")
         return 1
 
-    return table(design, impl)
+    code = table(design, impl)
+    if out is not None:
+        side_by_side(design, impl, out)
+    return code
 
 
 if __name__ == "__main__":
