@@ -1,0 +1,132 @@
+/* ===========================================================================
+   PickupCard · 主题 token
+   ★ 唯一会被 tools/css_tokens.py 抽取的部分。只放标量：长度 / 颜色 / 时长。
+   几何与文字宽度一律不在这里 —— 卡宽在游戏里跟名字走，浏览器里算不准，
+   那部分永远不进转换（Q2 / Q4）。
+
+   两个预设：默认深色玻璃，可选浅色。切换靠 <html data-theme="light">。
+   以后配置界面要暴露的就是这一组键，所以每个键都必须能独立起作用 ——
+   "改了没反应"的旋钮比没有旋钮更糟。
+   =========================================================================== */
+:root {
+  /* ---- 几何 ---- */
+  --pc-radius: 6px;
+  --pc-pad-h: 6px;
+  --pc-pad-v: 4px;
+  --pc-gap: 4px;
+  --pc-icon: 24px;
+  --pc-bar-w: 5px;
+
+  /* ---- 阴影：模糊半径 0 = 硬边（可 1:1 映射到 SDF）；>0 需要额外成本 ---- */
+  --pc-shadow-dy: 3px;
+  --pc-shadow-blur: 6px;
+  --pc-shadow-strength: 0.35;
+
+  /* ---- 稀有度强调色：与 RarityAccent 一一对应；RarityCore 在场时由它接管七档 ---- */
+  --pc-accent-common: #9AA4AD;
+  --pc-accent-uncommon: #FFD83D;
+  --pc-accent-rare: #55EBFF;
+  --pc-accent-epic: #D78BFF;
+  --pc-accent-xp: #7DFF8A;
+}
+
+/* ===================== 预设：深色玻璃（默认） ===================== */
+:root,
+:root[data-theme="dark"] {
+  --pc-fill-top: #262B38D1;
+  --pc-fill-bottom: #161A22DB;
+  --pc-border: #FFFFFF2E;
+  --pc-highlight: #FFFFFF3C;
+  --pc-name: #EBEFF6F0;
+  --pc-stage-bg: #202028;
+  --pc-stage-cell: #2C2C36;
+}
+
+/* ===================== 预设：浅色 ===================== */
+/* 强调色在浅底上要压深一档，否则黄/青会糊在白底里 —— 这是浅色主题唯一
+   不能靠"把底色换白"解决的部分。 */
+:root[data-theme="light"] {
+  --pc-fill-top: #FFFFFFF2;
+  --pc-fill-bottom: #E9ECF3F7;
+  --pc-border: #1B1F2724;
+  --pc-highlight: #FFFFFFCC;
+  --pc-name: #1B1F27F0;
+  --pc-stage-bg: #D8DCE4;
+  --pc-stage-cell: #C9CED8;
+
+  --pc-accent-common: #6B7480;
+  --pc-accent-uncommon: #C99200;
+  --pc-accent-rare: #0089A8;
+  --pc-accent-epic: #A64FD1;
+  --pc-accent-xp: #2E9E45;
+}
+
+/* ===========================================================================
+   以下为草稿页面共用的卡面组件。是草稿的"渲染器"，不进 token 转换。
+   =========================================================================== */
+
+.stage {
+  position: relative;
+  background-color: var(--pc-stage-bg);
+  background-image:
+    linear-gradient(45deg, var(--pc-stage-cell) 25%, transparent 25%, transparent 75%, var(--pc-stage-cell) 75%),
+    linear-gradient(45deg, var(--pc-stage-cell) 25%, transparent 25%, transparent 75%, var(--pc-stage-cell) 75%);
+  background-size: 24px 24px;
+  background-position: 0 0, 12px 12px;
+  overflow: hidden;
+}
+
+/* 一张卡 = 稀有度竖条 + 会向右长出来的内容体 */
+.card {
+  display: flex;
+  align-items: stretch;
+  gap: var(--pc-gap);
+  height: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
+  width: max-content;
+  filter: drop-shadow(0 var(--pc-shadow-dy) var(--pc-shadow-blur) rgba(0, 0, 0, var(--pc-shadow-strength)));
+}
+/* 硬边档：blur 0 时 drop-shadow 就是实心投影，不需要另开一条规则 */
+:root[data-shadow="none"] .card { filter: none; }
+:root[data-glow="none"] .card { filter: none; }
+
+.bar {
+  width: var(--pc-bar-w);
+  border-radius: var(--pc-radius);
+  background: var(--accent);
+  flex: none;
+}
+
+/* 内容体：宽度从 0 长到自然宽，锚在竖条右侧 —— "不断变长的长条"就是它 */
+.body {
+  display: flex;
+  align-items: stretch;
+  gap: var(--pc-gap);
+  width: max-content;
+  overflow: hidden;
+}
+.body > * { flex: none; }
+
+.box {
+  border-radius: var(--pc-radius);
+  background: linear-gradient(var(--pc-fill-top), var(--pc-fill-bottom));
+  box-shadow: inset 0 1px 0 var(--pc-highlight);
+  outline: 1px solid var(--pc-border);
+  outline-offset: -1px;
+}
+:root[data-highlight="none"] .box { box-shadow: none; }
+
+.icon {
+  width: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
+  display: grid;
+  place-items: center;
+}
+.icon img { width: var(--pc-icon); height: var(--pc-icon); image-rendering: pixelated; }
+
+.info {
+  display: flex;
+  align-items: center;
+  gap: var(--pc-gap);
+  padding: 0 var(--pc-pad-h);
+}
+.name { color: var(--pc-name); white-space: nowrap; }
+.count { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }

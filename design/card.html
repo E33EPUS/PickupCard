@@ -1,176 +1,139 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="dark">
 <head>
 <meta charset="utf-8">
 <title>PickupCard · 三段式卡面草稿</title>
+<link rel="stylesheet" href="theme.css">
 <style>
-/* ===================================================================
-   ★ 这一段是唯一会被 tools/css_tokens.py 抽取的部分（Q4：限定子集）
-   只放标量 token：长度 / 颜色 / 角度 / 时长。
-   几何布局与文字宽度一律在下文写死，并标注「示意」——卡宽在游戏里跟名字走，
-   在浏览器里算不准，所以那部分永远不进转换。
-   =================================================================== */
-:root {
-  --pc-radius: 6px;
-  --pc-pad-h: 6px;
-  --pc-pad-v: 4px;
-  --pc-gap: 4px;
-  --pc-icon: 24px;
-  --pc-bar-w: 5px;
-
-  --pc-fill-top: #262B38D1;
-  --pc-fill-bottom: #161A22DB;
-  --pc-border: #FFFFFF2E;
-  --pc-highlight: #FFFFFF3C;
-  --pc-shadow-color: #00000059;
-  --pc-shadow-dy: 3px;
-  --pc-name: #EBEFF6F0;
-
-  /* 稀有度强调色：与 RarityAccent 一一对应；装了 RarityCore 由它接管七档 */
-  --pc-accent-common: #9AA4AD;
-  --pc-accent-uncommon: #FFD83D;
-  --pc-accent-rare: #55EBFF;
-  --pc-accent-epic: #D78BFF;
-  --pc-accent-xp: #7DFF8A;
-}
-
-/* ================= 以下为草稿页面自身，不进转换 ================= */
-body {
-  margin: 0; padding: 28px 32px 60px;
-  background: #101014;
-  color: #BFC6D4;
-  font: 13px/1.6 "Segoe UI", system-ui, sans-serif;
-}
-h1 { font-size: 17px; margin: 0 0 4px; color: #EBEFF6; }
-h2 { font-size: 12px; margin: 30px 0 10px; color: #7D8695; font-weight: 600;
-     text-transform: uppercase; letter-spacing: .08em; }
-p.hint { margin: 0 0 8px; color: #6E7686; font-size: 12px; }
-
-.board {
-  display: inline-block; padding: 16px 20px; border-radius: 8px;
-  background-color: #202028;
-  background-image:
-    linear-gradient(45deg, #2C2C36 25%, transparent 25%, transparent 75%, #2C2C36 75%),
-    linear-gradient(45deg, #2C2C36 25%, transparent 25%, transparent 75%, #2C2C36 75%);
-  background-size: 24px 24px; background-position: 0 0, 12px 12px;
-}
-.rows { display: flex; flex-direction: column; gap: 6px; align-items: flex-start; }
-
-/* ---- 卡本体：三段式（几何示意，不进 token 转换） ---- */
-.card {
-  display: flex; align-items: stretch; gap: var(--pc-gap);
-  height: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
-  width: max-content;
-  box-shadow: 0 var(--pc-shadow-dy) 0 var(--pc-shadow-color); /* 硬边阴影（可 1:1 映射） */
-}
-.bar {
-  width: var(--pc-bar-w); border-radius: var(--pc-radius);
-  background: var(--accent);
-}
-.box {
-  border-radius: var(--pc-radius);
-  background: linear-gradient(var(--pc-fill-top), var(--pc-fill-bottom));
-  box-shadow: inset 0 1px 0 var(--pc-highlight);   /* 顶部高光线 */
-  outline: 1px solid var(--pc-border); outline-offset: -1px;
-}
-.icon {
-  width: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
-  display: grid; place-items: center;
-}
-.icon img { width: var(--pc-icon); height: var(--pc-icon); image-rendering: pixelated; }
-.info {
-  display: flex; align-items: center; gap: var(--pc-gap);
-  padding: 0 var(--pc-pad-h);
-}
-.name { color: var(--pc-name); white-space: nowrap; }
-.count { color: var(--accent); white-space: nowrap; font-variant-numeric: tabular-nums; }
-
-/* ---- 放大档：把同一张卡按倍数放大，用来看清细节 ---- */
-.zoom2 { zoom: 2; } .zoom3 { zoom: 3; }
-
-/* ---- 阴影近似档（对应 Q4 的「近似档」开关） ---- */
-body:has(#sh-none:checked) .card { box-shadow: none; }
-body:has(#sh-soft:checked) .card { box-shadow: 0 var(--pc-shadow-dy) 6px var(--pc-shadow-color); }
-body:has(#sh-noline:checked) .box { box-shadow: none; }
-.controls { margin: 0 0 14px; display: flex; gap: 18px; flex-wrap: wrap; font-size: 12px; }
-.controls label { cursor: pointer; color: #8E96A6; }
-.controls input:checked + label { color: #55EBFF; }
+/* ---- 草稿页面自身，不进 token 转换 ---- */
+body { margin:0; padding:24px 28px 60px; background:#101014; color:#BFC6D4;
+       font:13px/1.6 "Segoe UI", system-ui, sans-serif; }
+:root[data-theme="light"] body { background:#F2F4F8; color:#3A4150; }
+h1 { font-size:17px; margin:0 0 4px; color:inherit; }
+h2 { font-size:12px; margin:28px 0 10px; color:#7D8695; font-weight:600;
+     text-transform:uppercase; letter-spacing:.08em; }
+p.hint { margin:0 0 14px; color:#6E7686; font-size:12px; max-width:820px; }
+.controls { display:flex; gap:16px; align-items:center; flex-wrap:wrap;
+            margin:0 0 18px; font-size:12px;
+            padding:10px 14px; border:1px solid #FFFFFF14; border-radius:6px; }
+:root[data-theme="light"] .controls { border-color:#00000014; }
+.controls label { color:#8E96A6; cursor:pointer; }
+.controls .sep { width:1px; align-self:stretch; background:#FFFFFF1A; }
+:root[data-theme="light"] .controls .sep { background:#0000001A; }
+button { background:#262B38; color:#BFC6D4; border:1px solid #FFFFFF1F;
+         border-radius:4px; padding:3px 10px; font:inherit; cursor:pointer; }
+button:hover { border-color:#55EBFF66; color:#EBEFF6; }
+input[type=range] { width:110px; vertical-align:middle; }
+.board { display:inline-block; padding:16px 20px; border-radius:8px; }
+.rows { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.zoom2 { zoom:2; }
 </style>
 </head>
 <body>
 
 <h1>PickupCard · 三段式卡面草稿</h1>
-<p class="hint">结构：<b>稀有度竖条 ｜ 物品图标格 ｜ 名字 + 数量框</b>，三个独立圆角矩形等高。下面是浏览器草稿，仅用于定视觉参数。</p>
+<p class="hint">
+  结构：<b>稀有度竖条 ｜ 物品图标格 ｜ 名字 + 数量框</b>，三个独立圆角矩形等高。
+  下面这排开关就是将来配置界面要暴露的东西 —— 每个键都必须能独立生效。
+</p>
 
 <div class="controls">
-  <span>阴影：</span>
-  <input type="radio" name="sh" id="sh-hard" checked><label for="sh-hard">硬边（可 1:1 映射）</label>
-  <input type="radio" name="sh" id="sh-soft"><label for="sh-soft">模糊 6px（要额外成本）</label>
-  <input type="radio" name="sh" id="sh-none"><label for="sh-none">无</label>
-  <input type="radio" name="sh" id="sh-noline"><label for="sh-noline">无顶部高光</label>
+  <button id="btn-theme">切浅色</button>
+  <div class="sep"></div>
+  <span>阴影</span>
+  <label><input type="radio" name="sh" value="on" checked> 有</label>
+  <label><input type="radio" name="sh" value="none"> 无</label>
+  <label>偏移 <input type="range" id="sdy" min="0" max="8" value="3"><span id="sdy-v">3</span></label>
+  <label>模糊 <input type="range" id="sblur" min="0" max="16" value="6"><span id="sblur-v">6</span></label>
+  <label>浓度 <input type="range" id="sstr" min="0" max="1" step="0.05" value="0.35"><span id="sstr-v">0.35</span></label>
+  <div class="sep"></div>
+  <span>顶部高光</span>
+  <label><input type="radio" name="hl" value="on" checked> 有</label>
+  <label><input type="radio" name="hl" value="none"> 无</label>
 </div>
 
 <h2>五档强调色（竖条 + 数量同色）</h2>
-<div class="board"><div class="rows">
+<div class="board stage"><div class="rows">
   <div class="card" style="--accent: var(--pc-accent-common)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/stone.png" alt=""></div>
-    <div class="box info"><span class="name">石头</span><span class="count">+64</span></div>
+    <div class="body"><div class="box icon"><img src="icons/stone.png" alt=""></div>
+    <div class="box info"><span class="name">石头</span><span class="count">+64</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-uncommon)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/elytra.png" alt=""></div>
-    <div class="box info"><span class="name">鞘翅</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/elytra.png" alt=""></div>
+    <div class="box info"><span class="name">鞘翅</span><span class="count">+1</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-rare)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/beacon.png" alt=""></div>
-    <div class="box info"><span class="name">信标</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/beacon.png" alt=""></div>
+    <div class="box info"><span class="name">信标</span><span class="count">+1</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-epic)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/dragon_egg.png" alt=""></div>
-    <div class="box info"><span class="name">龙蛋</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/dragon_egg.png" alt=""></div>
+    <div class="box info"><span class="name">龙蛋</span><span class="count">+1</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-xp)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/emerald.png" alt=""></div>
-    <div class="box info"><span class="name">经验</span><span class="count">+137</span></div>
+    <div class="body"><div class="box icon"><img src="icons/nether_star.png" alt=""></div>
+    <div class="box info"><span class="name">经验</span><span class="count">+137</span></div></div>
   </div>
 </div></div>
 
 <h2>2× 放大（看圆角 / 描边 / 高光）</h2>
-<div class="board"><div class="rows zoom2">
+<div class="board stage"><div class="rows zoom2">
   <div class="card" style="--accent: var(--pc-accent-epic)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/diamond_sword.png" alt=""></div>
-    <div class="box info"><span class="name">附魔钻石剑</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/diamond_sword.png" alt=""></div>
+    <div class="box info"><span class="name">附魔钻石剑</span><span class="count">+1</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-xp)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/nether_star.png" alt=""></div>
-    <div class="box info"><span class="name">经验</span><span class="count">+137</span></div>
+    <div class="body"><div class="box icon"><img src="icons/emerald.png" alt=""></div>
+    <div class="box info"><span class="name">经验</span><span class="count">+137</span></div></div>
   </div>
 </div></div>
 
 <h2>内容边界（卡宽跟名字走）</h2>
-<div class="board"><div class="rows">
+<div class="board stage"><div class="rows">
   <div class="card" style="--accent: var(--pc-accent-common)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/diamond_sword.png" alt=""></div>
-    <div class="box info"><span class="name">被铁砧改了名字的附魔钻石剑（超长名字边界）</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/diamond_sword.png" alt=""></div>
+    <div class="box info"><span class="name">被铁砧改了名字的附魔钻石剑（超长名字边界）</span><span class="count">+1</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-rare)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/netherite_ingot.png" alt=""></div>
-    <div class="box info"><span class="name">下界合金锭</span><span class="count">+99999</span></div>
+    <div class="body"><div class="box icon"><img src="icons/netherite_ingot.png" alt=""></div>
+    <div class="box info"><span class="name">下界合金锭</span><span class="count">+99999</span></div></div>
   </div>
   <div class="card" style="--accent: var(--pc-accent-uncommon)">
     <div class="bar"></div>
-    <div class="box icon"><img src="icons/golden_apple.png" alt=""></div>
-    <div class="box info"><span class="name">石</span><span class="count">+1</span></div>
+    <div class="body"><div class="box icon"><img src="icons/golden_apple.png" alt=""></div>
+    <div class="box info"><span class="name">石</span><span class="count">+1</span></div></div>
   </div>
 </div></div>
 
+<script>
+const root = document.documentElement;
+document.getElementById('btn-theme').onclick = e => {
+  const light = root.dataset.theme === 'light';
+  root.dataset.theme = light ? 'dark' : 'light';
+  e.target.textContent = light ? '切浅色' : '切深色';
+};
+document.querySelectorAll('input[name=sh]').forEach(r =>
+  r.onchange = () => root.dataset.shadow = r.value === 'on' ? '' : 'none');
+document.querySelectorAll('input[name=hl]').forEach(r =>
+  r.onchange = () => root.dataset.highlight = r.value === 'on' ? '' : 'none');
+const bind = (id, cssVar) => {
+  const el = document.getElementById(id), out = document.getElementById(id + '-v');
+  el.oninput = () => { root.style.setProperty(cssVar, el.value + 'px'); out.textContent = el.value; };
+};
+bind('sdy', '--pc-shadow-dy'); bind('sblur', '--pc-shadow-blur');
+document.getElementById('sstr').oninput = e => {
+  root.style.setProperty('--pc-shadow-strength', e.target.value);
+  document.getElementById('sstr-v').textContent = e.target.value;
+};
+</script>
 </body>
 </html>
