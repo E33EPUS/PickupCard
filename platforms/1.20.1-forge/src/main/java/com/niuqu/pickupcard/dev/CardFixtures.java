@@ -90,6 +90,26 @@ public final class CardFixtures {
         return List.of(all.subList(0, 5), all.subList(5, all.size()));
     }
 
+    /**
+     * 测量页的固定样例：与 {@code design/measure.html} 一一对应，用来做像素对照。
+     * <p>
+     * 【为什么不直接复用上面那组】像素对照的前提是"两边画的是同一张卡"。
+     * 上面那组的四档稀有度是**从注册表按 rarity 现找**的，哪天某个物品改了稀有度，
+     * 这一组就悄悄换了一张卡 —— 而对照表还会照常给出数字，看起来一切正常。
+     * 所以测量页的物品名写死。
+     * <p>
+     * 【为什么这里没有经验卡】经验卡入场后会铺一层强调色的微光（NEW 角标的替代），
+     * 那是有颜色、带软边的，会盖住框与框之间的间隙，间隙就量不出来了。
+     * 测量页只管几何，颜色另有页面看。
+     */
+    public static List<Fixture> measure() {
+        return List.of(
+                new Fixture("measure-common", new ItemStack(Items.STONE), 64),
+                new Fixture("measure-uncommon", new ItemStack(Items.ELYTRA), 1),
+                new Fixture("measure-rare", new ItemStack(Items.BEACON), 1),
+                new Fixture("measure-epic", new ItemStack(Items.DRAGON_EGG), 1));
+    }
+
     /** 把一张样例送进账本——走的是和真实拾取完全相同的那条路。 */
     public static void inject(Fixture fixture) {
         if (fixture.xp()) {

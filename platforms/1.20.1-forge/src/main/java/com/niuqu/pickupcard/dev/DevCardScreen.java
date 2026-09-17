@@ -29,7 +29,9 @@ public final class DevCardScreen extends Screen {
 
     private static final int BG_CHESS = 0;
     private static final int BG_FLAT = 1;
-    private static final int BG_COUNT = 2;
+    /** 测量页专用：纯黑。见 {@link #setMeasure}。 */
+    private static final int BG_MEASURE = 2;
+    private static final int BG_COUNT = 3;
 
     /** 棋盘格边长。半透明卡面必须在有纹理的背景上才判断得出来。 */
     private static final int CELL = 12;
@@ -81,6 +83,10 @@ public final class DevCardScreen extends Screen {
     // ------------------------------------------------------------------
 
     private void paintBackground(GuiGraphics gui) {
+        if (background == BG_MEASURE) {
+            gui.fill(0, 0, width, height, 0xFF000000);
+            return;
+        }
         if (background == BG_FLAT) {
             gui.fill(0, 0, width, height, 0xFF23232B);
             return;
@@ -150,6 +156,30 @@ public final class DevCardScreen extends Screen {
         this.spike = value;
     }
 
+    /**
+     * 由自动驱动切到测量页：<b>纯黑底、无辅助线、无读数</b>，卡面之外空无一物。
+     * <p>
+     * 【它解决的是什么】上一版像素对照不可信，根因不在算法而在输入：喂进去的是
+     * 带投影、带辅助线、带棋盘底的截图。辅助线画在卡的边界上，会被"最右非背景像素"
+     * 当成卡片内容；投影是软边的，会把框与框之间的间隙填住，于是"间距"恒为 0。
+     * <p>
+     * 【为什么底色是纯黑】因为我不用为此加任何开关：投影本质上是一层半透明的黑，
+     * 叠在纯黑上等于什么都没叠，自己就消失了。要是换成别的底色，就得在渲染里加一个
+     * "关掉投影"的入口 —— 而"投影关没关"已经有一个键了（{@code --pc-shadow-alpha}），
+     * 再开一个口子就是第二真源。**选对测量环境，比给测量加开关便宜。**
+     */
+    public void setMeasure(boolean value) {
+        if (value) {
+            background = BG_MEASURE;
+            guides = false;
+            stats = false;
+        } else {
+            background = BG_CHESS;
+            guides = true;
+            stats = true;
+        }
+    }
+
     private void paintStats(GuiGraphics gui) {
         CardStage.Stats s = CardStage.INSTANCE.stats();
         int y = 6;
@@ -173,6 +203,7 @@ public final class DevCardScreen extends Screen {
     private String bgName() {
         return switch (background) {
             case BG_FLAT -> "flat";
+            case BG_MEASURE -> "measure";
             default -> "chess";
         };
     }

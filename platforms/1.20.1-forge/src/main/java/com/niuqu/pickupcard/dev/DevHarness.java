@@ -93,9 +93,16 @@ public final class DevHarness {
         private static final int QUIT_AFTER_SHOT = 40;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
-        /** 卡样例页之后的最后一页：形状层 spike（不画卡，只画矢量图元）。 */
+        /** 卡样例页之后的形状层 spike 页（不画卡，只画矢量图元）。 */
         private static final int SPIKE_PAGE = PAGES.size();
-        private static final int TOTAL_PAGES = PAGES.size() + 1;
+        /**
+         * 最后一页：测量页。纯黑底、无辅助线、无读数 —— 给像素对照一张干净的输入。
+         * <p>
+         * 【为什么它是一页而不是"截图时顺手关掉"】对照的输入必须是可重复的：
+         * 同一组卡、同一个底、同一个状态。做成页面，它就有名字、有日志、有产物。
+         */
+        private static final int MEASURE_PAGE = PAGES.size() + 1;
+        private static final int TOTAL_PAGES = PAGES.size() + 2;
 
         private static DevCardScreen screen;
 
@@ -129,7 +136,8 @@ public final class DevHarness {
 
             sinceInject++;
             if (sinceInject == MID_SHOT) {
-                capture(mc, "mid");
+                // 测量页不拍中途：展开到一半的卡几何是变的，量出来的数没有意义
+                if (page != MEASURE_PAGE) capture(mc, "mid");
             } else if (sinceInject == SHOT_AFTER_OPEN) {
                 capture(mc, null);
             } else if (sinceInject >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
@@ -147,9 +155,19 @@ public final class DevHarness {
             }
             CardFixtures.clear();
             if (page == SPIKE_PAGE) {
+                screen.setMeasure(false);
                 screen.setSpike(true);
                 PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: 形状层 spike", page + 1, TOTAL_PAGES);
+            } else if (page == MEASURE_PAGE) {
+                screen.setSpike(false);
+                screen.setMeasure(true);
+                for (CardFixtures.Fixture fixture : CardFixtures.measure()) {
+                    CardFixtures.inject(fixture);
+                }
+                PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: 测量页（纯黑底/无辅助线/无读数）",
+                        page + 1, TOTAL_PAGES);
             } else {
+                screen.setMeasure(false);
                 screen.setSpike(false);
                 for (CardFixtures.Fixture fixture : PAGES.get(page)) {
                     CardFixtures.inject(fixture);
@@ -159,6 +177,21 @@ public final class DevHarness {
                                 .collect(java.util.stream.Collectors.joining(", ")));
             }
             sinceInject = 0;
+        }
+
+        /** 产物名跟着页面走：测量页的名字必须一眼看得出是测量页，不是"某张截图"。 */
+        private static String shotName(String suffix) {
+            // 用 if 而不是 switch：SPIKE_PAGE 是 PAGES.size()，不是编译期常量，
+            // 编译不过 —— case 标签要求常量表达式。
+            String base;
+            if (page == SPIKE_PAGE) {
+                base = "pickupcard-harness-spike";
+            } else if (page == MEASURE_PAGE) {
+                base = "pickupcard-measure";
+            } else {
+                base = "pickupcard-harness-p" + (page + 1);
+            }
+            return base + (suffix == null ? "" : "-" + suffix);
         }
 
         private static void capture(Minecraft mc, String suffix) {
@@ -179,7 +212,7 @@ public final class DevHarness {
                     stats.enterMs(), String.format(java.util.Locale.ROOT, "%.2f", stats.firstRise()), ages);
             // 活下来的是哪几张：淘汰顺序不能靠推断，得看数据
             PickupCard.LOGGER.info("[harness-auto] 在屏: {}", keys);
-            String name = "pickupcard-harness-p" + (page + 1) + (suffix == null ? "" : "-" + suffix);
+            String name = shotName(suffix);
             Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(),
                     message -> PickupCard.LOGGER.info("[harness-auto] 截图: {} -> {}", name, message.getString()));
         }
