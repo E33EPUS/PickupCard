@@ -112,7 +112,7 @@ public final class TrioCardPainter implements CardPainter {
 
         PoseStack pose = gui.pose();
         pose.pushPose();
-        motion(pose, canvas, slot, rise);
+        motion(pose, canvas, slot);
         pose.translate(slot.x(), slot.y(), 0f);
 
         // 还在展开才需要裁剪；已就位的卡不开，形状层仍能合批
@@ -198,7 +198,7 @@ public final class TrioCardPainter implements CardPainter {
         ShapeBatch batch = new ShapeBatch(gui);
         for (CardSlot slot : slots) {
             float rise = canvas.contentOf(slot.view());
-            pushCardPose(gui, canvas, slot, rise);
+            pushCardPose(gui, canvas, slot);
             cardShadow(batch, style, boxXOf(canvas, slot, style, rise), 0f, bodyWOf(slot, style),
                     slot.height(), Math.min(style.cornerRadius(), slot.height() / 2f));
             gui.pose().popPose();
@@ -214,7 +214,7 @@ public final class TrioCardPainter implements CardPainter {
             for (CardSlot slot : slots) {
                 float rise = canvas.contentOf(slot.view());
                 NanoVG.nvgSave(vg);
-                motionToNvg(vg, canvas, slot, rise);
+                motionToNvg(vg, canvas, slot);
                 NvgCardPainter.paintCard(vg, style, slot.x(), slot.y(), slot.width(), slot.height(),
                         accentOf(slot.view().notice().payload()), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise));
@@ -228,7 +228,7 @@ public final class TrioCardPainter implements CardPainter {
         for (CardSlot slot : slots) {
             float rise = canvas.contentOf(slot.view());
             Inbox.Card card = slot.view().notice().payload();
-            pushCardPose(gui, canvas, slot, rise);
+            pushCardPose(gui, canvas, slot);
             cardGlow(glow, style, accentOf(card), isHighlighted(card), boxXOf(canvas, slot, style, rise),
                     0f, bodyWOf(slot, style), slot.height(),
                     Math.min(style.cornerRadius(), slot.height() / 2f), rise);
@@ -253,7 +253,7 @@ public final class TrioCardPainter implements CardPainter {
         float windowW = clip ? bodyW * rise : bodyW;
         float shift = clip ? 0f : -(1f - rise) * bodyW;
 
-        pushCardPose(gui, canvas, slot, rise);
+        pushCardPose(gui, canvas, slot);
         boolean revealing = rise < 1f;
         if (revealing) {
             scissor(gui, gui.pose(), bodyX + windowW, h);
@@ -268,10 +268,10 @@ public final class TrioCardPainter implements CardPainter {
     }
 
     /** 入场位移/缩放：先到卡中心缩放、再按 dy 平移、最后落到卡的左上角。 */
-    private static void pushCardPose(GuiGraphics gui, CardCanvas canvas, CardSlot slot, float rise) {
+    private static void pushCardPose(GuiGraphics gui, CardCanvas canvas, CardSlot slot) {
         PoseStack pose = gui.pose();
         pose.pushPose();
-        motion(pose, canvas, slot, rise);
+        motion(pose, canvas, slot);
         pose.translate(slot.x(), slot.y(), 0f);
     }
 
@@ -375,38 +375,28 @@ public final class TrioCardPainter implements CardPainter {
     // ------------------------------------------------------------------
 
     /**
-     * 入场上升 + 退场下沉。外壳（NanoVG）与内容（原版）必须用同一组数，否则文字会和框错位，
-     * 所以数只算一处：{@link Motion}。两条路径各取所需 —— 一条写进 PoseStack，
-     * 一条写进 NanoVG 的矩阵（NanoVG 有自己的栈，pose 里的它看不见）。
+     * 退场下沉量。**入场一律是 0**，两个原因：
+     * <ol>
+     *   <li>草稿里新卡是"原地出现"的（{@code animation.html}：新槽位直接落最终位置，
+     *       复用过渡会让整张卡从别处滑进来）。旧版给它加了 8px 上升 + 0.94→1.0 缩放，
+     *       还带 easeOutBack 的过冲 —— 那是草稿里根本没有的动作；</li>
+     *   <li>缩放会让物品图标和文字<b>每帧重采样</b>，动起来就是发虚的。</li>
+     * </ol>
+     * 入场真正在跑的只有两条：竖条纵向展开、内容横向滑出。
+     * <p>
+     * 【为什么抽出来】外壳走 NanoVG、内容走原版，两边必须用同一个位移，
+     * 否则文字会和框错位。所以数只算一处：这里。
      */
-    private record Motion(float dy, float scale) {
+    private static float exitDropOf(CardCanvas canvas, CardSlot slot) {
+        return Easing.easeInQuad(canvas.exitOf(slot.view())) * EXIT_DROP;
     }
 
-    private static Motion motionOf(CardCanvas canvas, CardSlot slot, float rise) {
-        float exit = canvas.exitOf(slot.view());
-        float dy = (1f - Easing.easeOutBack(rise)) * ENTER_RISE + Easing.easeInQuad(exit) * EXIT_DROP;
-        float scale = (0.94f + 0.06f * Easing.easeOutBack(rise)) * (1f - 0.06f * exit);
-        return new Motion(dy, scale);
+    private static void motion(PoseStack pose, CardCanvas canvas, CardSlot slot) {
+        pose.translate(0f, exitDropOf(canvas, slot), 0f);
     }
 
-    private static void motion(PoseStack pose, CardCanvas canvas, CardSlot slot, float rise) {
-        Motion m = motionOf(canvas, slot, rise);
-        float cx = slot.centerX();
-        float cy = slot.centerY();
-        pose.translate(cx, cy, 0f);
-        pose.scale(m.scale(), m.scale(), 1f);
-        pose.translate(-cx, -cy, 0f);
-        pose.translate(0f, m.dy(), 0f);
-    }
-
-    private static void motionToNvg(long vg, CardCanvas canvas, CardSlot slot, float rise) {
-        Motion m = motionOf(canvas, slot, rise);
-        float cx = slot.centerX();
-        float cy = slot.centerY();
-        NanoVG.nvgTranslate(vg, cx, cy);
-        NanoVG.nvgScale(vg, m.scale(), m.scale());
-        NanoVG.nvgTranslate(vg, -cx, -cy);
-        NanoVG.nvgTranslate(vg, 0f, m.dy());
+    private static void motionToNvg(long vg, CardCanvas canvas, CardSlot slot) {
+        NanoVG.nvgTranslate(vg, 0f, exitDropOf(canvas, slot));
     }
 
     /**

@@ -15,7 +15,7 @@ package com.niuqu.pickupcard.style;
 public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, boolean bumpEnabled) {
 
     public static CardTimeline defaults() {
-        return new CardTimeline(320L, 300L, true, true);
+        return new CardTimeline(560L, 300L, true, true);
     }
 
     /** 竖条展开占入场总时长的比例（前 30%）。 */

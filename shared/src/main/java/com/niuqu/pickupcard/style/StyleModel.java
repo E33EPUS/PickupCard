@@ -68,7 +68,7 @@ public record StyleModel(int cornerRadius,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 0x3CFFFFFF, 90, 2, 4, 46,
                 0xF0EBEFF6,
-                320L, 300L, true, true, true);
+                560L, 300L, true, true, true);
     }
 
     /** 主题里的数值全部过一遍夹逼：玩家手写的 JSON 不该能把渲染打崩。 */
@@ -124,7 +124,7 @@ public record StyleModel(int cornerRadius,
                     i(mat, "shadowBlur", 4),
                     i(mat, "glowAlpha", 46),
                     color(tex, "nameColor", 0xF0EBEFF6),
-                    i(anim, "enterMs", 320),
+                    i(anim, "enterMs", 560),
                     i(anim, "bumpMs", 300),
                     b(anim, "enterEnabled", true),
                     b(anim, "bumpEnabled", true),

@@ -30,7 +30,7 @@
     "xp": "#7DFF8A"
   },
   "animation": {
-    "enterMs": 620,
+    "enterMs": 560,
     "bumpMs": 300,
     "enterEnabled": true,
     "bumpEnabled": true,

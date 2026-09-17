@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.render;
 
+import com.niuqu.pickupcard.layout.CardMove;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
@@ -46,8 +47,12 @@ public final class CardStage {
     /** 卡与卡之间的间隙。跟卡内间隙（style.gap）不是一回事，刻意分开。 */
     private static final float STACK_GAP = 4f;
 
+
     /** 插入序 = 从老到新，正好是排布要的顺序。 */
     private final Map<String, CardView> live = new LinkedHashMap<>();
+
+    /** 换位置时的过渡（旧的被新卡顶上去）。纯逻辑在 shared 里，有已知答案钉着。 */
+    private final CardMove move = new CardMove();
     private final List<Inbox.Event> pending = new ArrayList<>();
     private final StyleSource styles = new StyleSource();
 
@@ -212,11 +217,16 @@ public final class CardStage {
         }
 
         List<CardSlot> slots = new ArrayList<>(alive.size());
+        long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
                 sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
                 MARGIN_X, MARGIN_Y, STACK_GAP)) {
-            slots.add(new CardSlot(alive.get(slot.index()), slot.x(), slot.y(), slot.width(), slot.height()));
+            CardView view = alive.get(slot.index());
+            slots.add(new CardSlot(view, slot.x(), move.y(view.notice().key(), slot.y(), now),
+                    slot.width(), slot.height()));
         }
+        move.retain(live.keySet());
         return slots;
     }
+
 }
