@@ -137,6 +137,15 @@ public final class NvgCardPainter {
             for (CardSlot slot : slots) {
                 float rise = canvas.contentOf(slot.view());
                 Inbox.Card card = slot.view().notice().payload();
+                if (slot.view().exiting()) {
+                    // 【为什么要这一行】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。
+                    // 这件事只有逐帧数值能定死：alpha 一路单调到 0 说明问题在绘制那一路；
+                    // alpha 中途跳回 1 就是这张卡被救回来 / 重挂了（见 CardView#absorbMerge）。
+                    // 退场只有十几帧，不会刷屏。
+                    PickupCard.LOGGER.info("[退场] key={} 进度={} alpha={}", slot.view().key(),
+                            String.format(java.util.Locale.ROOT, "%.2f", canvas.exitOf(slot.view())),
+                            String.format(java.util.Locale.ROOT, "%.2f", exitAlphaOf(canvas, slot)));
+                }
                 nvgSave(vg);
                 // 退场：整张卡（外壳 + 竖条 + 微光 + 影子）一起淡，见类注释
                 nvgGlobalAlpha(vg, exitAlphaOf(canvas, slot));

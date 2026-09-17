@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.render;
 
+import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.layout.CardMove;
 import com.niuqu.pickupcard.layout.HudSafeZone;
 import com.niuqu.pickupcard.layout.LayoutSettings;
@@ -226,13 +227,26 @@ public final class CardStage {
     /** 账本事件 → 屏幕上的卡。 */
     private void absorb(Inbox.Event event, long now) {
         if (event instanceof Inbox.Event.Added added) {
-            live.put(added.notice().key(), new CardView(added.notice()));
+            // 【为什么要记这一笔】同一个 key 又"新增"了一张，说明屏幕上那张（可能正在淡出）
+            // 会被**整张换掉**：新 CardView 的 exitStartAt = NO_EXIT，不透明度瞬间回到 1。
+            // 用户报的「淡出最后一帧完全不透明，然后消失」只可能是这一类事件造成的，
+            // 所以把它写成日志，让下一次复现自己带上证据。
+            if (live.put(added.notice().key(), new CardView(added.notice())) != null) {
+                PickupCard.LOGGER.info("[重挂] key={}：同名卡被整张替换（可能在淡出中）",
+                        added.notice().key());
+            }
         } else if (event instanceof Inbox.Event.Merged merged) {
             CardView view = live.get(merged.notice().key());
             if (view == null) {
                 // 时序兜底：账本说有、渲染却没见过，按新卡补挂
                 live.put(merged.notice().key(), new CardView(merged.notice()));
             } else {
+                if (view.exiting()) {
+                    // 合并会把退场撤销（absorbMerge 里 exitStartAt = NO_EXIT）—— 这是刻意设计的
+                    // 「救回来」，但它在屏幕上就是"淡到一半突然全不透明"。同样进日志。
+                    PickupCard.LOGGER.info("[救回] key={}：淡出被合并撤销，不透明度回到 1",
+                            merged.notice().key());
+                }
                 view.absorbMerge(merged.notice(), now);
             }
         } else if (event instanceof Inbox.Event.Evicted evicted) {
@@ -255,20 +269,33 @@ public final class CardStage {
         // 同一个约定收：最新那张贴着底线、旧的往上顶。live 是插入序（老 -> 新），所以反过来。
         List<CardView> alive = new ArrayList<>(live.values());
         Collections.reverse(alive);
+
+        // 【取舍：屏幕放不下就先丢最老的】画布矮的时候（guiScale 4 的 320×180，让开 HUD 带
+        // 之后只剩 105px）一摞 5 张是画到屏幕外面的 —— StackLayout 只做减法，从不检查 y 变负。
+        // 丢的是最老的那几张，它们在丢的这一刻本来就在堆顶之上、画布之外，玩家看不见；
+        // 而且是从 live 里**摘掉**而不是"这一帧不画"：留下来的话，等新卡走掉时它们会突然冒出来。
+        float cardHeight = CardMetrics.height(canvas, mc.font);
+        float separation = canvas.layout().separation();
+        int fits = StackLayout.fittingCount(canvas.guiHeight(), HudSafeZone.bottomInset(),
+                cardHeight, separation);
+        if (fits >= 1 && fits < alive.size()) {
+            for (CardView dropped : new ArrayList<>(alive.subList(fits, alive.size()))) {
+                live.remove(dropped.key());
+            }
+            alive = new ArrayList<>(alive.subList(0, fits));
+        }
+
         List<StackLayout.Size> sizes = new ArrayList<>(alive.size());
+        float widest = 0f;
         for (CardView view : alive) {
-            sizes.add(new StackLayout.Size(
-                    CardMetrics.width(canvas, mc.font, view.notice().payload(), view.notice().count()),
-                    CardMetrics.height(canvas, mc.font)));
+            float width = CardMetrics.width(canvas, mc.font, view.notice().payload(), view.notice().count());
+            widest = Math.max(widest, width);
+            sizes.add(new StackLayout.Size(width, cardHeight));
         }
 
         // HUD 安全区：底部留白算出来；右侧再按"侧栏 / 状态效果图标"临时让开多少决定。
-        float stackHeight = 0f;
-        for (StackLayout.Size size : sizes) {
-            stackHeight += size.height();
-        }
-        stackHeight += canvas.layout().separation() * Math.max(0, sizes.size() - 1);
-        float reserve = rightReserve(mc, canvas, stackHeight);
+        float stackHeight = StackLayout.totalHeight(sizes, separation);
+        float reserve = rightReserve(mc, canvas, widest, stackHeight);
 
         List<CardSlot> slots = new ArrayList<>(alive.size());
         long now = canvas.now();
@@ -287,22 +314,39 @@ public final class CardStage {
     }
 
     /**
-     * 右侧要让开多少：<b>计分板侧栏</b>（右侧一竖条，一直在）与<b>状态效果图标</b>
-     * （右上角，只有卡堆的顶伸进它那一带时才挡道）。
+     * 右侧要让开多少：<b>计分板侧栏</b>与<b>状态效果图标</b> —— 两者都只在卡堆<b>真的碰到</b>
+     * 它们时才让（判据在 {@link HudSafeZone#reserve}，带单测）。
      * <p>
-     * 【为什么每一帧现问】它们是"有时才在"的东西：让多少由它们自己决定，就不是又一个魔数。
-     * 数字与出处见 {@link HudSafeZone}（图标一行 26 高、一列 25 宽；侧栏宽度现量）。
+     * 【为什么每一帧现问】它们是"有时才在、而且在屏幕中部"的东西：让多少由它们自己决定，
+     * 就不是又一个魔数。数字与出处见 {@link HudSafeZone}（图标一行 26 高、一列 25 宽；侧栏宽度现量）。
+     * <p>
+     * 【为什么侧栏也要看纵向】从前这条是无条件的：画布 1080 高时卡堆在右下角（y≈890..1005）、
+     * 侧栏在屏幕中部（y≈472..607），够不着却被整列推开 —— 低缩放档下就这样被推到快捷栏左边，
+     * 正是用户报的「位置会变到物品栏左侧」。
+     *
+     * @param widestCard  本帧最宽的那张卡（用来还原卡堆矩形）
+     * @param stackHeight 整摞卡的高度（含间隙）
      */
-    private static float rightReserve(Minecraft mc, CardCanvas canvas, float stackHeight) {
-        if (mc.level == null) {
+    private static float rightReserve(Minecraft mc, CardCanvas canvas, float widestCard,
+                                      float stackHeight) {
+        if (mc.level == null || stackHeight <= 0f || widestCard <= 0f) {
             return 0f;
         }
-        float reserve = 0f;
+        // 卡堆这一帧（未左移时）实际占的矩形。左缘必须用 StackLayout 的同一条公式，
+        // 否则会出现"判据说没碰上、画出来却压在一起"。
+        float left = Math.max(0f, Math.min(canvas.layout().leftLimit(canvas.guiWidth()),
+                canvas.guiWidth() - MARGIN_X - widestCard));
+        HudSafeZone.Rect cards = new HudSafeZone.Rect(left,
+                canvas.guiHeight() - HudSafeZone.bottomInset() - stackHeight, widestCard, stackHeight);
 
         // 1 = 侧栏槽位（原版 Gui#render 里就是这么取的：getDisplayObjective(1)）
         Objective sidebar = mc.level.getScoreboard().getDisplayObjective(1);
+        HudSafeZone.Rect sidebarRect = null;
+        float sidebarWidth = 0f;
         if (sidebar != null) {
-            reserve += scoreboardWidth(mc.font, sidebar) + 5f;
+            sidebarWidth = scoreboardWidth(mc.font, sidebar);
+            sidebarRect = HudSafeZone.sidebar(canvas.guiWidth(), canvas.guiHeight(),
+                    sidebarWidth, scoreboardLines(sidebar));
         }
 
         int beneficial = 0;
@@ -317,15 +361,28 @@ public final class CardStage {
             }
         }
         int columns = Math.max(beneficial, harmful);
+        HudSafeZone.Rect effectRect = null;
+        float effectWidth = 0f;
         if (columns > 0) {
-            // 有害效果会再占一排（图标从 y=27 起）—— 卡堆的顶只有在伸到那一带时才需要让
+            // 有害效果会再占一排（图标从 y=27 起）—— 所以图标带的下沿要看有没有那一排
             float effectsBottom = harmful > 0 ? 51f : 25f;
-            float stackTop = canvas.guiHeight() - HudSafeZone.bottomInset() - stackHeight;
-            if (stackTop < effectsBottom) {
-                reserve += HudSafeZone.EFFECT_COL_W * columns;
+            effectWidth = HudSafeZone.EFFECT_COL_W * columns;
+            effectRect = new HudSafeZone.Rect(canvas.guiWidth() - effectWidth, 1f,
+                    effectWidth, effectsBottom - 1f);
+        }
+
+        return HudSafeZone.reserve(cards, sidebarRect, sidebarWidth, effectRect, effectWidth);
+    }
+
+    /** 侧栏会画几行（原版最多 15 行 —— 它决定那一竖条的纵向范围）。 */
+    private static int scoreboardLines(Objective objective) {
+        int lines = 0;
+        for (Score ignored : objective.getScoreboard().getPlayerScores(objective)) {
+            if (++lines >= 15) {
+                break;
             }
         }
-        return reserve;
+        return Math.max(1, lines);
     }
 
     /** 侧栏一行的实测宽度（原版是按"标题 / 条目+分数"的最宽那行算的，这里取个上界就够）。 */

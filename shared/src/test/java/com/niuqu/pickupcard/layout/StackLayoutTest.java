@@ -162,4 +162,48 @@ class StackLayoutTest {
         var sizes = List.of(new StackLayout.Size(10, 20), new StackLayout.Size(10, 30));
         assertEquals(20 + 30 + 5f, StackLayout.totalHeight(sizes, 5f), EPS);
     }
+
+    @Test
+    @DisplayName("画布矮时：号称放得下的那几张全在屏幕里，多出来的那一张必然在屏幕外")
+    void onlyWhatFitsStaysOnScreen() {
+        for (float h : new float[]{144f, 180f, 240f, 360f, 480f, 1080f}) {
+            int fits = StackLayout.fittingCount(h, 75, 20f, 4f);
+            assertTrue(fits >= 1, "画布 " + h + " 高时一张都放不下，取舍就无从谈起");
+            // 正好多要一张：用来验证"第 fits 张就在屏幕外"
+            var slots = cards(h, fits + 1);
+            for (int i = 0; i < fits; i++) {
+                assertTrue(slots.get(i).y() >= 0f,
+                        "画布 " + h + " 高：第 " + i + " 张号称放得下，却在屏幕外（y=" + slots.get(i).y() + "）");
+            }
+            assertTrue(slots.get(fits).y() < 0f,
+                    "画布 " + h + " 高：第 " + fits + " 张号称放不下，却在屏幕里（y=" + slots.get(fits).y() + "）");
+        }
+    }
+
+    /**
+     * 反例对照：<b>没有</b>夹紧时，5 张卡在 180 高的画布上会顶到屏幕外。
+     * <p>
+     * 这就是用户报的「高缩放下会超出屏幕」：guiScale 4 的 320×180 上，让开 75 的 HUD 带
+     * 只剩 105px，第 5 张的 y 是 −11 —— 而 {@code stack()} 从不检查这件事。
+     * 谁把取舍删掉，这条会立刻红。
+     */
+    @Test
+    @DisplayName("没有夹紧时 5 张卡在 180 高的画布上必然顶出屏幕（那个 bug 的对照）")
+    void withoutTheClampFiveCardsSpillOffScreen() {
+        var slots = cards(180f, 5);
+        assertTrue(slots.get(4).y() < 0f, "第 5 张（index 4）本该在屏幕外，y=" + slots.get(4).y());
+        assertEquals(4, StackLayout.fittingCount(180f, 75, 20f, 4f), "180 高只放得下 4 张");
+        assertEquals(3, StackLayout.fittingCount(144f, 75, 20f, 4f), "144 高只放得下 3 张");
+        assertEquals(7, StackLayout.fittingCount(240f, 75, 20f, 4f), "240 高（guiScale 3）放得下 7 张");
+    }
+
+    /** n 张 100×20 的卡，用真实的底部留白（75）在给定画布高上排一遍。 */
+    private static List<StackLayout.Slot> cards(float guiHeight, int n) {
+        var sizes = new StackLayout.Size[n];
+        for (int i = 0; i < n; i++) {
+            sizes[i] = new StackLayout.Size(100, 20);
+        }
+        return StackLayout.stack(List.of(sizes), GUI_W, guiHeight, LayoutSettings.defaults(),
+                MARGIN, 75, 4f);
+    }
 }

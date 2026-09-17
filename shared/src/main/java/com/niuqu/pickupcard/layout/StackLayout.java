@@ -94,4 +94,29 @@ public final class StackLayout {
         for (Size size : sizes) total += size.height();
         return total;
     }
+
+    /**
+     * 画布能<b>完整</b>放下几张卡。
+     * <p>
+     * 【为什么取舍必须有人做】{@link #stack} 只做减法：{@code y} 会一路减到负数，
+     * 于是 guiScale 4 的 320×180（让开 HUD 带之后只剩 105px）上第 5 张的 y = -15 ——
+     * 直接画到屏幕外面去。用户报的「高缩放下会超出屏幕」就是它。这个数只有一处能算对，
+     * 所以单独成函数、带单测（{@code StackLayoutTest#onlyWhatFitsStaysOnScreen}）。
+     *
+     * @param guiHeight  画布高
+     * @param marginY    距屏幕下边的留白（HUD 带）
+     * @param cardHeight 一张卡的高（同屏的卡等高）
+     * @param gap        卡与卡之间的间隙
+     * @return 能完整放下的张数；0 = 连一张都放不下
+     */
+    public static int fittingCount(float guiHeight, int marginY, float cardHeight, float gap) {
+        if (cardHeight <= 0f) {
+            return Integer.MAX_VALUE;
+        }
+        float room = guiHeight - marginY;
+        if (room < cardHeight) {
+            return 0;
+        }
+        return (int) ((room + gap) / (cardHeight + gap));
+    }
 }

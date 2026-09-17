@@ -118,6 +118,45 @@ class HudSafeZoneTest {
                 "效果图标在右上，x 从 426-50=376 起");
     }
 
+    /**
+     * 让位判据：<b>只有卡堆真的碰上那一块才让</b>。
+     * <p>
+     * 【为什么这条重要】从前侧栏那条是无条件的 —— 低缩放档（画布高、卡堆贴右下角）下
+     * 侧栏在屏幕中部，两者隔着几百像素，却把整列推到快捷栏左边去。这就是用户报的
+     * 「低缩放下位置会变到物品栏左侧」。高缩放档必须照样让开（下面第二条）。
+     */
+    @Test
+    void reservesOnlyWhatTheStackActuallyTouches() {
+        // 低缩放：1920×1080 画布，5 张卡贴着右下角；侧栏 200 宽、15 行在屏幕中部 → 够不着
+        HudSafeZone.Rect tallCards = new HudSafeZone.Rect(1040f, 890f, 192f, 116f);
+        HudSafeZone.Rect tallSidebar = HudSafeZone.sidebar(1920f, 1080f, 200f, 15);
+        assertEquals(0f, HudSafeZone.reserve(tallCards, tallSidebar, 200f, null, 0f), 0.01f,
+                "隔着 280 像素却让位了：" + describe(tallSidebar));
+
+        // 高缩放：426×240 画布，卡堆伸到屏幕中部，侧栏 120 宽、15 行 → 真的撞上，让 125
+        HudSafeZone.Rect shortCards = new HudSafeZone.Rect(219f, 49f, 120f, 116f);
+        HudSafeZone.Rect shortSidebar = HudSafeZone.sidebar(426f, 240f, 120f, 15);
+        assertTrue(shortCards.intersects(shortSidebar), "这条断言的前提是两者相交");
+        assertEquals(125f, HudSafeZone.reserve(shortCards, shortSidebar, 120f, null, 0f), 0.01f,
+                "让位量 = 侧栏宽 + 5");
+    }
+
+    /** 状态效果图标同一条规则：够不着就不让（纵向差得远就不该让位）。 */
+    @Test
+    void effectsAreReservedOnlyWhenReached() {
+        // 1920 宽的画布上三列有益 + 一列有害：图标带在 x=1845..1920、y=1..51
+        HudSafeZone.Rect icons = HudSafeZone.effectIcons(1920f, 3, 1).get(0);
+        // 低缩放：卡堆贴着右下角（y≈890），够不着右上角那一带
+        HudSafeZone.Rect lowCards = new HudSafeZone.Rect(1845f, 890f, 75f, 116f);
+        assertEquals(0f, HudSafeZone.reserve(lowCards, null, 0f, icons, 75f), 0.01f,
+                "隔着 800 多像素却让位了：" + describe(icons));
+
+        // 同一摞卡整摞抬到屏幕顶部 → 真的撞上，让 75
+        HudSafeZone.Rect highCards = new HudSafeZone.Rect(1845f, 0f, 75f, 116f);
+        assertTrue(highCards.intersects(icons), "这条断言的前提是两者相交");
+        assertEquals(75f, HudSafeZone.reserve(highCards, null, 0f, icons, 75f), 0.01f);
+    }
+
     private static String canvasLabel(float w, float h, float textWidth) {
         return "[" + (int) w + "×" + (int) h + " 文字宽 " + (int) textWidth + "]";
     }

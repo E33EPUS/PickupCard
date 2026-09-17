@@ -158,6 +158,32 @@ public final class HudSafeZone {
         return new Placement(leftMin, leftMax, bottomInset(), Math.max(0f, rightReserve));
     }
 
+    /**
+     * 右侧这一帧要额外让开多少 —— <b>只有卡堆真的碰上那一块才让</b>。
+     * <p>
+     * 【为什么不是"有就全让"】侧栏与状态效果图标都是"有时才在、而且在屏幕中部"的东西：
+     * 画布 1080 高时卡堆贴着右下角（y≈890..1005），侧栏在 y≈472..607，两者根本碰不上，
+     * 却因为一句无条件让位把整列推到快捷栏左边 —— 用户报的「低缩放下位置会变到物品栏左侧」
+     * 就是这一条。状态效果图标与侧栏在这里共用一条规则，因为它们本来就是同一类东西。
+     *
+     * @param cards        卡堆这一帧（未左移时）占的矩形
+     * @param sidebar      计分板侧栏的矩形；没有侧栏传 {@code null}
+     * @param sidebarWidth 侧栏宽（让位量 = 它 + 5）
+     * @param effects      状态效果图标带的矩形；没有效果传 {@code null}
+     * @param effectsWidth 图标带的总宽（列数 × {@link #EFFECT_COL_W}）
+     */
+    public static float reserve(Rect cards, Rect sidebar, float sidebarWidth,
+                                Rect effects, float effectsWidth) {
+        float reserve = 0f;
+        if (sidebar != null && cards.intersects(sidebar)) {
+            reserve += sidebarWidth + 5f;
+        }
+        if (effects != null && cards.intersects(effects)) {
+            reserve += effectsWidth;
+        }
+        return reserve;
+    }
+
     /** 便捷：把一个矩形夹进"右侧留白"之内（左移多少）。 */
     public static float shiftLeft(float left, float cardWidth, float guiWidth, float rightReserve) {
         float overflow = (left + cardWidth) - (guiWidth - PAD - rightReserve);

@@ -541,7 +541,10 @@ public final class PickupCardConfigScreen extends Screen {
 
     private NvgSlider decimal(ForgeConfigSpec.DoubleValue config, double shown, double min, double max) {
         return new NvgSlider("", min, max, 1,
-                () -> shown,   // 卡片间距只有界面能改，直接读快照就行
+                // 【这里踩过：值供给器不能读快照】从前写的是 `() -> shown` —— 那是打开页面时
+                // 拍下的一次性快照，拖拽写进 TOML 的值永远不回灌到界面，圆钮就一动不动，
+                // 玩家看到的是"这条滑条拖不动"。跟 number/time 一样读活配置。
+                () -> currentDouble(config, shown),
                 v -> {
                     config.set((double) Math.round(v));
                     changed();
@@ -611,6 +614,11 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     private static long currentLong(ForgeConfigSpec.LongValue config, long effective) {
+        return config.get() < 0 ? effective : config.get();
+    }
+
+    /** 小数配置（目前只有卡片间距）的活值：跟 int/long 同一条规则，-1 才算没改过。 */
+    private static double currentDouble(ForgeConfigSpec.DoubleValue config, double effective) {
         return config.get() < 0 ? effective : config.get();
     }
 

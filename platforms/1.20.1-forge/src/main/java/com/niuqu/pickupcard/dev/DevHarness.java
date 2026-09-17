@@ -111,6 +111,9 @@ public final class DevHarness {
          */
         private static final int EXIT_PUSH_AFTER = SHOT_AFTER_OPEN + 2;
         private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
+        /** 淡出播到一半（480ms 里约 250ms 处）再捡一个同样的物品：合并会把退场撤销。 */
+        private static final int EXIT_REVIVE_AFTER = EXIT_SHOT_AFTER + 2;
+        private static final int EXIT_REVIVE_SHOT_AFTER = EXIT_REVIVE_AFTER + 2;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
         /** 卡样例页之后的矢量 spike 页（不画卡，只画图元与外壳探针）。 */
@@ -361,6 +364,19 @@ public final class DevHarness {
                 Screenshot.grab(mc.gameDirectory, "pickupcard-hud-exit", mc.getMainRenderTarget(),
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-exit -> {}",
                                 m.getString()));
+            } else if (age == EXIT_REVIVE_AFTER) {
+                // 【为什么要推这一下】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。
+                // 逐帧 alpha 探针证明退场曲线本身是单调的（不再有第二种可能），那剩下的解释
+                // 只有一种：淡出被"救回来"了 —— 合并会把退场撤销（CardView#absorbMerge）。
+                // 这里就在淡出播到一半时再捡一个同样的石头，把它复现出来。
+                CardFixtures.inject(PAGES.get(0).get(0));
+                PickupCard.LOGGER.info("[harness-auto] 淡出中再捡一次石头（同一样例：最老那张就是它）");
+            } else if (age == EXIT_REVIVE_SHOT_AFTER) {
+                PickupCard.LOGGER.info("[harness-auto] 救回后读数 cards={}",
+                        CardStage.INSTANCE.stats().live());
+                Screenshot.grab(mc.gameDirectory, "pickupcard-hud-revive", mc.getMainRenderTarget(),
+                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-revive -> {}",
+                                m.getString()));
             } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
                 PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");
                 mc.stop();
@@ -391,16 +407,27 @@ public final class DevHarness {
          */
         private static void logHudSafeZone(Minecraft mc) {
             float lowestCard = 0f;
+            float highestCard = Float.MAX_VALUE;
             for (var slot : CardStage.INSTANCE.lastSlots()) {
                 lowestCard = Math.max(lowestCard, slot.y() + slot.height());
+                highestCard = Math.min(highestCard, slot.y());
             }
             float hudTop = mc.getWindow().getGuiScaledHeight()
                     - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset();
+            // 顶端那一行是给"高缩放下顶出屏幕"立的：卡堆的顶必须 >= 0（画布顶端），
+            // 而只报最低边是看不出这件事的 —— 上一版就这么漏过去了。
             PickupCard.LOGGER.info(
-                    "[harness-auto] HUD 安全区：卡堆最低边 y={}，HUD 带顶 y={}（缝 {}，底部留白 {}，画布 {}x{}）",
+                    "[harness-auto] HUD 安全区：卡堆最低边 y={}，HUD 带顶 y={}（缝 {}，底部留白 {}，"
+                            + "画布 {}x{}，卡堆顶 y={}，放得下 {} 张）",
                     Math.round(lowestCard), Math.round(hudTop), Math.round(hudTop - lowestCard),
                     com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
-                    mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight());
+                    mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
+                    highestCard == Float.MAX_VALUE ? "-" : Math.round(highestCard),
+                    com.niuqu.pickupcard.layout.StackLayout.fittingCount(
+                            mc.getWindow().getGuiScaledHeight(),
+                            com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
+                            CardStage.INSTANCE.previewStyle().boxHeight(),
+                            PickupCardConfig.layoutSnapshot().separation()));
         }
 
         private static void capture(Minecraft mc, String suffix) {
