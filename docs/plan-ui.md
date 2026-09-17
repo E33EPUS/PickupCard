@@ -17,7 +17,7 @@
 | 3 | harness 形态 | **完整调试屏**：样例卡集 + 几何辅助线 + 动画时间控制 + 背景切换 + GUI scale 验证 + 只读滑条 + 截图导出 | dev-only（`FMLEnvironment.isDevelopment()`）门控；**不许长成第二个 UI 框架**（滑条用我们自己的形状层画＝吃狗粮）；**不许当第二真源** |
 | 4 | 设计保真 | **限定 CSS 子集，清单外报错、绝不静默**；`tools/css_tokens.py` 遇到清单外属性直接失败退出 | 静默失败是最毒的（上一版 AUI 的 `radial-gradient` 不解析且不报错） |
 | 5 | 实施顺序 | **harness 壳 → 形状层 → 卡片画法 → 美术迭代**；`BaselineCardPainter` 从占位升格为**对照组** | 先建测试台，材料用最糙的；需求从工具里长出来，不先设计 API |
-| 6 | 批处理批什么 | **统一入口 + 同 uniform 自动合并 + `stats()`**；不碰自定义顶点属性 | **坐标一律屏幕绝对值**；**形状层整体先于内容层提交**（`MultiBufferSource` 按 RenderType 分组，不是按插入序） |
+| 6 | 批处理批什么 | **统一入口 + 同 uniform 自动合并 + `stats()`**；不碰自定义顶点属性 | ~~坐标一律屏幕绝对值~~ → **跟随 `GuiGraphics.fill` 的 pose 语义**（见下方"实施修正"）；**形状层整体先于内容层提交**（`MultiBufferSource` 按 RenderType 分组，不是按插入序） |
 | 7 | 谁判"好看" | **客观门 + 候选制 + 3 轮断路器** | 客观项（错位=0/任意 scale 锐利/5 卡不重叠/超长名不越界/60fps）不过就不聊视觉；视觉我出 3 版候选你选；3 轮不行＝方向问题，停下重定，不继续磨 |
 | 8 | 卡宽边界 | 上限 `min(屏宽 × 0.45, 240px)`；`Font.plainSubstrByWidth` 像素级截断 + `…`；名字区加下限 ~40px；**NEW 改为入场时的一次性光晕脉冲**（不占布局） | 全名看不到了——HUD 卡不接受悬停，tooltip 兜不了，这是**认下的信息损失** |
 
@@ -31,22 +31,35 @@
 | **M3** | 美术迭代：HTML 草稿 ↔ harness 对照，按允许子集走 | **你点头**（唯一主观验收） |
 | **M4** | 收尾：入场/合并/退场曲线、XP 卡形、超长名字截断、NEW 闪光、性能 | 逐项真机截图 |
 
-## 已知风险（M1 必须先解决）
+## M1 已完成：形状层落地（2026-09-17）
 
-**uniform 驱动的 SDF 与 `MultiBufferSource` 不兼容。** `BufferSource` 按 RenderType 分组、到
-`endBatch()` 才画，而 uniform 是 per-draw 的 —— 所以"参数放 uniform"必然推出"每形状自己
-flush"。这解释了归档版 `ShapeBatch` 为什么用 `Tesselator`（**不是疏忽，是被方案逼的**），
-而上一版 v1 的"整层不可见"恰恰发生在手搓路径上（错题本原话：GL 状态/时序类问题无法盲调）。
+对 1.20.1 字节码核实了四件事，全部有据：
 
-**处理：M1 第一个动作是最小可见性 spike** —— 一个圆角矩形、坐标写死、画在 HUD 正中。
-一个形状不可见，五十个也不用试。同时对着 1.20.1 源码核三件事：
+1. **`apply()` 不重置自定义 uniform** —— 它遍历全部 uniform 调 `upload()`，而
+   `upload()` 只在 dirty 时上传。所以"先 set 再 draw"是**对的**，uniform 会在 flush
+   那一刻随 `apply()` 上传。
+2. **`Tesselator.end()` 就是 `BufferUploader.drawWithShader(builder.end())`** —— 归档版
+   的入口本身就是正规 vanilla 入口，"整层不可见"不在入口上。
+3. ⚠️ **真正的静默陷阱**：`safeGetUniform(名字)` 在名字不存在时返回的是
+   `AbstractUniform`——一个 `set(float)` 字节码为 `return` 的**空实现**。打错名、或某个
+   uniform 被 GLSL 优化掉，都会变成"set 全丢、不报错、不日志"。这正是老 bug 的形状。
+   现在 `ShapeShaders.uniform()` 会按名字**尖叫一次**。
+4. **`RenderType.create` 是包级私有**，自建 RenderType 需要 AT —— 除非继承 `RenderType`
+   用它的 protected 构造器（ModernUI 的 `GuiRenderType` 就是这么做的）。我们照做，
+   blend/cull/depth 交给声明式 `RenderStateShard` 清单（框架成对 setup/clear），
+   取代归档版手写却没配对还原的 `RenderSystem` 开关。
 
-1. `ShaderInstance.apply()` 会不会重置我设的自定义 uniform
-2. `BufferUploader.drawWithShader` 的入口契约
-3. `BufferSource.endBatch` 的分组与顺序语义
+**spike 结果：六个图元全部画出，几何逐像素命中（误差 ≤1px），双色渐变正常，
+"整层不可见"没有复现。** 读数 `shapes=6 flushes=6 merges=0`。
 
-然后二选一定案：**(a)** uniform + 每形状 flush（成熟，ModernUI 自己也是每次 flush），
-或 **(b)** 参数搬进顶点属性换真合批。**由 spike 的数据决定，不由讨论决定。**
+### 实施中的两处修正（与原计划的差异）
+
+- **坐标语义改为跟随 `GuiGraphics.fill`**（当前 pose 空间），不再要求"一律屏幕绝对"。
+  真正要守的不变量是"**一个 painter 的一趟绘制里只有一种坐标空间**"；跟随 `GuiGraphics`
+  是最不会搞错的那种，因为原版所有绘制代码都是这个语义。
+- **"同 uniform 合并"的实际收益比预想小**：spike 里六个图形尺寸各异、零合并。
+  真实卡面能合并的是同尺寸的强调色条与圆徽章。1.20.1 上 uniform 是 per-draw，
+  要真合批就得把参数搬进自定义顶点属性——那是这个版本有名的坑，不做。
 
 ## 与上一版的关系
 
