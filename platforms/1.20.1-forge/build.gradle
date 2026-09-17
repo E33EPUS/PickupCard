@@ -99,6 +99,19 @@ dependencies {
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
     compileOnly 'org.spongepowered:mixin:0.8.5'
 
+    // ---- 矢量渲染引擎：NanoVG ----
+    // 【版本钉死在 3.3.1】启动日志里 MC 1.20.1 加载的是 "LWJGL version 3.3.1 build 7"。
+    // 绑定（Java 侧）和 native（C 侧）成对发布，混版本会在第一次调用时 UnsatisfiedLinkError。
+    // 【为什么是它】绑定 122 KB + 四平台 native 合计约 835 KB（win 265/linux 202/mac 197/mac-arm64 170），
+    // 是唯一同时算得上"高级"和"轻量"的矢量画布：Skija 体积大二十倍且本机有崩溃前科，
+    // ModernUI 25 MB + LGPL，而且它的圆角也是同一套 IQ SDF。
+    // 【SVG 是白送的】绑定自带 NanoSVG（nnsvgParse / NSVGImage / NSVGShape / NSVGPath），
+    // 所以"用 SVG 纯矢量绘制"既不用再加依赖，也不用自己写路径解析器。
+    implementation 'org.lwjgl:lwjgl-nanovg:3.3.1'
+    // 开发与测试期：native 直接进 classpath，LWJGL 的 SharedLibraryLoader 自己解压到临时目录。
+    // 【发布前必做】四平台 native 必须 JiJ 进 jar，否则玩家侧第一次画卡就是 UnsatisfiedLinkError。
+    runtimeOnly 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-windows'
+
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.junit.platform:junit-platform-launcher'
