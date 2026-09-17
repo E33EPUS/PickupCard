@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>PickupCard · 测量页</title>
+<!-- 参数唯一真源，然后才是组件样式；两者都不能少，顺序也不能反 -->
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="theme.css">
+<style>
+/* ===========================================================================
+   测量页：只有纯底和卡。没有标题、没有按钮、没有读数、没有辅助线。
+   ---------------------------------------------------------------------------
+   这一页是给像素扫描用的，任何多余的像素都是噪声：辅助线会被"最右非背景像素"
+   当成卡片内容，读数会挡住卡，棋盘底会让"按背景色切段"失效（两个格子都像背景）。
+
+   【为什么底色是纯黑】投影是半透明的黑，叠在纯黑上等于什么都没叠，自己就没了。
+   换成别的底色，就得给渲染加一个"关掉投影"的开关，而"投影关没关"已经有一个键了
+   （--pc-shadow-alpha）—— 再开一个口子就是第二真源。
+   *选对测量环境，比给测量加开关便宜。*
+
+   卡片内容必须与 Java 侧 CardFixtures.measure() 逐字一致，否则对照表量的是两张不同的卡。
+   =========================================================================== */
+html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
+#board { position:fixed; inset:0; background:#000; }
+
+/* 竖排、从下往上堆、右缘对齐 —— 与 Java 的 StackLayout 同一条规则：
+   最新的一张贴底，卡间距 6px，右边距 16px。 */
+.rows { position:absolute; right:16px; bottom:16px;
+        display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+</style>
+</head>
+<body>
+<div id="board">
+  <div class="rows">
+    <div class="card" style="--accent: var(--pc-accent-common)">
+      <div class="bar"></div>
+      <div class="body"><div class="box icon"><img src="icons/stone.png" alt=""></div>
+      <div class="box info"><span class="name">石头</span><span class="count">+64</span></div></div>
+    </div>
+    <div class="card" style="--accent: var(--pc-accent-uncommon)">
+      <div class="bar"></div>
+      <div class="body"><div class="box icon"><img src="icons/elytra.png" alt=""></div>
+      <div class="box info"><span class="name">鞘翅</span><span class="count">+1</span></div></div>
+    </div>
+    <div class="card" style="--accent: var(--pc-accent-rare)">
+      <div class="bar"></div>
+      <div class="body"><div class="box icon"><img src="icons/beacon.png" alt=""></div>
+      <div class="box info"><span class="name">信标</span><span class="count">+1</span></div></div>
+    </div>
+    <div class="card" style="--accent: var(--pc-accent-epic)">
+      <div class="bar"></div>
+      <div class="body"><div class="box icon"><img src="icons/dragon_egg.png" alt=""></div>
+      <div class="box info"><span class="name">龙蛋</span><span class="count">+1</span></div></div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

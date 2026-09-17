@@ -7,13 +7,24 @@
 草稿和游戏里差了"竖条该不该上下内缩""该左对齐还是右对齐"两条**结构差异**，
 而当时两边没有任何可比对的依据 —— 我看不到用户看到的，用户也说不清我看到的是什么。
 
-同一套算法跑两张图，测量口径就一致了；归一化后不同分辨率也能比。
-这张表就是 Q7 里说的"客观门"：先把能客观判定的量出来，再谈好看不好看。
+【为什么它必须配一张"测量页"】v1 是拿任意截图比的，量出来的一堆数都是垃圾，
+而且**看起来很像真的**。当时把病归在输入上（"投影把间隙填住了"），其实算法本身就是坏的：
+"从竖条右缘找第一个比竖条暗 75% 的像素"这条规则**永远**返回竖条右缘 +1，
+因为竖条比卡体亮，条件在第一个像素就不成立 —— 间隙恒等于 1px，与真实值无关。
+这个 bug 是 `design/test_measure.py` 拿合成图（已知答案）测出来的，不是看出来的。
+
+现在三层各司其职：
+    design/measure.py     看图算数（纯函数，有已知答案的测试钉着）
+    design/test_measure.py 合成图 → 断言量回来的数就是真值
+    本文件                 拒绝不可信的输入 + 把差打印成人能读的表
 
 用法：
     python design/compare.py 设计图.png 游戏截图.png
-    python design/compare.py --solo 某张图.png          # 只量一张
+    python design/compare.py --solo 某张图.png
+    python design/compare.py a.png b.png --expect 4
 """
+
+from __future__ import annotations
 
 import re
 import sys
@@ -22,15 +33,27 @@ from pathlib import Path
 import numpy as np
 from PIL import Image
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import measure  # noqa: E402
+
 ROOT = Path(__file__).resolve().parent.parent
 TOKENS = ROOT / "design" / "tokens.css"
 
-# 要从 tokens.css 读的强调色（对照工具跟着真源走，不自己另存一份）
+# 从 tokens.css 读强调色（对照工具跟着真源走，不自己另存一份）
 ACCENT_NAMES = ["common", "uncommon", "rare", "epic", "xp"]
+
+# 结构指标的报警阈值：差超过卡高的 2% 才算"差得多"。
+# 【为什么是 2%】测量分辨率是 ±1 个设备像素；卡高 64px 时那就是 1.6%。
+# 阈值比分辨率略宽一点，免得把量测噪声当成设计差异报出来。
+TOL = 0.02
+
+# 测量页专用的底色。纯黑不是随便挑的：投影是半透明的黑，叠在纯黑上等于没叠，
+# 于是"卡片之外就是纯底"成立 —— 不用为测量往渲染里加任何开关。
+MEASURE_BG = (0, 0, 0)
 
 
 def load_accents():
-    """从 tokens.css 读出 :root 里的强调色，返回 [(名字, (r,g,b))]。"""
+    """从 tokens.css 读出强调色，返回 [(名字, (r,g,b))]，顺序固定。"""
     text = re.sub(r"/\*.*?\*/", " ", TOKENS.read_text(encoding="utf-8"), flags=re.S)
     root = re.search(r":root\s*\{(.*?)\}", text, flags=re.S)
     body = root.group(1) if root else ""
@@ -39,156 +62,166 @@ def load_accents():
         m = re.search(rf"--pc-accent-{name}\s*:\s*#([0-9a-fA-F]{{6}})", body)
         if m:
             v = m.group(1)
-            out.append((name, (int(v[0:2], 16), int(v[2:4], 16), int(v[4:6], 16))))
+            out.append((name, tuple(int(v[i:i + 2], 16) for i in (0, 2, 4))))
     return out
 
 
-def background_color(a):
-    """图像里出现最多的颜色 —— 在对照稿和截图里都是背景。"""
-    flat = a.reshape(-1, 3)
-    colors, counts = np.unique(flat, axis=0, return_counts=True)
-    return colors[counts.argmax()]
-
-
-def is_bg(px, bg, tol=14):
-    return abs(int(px[0]) - int(bg[0])) + abs(int(px[1]) - int(bg[1])) + abs(int(px[2]) - int(bg[2])) <= tol * 3
-
-
-def find_bars(a, accents):
-    """
-    找出每张卡的稀有度竖条。
-    强调色同时出现在竖条和数量文字上，所以按 x 聚类后取「最高的那一簇」= 竖条。
-    """
-    bars = []
-    for name, rgb in accents:
-        m = (np.abs(a - np.array(rgb)).sum(axis=2) <= 45)
-        ys, xs = np.where(m)
-        if len(ys) == 0:
-            continue
-        # 按 x 聚类，簇间隔 > 8px 就断开
-        order = np.argsort(xs)
-        clusters, cur = [], [order[0]]
-        for i in order[1:]:
-            if xs[i] - xs[cur[-1]] <= 8:
-                cur.append(i)
-            else:
-                clusters.append(cur)
-                cur = [i]
-        clusters.append(cur)
-        # 只要"够高"的簇：强调色同时出现在数量文字上，文字那一簇矮而宽，必须排掉。
-        # 这也顺手排掉了竖条被裁一半之类的异常情况。
-        tall = [c for c in clusters if ys[c].max() - ys[c].min() >= 0.5 * (ys.max() - ys.min())]
-        if not tall:
-            tall = clusters
-        best = max(tall, key=lambda c: ys[c].max() - ys[c].min())
-        cy, cx = ys[best], xs[best]
-        bars.append({
-            "name": name,
-            "x0": int(cx.min()), "x1": int(cx.max()),
-            "y0": int(cy.min()), "y1": int(cy.max()),
-        })
-    bars.sort(key=lambda b: b["y0"])
-    return bars
-
-
-def measure(path):
-    a = np.array(Image.open(path).convert("RGB")).astype(int)
-    bg = background_color(a)
-    bars = find_bars(a, load_accents())
-    if not bars:
-        return None
-
-    # 卡体：从竖条右缘往右扫竖条中线那一行，找第一段"非背景"
-    for b in bars:
-        row = (b["y0"] + b["y1"]) // 2
-        # 竖条右缘往右，找第一个"明显比竖条暗"的像素 = 卡体起点。
-        # 不用"回到背景色"是因为阴影可能把间隙填住，那样会量成 0。
-        bar_px = a[row, b["x0"]:b["x1"] + 1].mean(axis=0)
-        x = b["x1"] + 1
-        limit = min(a.shape[1], b["x1"] + 200)
-        while x < limit and a[row, x].sum() > bar_px.sum() * 0.75:
-            x += 1
-        b["body_x0"] = x
-        # 卡体右缘：从 body_x0 往后，最后一个非背景像素（允许中间有背景，比如两个框之间的缝）
-        x2 = x
-        last = x
-        gap = 0
-        while x2 < a.shape[1] and gap < 40:
-            if is_bg(a[row, x2], bg):
-                gap += 1
-            else:
-                last = x2
-                gap = 0
-            x2 += 1
-        b["body_x1"] = last
-        # 卡体高度：在卡体中部一列，量非背景的垂直跨度
-        col = (b["body_x0"] + b["body_x1"]) // 2
-        y = b["y0"]
-        while y > 0 and not is_bg(a[y, col], bg):
-            y -= 1
-        top = y + 1
-        y = b["y1"]
-        while y < a.shape[0] - 1 and not is_bg(a[y, col], bg):
-            y += 1
-        b["card_y0"], b["card_y1"] = top, y - 1
-    return {"bars": bars, "bg": bg, "size": a.shape[:2]}
-
-
-def report(label, m):
-    if m is None:
-        print(f"  {label}: 没检出卡片")
-        return None
-    bars = m["bars"]
-    h = np.median([b["card_y1"] - b["card_y0"] + 1 for b in bars])
-    pitch = np.median(np.diff([b["y0"] for b in bars])) if len(bars) > 1 else float("nan")
-    bar_h = np.median([b["y1"] - b["y0"] + 1 for b in bars])
-    bar_w = np.median([b["x1"] - b["x0"] + 1 for b in bars])
-    gap_bar = np.median([b["body_x0"] - b["x1"] for b in bars])
-    lefts = [b["x0"] for b in bars]
-    rights = [b["body_x1"] for b in bars]
-    print(f"  {label}  ({m['size'][1]}x{m['size'][0]}, {len(bars)} 张卡, 卡高 {h:.0f}px)")
+def measure_one(path: Path, expect: int | None):
+    """读一张图 → 量它 → 顺手回答"这份输入能不能用"。量不出卡就返回 None。"""
+    a = np.array(Image.open(path).convert("RGB")).astype(np.int64)
+    flat = measure.flatness(a, MEASURE_BG)
+    problems = []
+    if flat < 0.4:
+        problems.append(
+            f"纯底只占 {flat:.0%} —— 这不是一张测量页。棋盘格/世界画面/辅助线都会让"
+            f"按底色切段失效。实现侧跑 -PharnessAuto=shot 会出 pickupcard-measure；"
+            f"设计侧跑 python design/shot.py design/measure.html")
+    m = measure.measure_cards(a, load_accents(), bg=MEASURE_BG)
+    if expect is not None:
+        problems += measure.check_card_count(m, expect)
+    # 【为什么没量到卡也返回一份结果】因为"量不到"的原因必须报给用户 ——
+    # "纯底只占 12%，这是世界画面"比"没量到卡"有用得多。
+    mm = measure.metrics(m) if m["cards"] else None
     return {
-        "卡高": h,
-        "竖条宽 / 卡高": bar_w / h,
-        "竖条高 / 卡高": bar_h / h,
-        "条-卡体间距 / 卡高": gap_bar / h,
-        "级差 / 卡高": pitch / h,
-        "竖条左缘极差 / 卡高": (max(lefts) - min(lefts)) / h,
-        "卡体右缘极差 / 卡高": (max(rights) - min(rights)) / h,
-        "卡总宽 / 卡高": np.median([b["body_x1"] - b["x0"] + 1 for b in bars]) / h,
+        "m": m,
+        "metrics": mm,
+        "fixed": measure.fixed_edge(mm) if mm else None,
+        "px": int(round(mm["卡高"])) if mm else None,
+        "flat": flat,
+        "problems": problems,
+        "notes": m.get("notes", []),
+        "path": path,
     }
 
 
+def summarize_notes(notes: list[str]) -> str:
+    """把一堆"某个行带里没竖条"的记账合成一句，别把报告淹掉。"""
+    if not notes:
+        return "无可疑行带"
+    per: dict[str, int] = {}
+    other = 0
+    for n in notes:
+        head = n.split(":", 1)[0]
+        if head in ACCENT_NAMES:
+            per[head] = per.get(head, 0) + 1
+        else:
+            other += 1
+    parts = [f"{k} {v}" for k, v in per.items()]
+    if other:
+        parts.append(f"其它 {other}")
+    return (f"跳过 {len(notes)} 个没有竖条的行带（" + "、".join(parts)
+            + "）—— 多半是物品贴图用了同一个颜色")
+
+
+def report(label: str, one) -> None:
+    m = one["m"]
+    per = measure.count_by_accent(m)
+    got = " ".join(f"{k}×{v}" for k, v in per.items()) or "一张都没有"
+    tall = f"卡高 {one['px']:.0f}px" if one["px"] else "卡高 ——"
+    print(f"  {label:<8}{one['path'].name:<26}{m['size'][1]}x{m['size'][0]}"
+          f"  纯底 {one['flat']:.0%}  {tall}  卡数 {len(m['cards'])}（{got}）")
+    if m["cards"]:
+        print(f"          {summarize_notes(one['notes'])}")
+    for p in one["problems"]:
+        print(f"      · {p}")
+
+
+def table(first: dict, second: dict) -> int:
+    """打印对照表。返回退出码：结构项不一致 = 客观门没过。"""
+    a, b = first["metrics"], second["metrics"]
+    head = f"  {'指标':<28}{'设计':>10}{'实现':>10}{'差异':>10}"
+    print()
+    print(head)
+    print("  " + "-" * 58)
+    bad: list[str] = []
+    for kind, name in measure.METRICS:
+        d, i = a[name], b[name]
+        if kind == measure.REF:
+            print(f"  {name:<28}{d:>10.1f}{i:>10.1f}{'':>10}   （绝对值，不比较）")
+            continue
+        diff = i - d
+        if kind == measure.STRUCT:
+            flag = "  ← 差得多" if abs(diff) > TOL else ""
+            if flag:
+                bad.append(f"{name} 差 {diff:+.3f}")
+        else:
+            flag = "  （跟着字体走，只报不判）"
+        print(f"  {name:<28}{d:>10.3f}{i:>10.3f}{diff:>+10.3f}{flag}")
+
+    fa, fb = first["fixed"], second["fixed"]
+    mark = "" if fa == fb else "  ← 差得多"
+    print()
+    print(f"  {'固定的是哪条边':<26}{fa:>10}{fb:>10}{mark}")
+    if fa != fb:
+        bad.append(f"固定边 {fa} vs {fb}")
+
+    res = 1.0 / min(first["px"], second["px"])
+    print()
+    print("  说明：结构项按卡高归一，两边分辨率不同也能比。")
+    print("        内容项里卡宽跟着字体走（浏览器和游戏不是一个字体），差异是必然的。")
+    print(f"        测量分辨率 ±1 设备像素 = 卡高的 {res:.1%}，报警阈值 {TOL:.0%}。")
+    print()
+    if bad:
+        print("  客观门：不合格 —— " + "；".join(bad))
+        return 1
+    print("  客观门：结构项全部一致")
+    return 0
+
+
+def solo(path: Path, expect: int | None) -> int:
+    one = measure_one(path, expect)
+    print(f"单张测量：{path}")
+    print()
+    report("实测", one)
+    if one["metrics"] is None:
+        return 1
+    print()
+    for kind, name in measure.METRICS:
+        print(f"  [{kind}] {name:<28}{one['metrics'][name]:>10.3f}")
+    print()
+    print(f"  固定的是哪条边：{one['fixed']}")
+    return 1 if one["problems"] else 0
+
+
 def main() -> int:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    if "--solo" in sys.argv:
+    argv = sys.argv[1:]
+    expect = None
+    if "--expect" in argv:
+        k = argv.index("--expect")
+        expect = int(argv[k + 1])
+        del argv[k:k + 2]
+    args = [a for a in argv if not a.startswith("--")]
+
+    if "--solo" in argv:
         if not args:
             print(__doc__)
             return 1
-        print(f"单张测量：{args[0]}")
-        report("实测", measure(args[0]))
-        return 0
+        return solo(Path(args[0]), expect)
+
     if len(args) != 2:
         print(__doc__)
         return 1
 
-    print("按卡高归一后的对照（同一个算法跑两张图，口径一致）\n")
-    design = report(f"设计 {Path(args[0]).name}", measure(args[0]))
-    impl = report(f"实现 {Path(args[1]).name}", measure(args[1]))
-    if not design or not impl:
+    design = measure_one(Path(args[0]), expect)
+    impl = measure_one(Path(args[1]), expect)
+
+    print("输入检查（两边都必须是「卡片之外空无一物」的测量页）")
+    print()
+    report("设计", design)
+    report("实现", impl)
+    if design["metrics"] is None or impl["metrics"] is None:
+        print()
+        print("量不出卡，先修输入 —— 拿着一堆理由在上面。")
         return 1
 
-    print(f"\n  {'指标':<22}{'设计':>10}{'实现':>10}{'差异':>10}")
-    print("  " + "-" * 52)
-    for k in design:
-        d, i = design[k], impl[k]
-        diff = i - d
-        flag = ""
-        if k != "卡高" and abs(diff) > 0.03:
-            flag = "  ← 差得多"
-        print(f"  {k:<22}{d:>10.3f}{i:>10.3f}{diff:>+10.3f}{flag}")
-    print("\n  说明：竖条左缘极差 / 卡体右缘极差 = 0 表示那条边对齐；越大越参差。")
-    return 0
+    nd, ni = len(design["m"]["cards"]), len(impl["m"]["cards"])
+    if nd != ni:
+        print()
+        print(f"两边的卡数不一样（{nd} vs {ni}），逐项对比是在比不同的东西。")
+        print("先把样例集对齐：设计侧 design/measure.html、实现侧 CardFixtures.measure()。")
+        return 1
+
+    return table(design, impl)
 
 
 if __name__ == "__main__":
