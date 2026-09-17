@@ -1,102 +1,59 @@
 /* ===========================================================================
-   PickupCard · 主题 token
-   ★ 唯一会被 tools/css_tokens.py 抽取的部分。只放标量：长度 / 颜色 / 时长。
-   几何与文字宽度一律不在这里 —— 卡宽在游戏里跟名字走，浏览器里算不准，
-   那部分永远不进转换（Q2 / Q4）。
+   PickupCard · 草稿页面组件
+   ---------------------------------------------------------------------------
+   ★ 这里**不定义任何产品参数**。颜色、半径、内边距、时长全部来自 tokens.css
+     （`<link rel="stylesheet" href="tokens.css">` 必须在本文之前）。
 
-   两个预设：默认深色玻璃，可选浅色。切换靠 <html data-theme="light">。
-   以后配置界面要暴露的就是这一组键，所以每个键都必须能独立起作用 ——
-   "改了没反应"的旋钮比没有旋钮更糟。
+   【为什么把旧的那份 token 块删掉】v1 的 theme.css 里也有一份 :root，
+     和 tokens.css 重名了 18 个键。抽取器只管 tokens.css，所以改了 tokens.css
+     以后草稿页面纹丝不动 —— 而"改了没反应"正是这个项目要治的病，
+     只不过这次的病人是设计稿自己。
+     现在两边引用同一个文件，草稿与游戏不可能再漂。
+
+   本文只放"草稿页面怎么摆"这个层面的东西：舞台底色、棋盘格、卡片 DOM 结构。
+   这些**不参与 token 转换**（游戏里由 harness 自己铺底、由 Java 画卡）。
    =========================================================================== */
+
+/* 草稿舞台专用，不是产品参数，所以不叫 --pc-* */
 :root {
-  /* ---- 几何 ---- */
-  --pc-radius: 6px;
-  --pc-pad-h: 6px;
-  --pc-pad-v: 4px;
-  --pc-gap: 4px;
-  --pc-icon: 24px;
-  --pc-bar-w: 5px;
-
-  /* ---- 阴影：模糊半径 0 = 硬边（可 1:1 映射到 SDF）；>0 需要额外成本 ---- */
-  --pc-shadow-dy: 3px;
-  --pc-shadow-blur: 6px;
-  --pc-shadow-strength: 0.35;
-
-  /* ---- 稀有度强调色：与 RarityAccent 一一对应；RarityCore 在场时由它接管七档 ---- */
-  --pc-accent-common: #9AA4AD;
-  --pc-accent-uncommon: #FFD83D;
-  --pc-accent-rare: #55EBFF;
-  --pc-accent-epic: #D78BFF;
-  --pc-accent-xp: #7DFF8A;
+  --draft-stage-bg: #202028;
+  --draft-stage-cell: #2C2C36;
 }
-
-/* ===================== 预设：深色玻璃（默认） ===================== */
-:root,
-:root[data-theme="dark"] {
-  --pc-fill-top: #262B38D1;
-  --pc-fill-bottom: #161A22DB;
-  --pc-border: #FFFFFF2E;
-  --pc-highlight: #FFFFFF3C;
-  --pc-name: #EBEFF6F0;
-  --pc-stage-bg: #202028;
-  --pc-stage-cell: #2C2C36;
-}
-
-/* ===================== 预设：浅色 ===================== */
-/* 强调色在浅底上要压深一档，否则黄/青会糊在白底里 —— 这是浅色主题唯一
-   不能靠"把底色换白"解决的部分。 */
-:root[data-theme="light"] {
-  --pc-fill-top: #FFFFFFF2;
-  --pc-fill-bottom: #E9ECF3F7;
-  --pc-border: #1B1F2724;
-  --pc-highlight: #FFFFFFCC;
-  --pc-name: #1B1F27F0;
-  --pc-stage-bg: #D8DCE4;
-  --pc-stage-cell: #C9CED8;
-
-  --pc-accent-common: #6B7480;
-  --pc-accent-uncommon: #C99200;
-  --pc-accent-rare: #0089A8;
-  --pc-accent-epic: #A64FD1;
-  --pc-accent-xp: #2E9E45;
-}
-
-/* ===========================================================================
-   以下为草稿页面共用的卡面组件。是草稿的"渲染器"，不进 token 转换。
-   =========================================================================== */
 
 .stage {
   position: relative;
-  background-color: var(--pc-stage-bg);
+  background-color: var(--draft-stage-bg);
   background-image:
-    linear-gradient(45deg, var(--pc-stage-cell) 25%, transparent 25%, transparent 75%, var(--pc-stage-cell) 75%),
-    linear-gradient(45deg, var(--pc-stage-cell) 25%, transparent 25%, transparent 75%, var(--pc-stage-cell) 75%);
+    linear-gradient(45deg, var(--draft-stage-cell) 25%, transparent 25%, transparent 75%, var(--draft-stage-cell) 75%),
+    linear-gradient(45deg, var(--draft-stage-cell) 25%, transparent 25%, transparent 75%, var(--draft-stage-cell) 75%);
   background-size: 24px 24px;
   background-position: 0 0, 12px 12px;
   overflow: hidden;
 }
 
-/* 一张卡 = 稀有度竖条 + 会向右长出来的内容体 */
+/* 一张卡 = 稀有度竖条 + 内容体（图标格 + 名字框） */
 .card {
   display: flex;
   align-items: stretch;
   gap: var(--pc-gap);
   height: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
   width: max-content;
-  filter: drop-shadow(0 var(--pc-shadow-dy) var(--pc-shadow-blur) rgba(0, 0, 0, var(--pc-shadow-strength)));
+  /* 投影浓度只有一份真源：--pc-shadow-alpha（0-255），和 Java 里同一把尺 */
+  filter: drop-shadow(0 var(--pc-shadow-dy) var(--pc-shadow-blur)
+                     rgba(0, 0, 0, calc(var(--pc-shadow-alpha) / 255)));
 }
-/* 硬边档：blur 0 时 drop-shadow 就是实心投影，不需要另开一条规则 */
 :root[data-shadow="none"] .card { filter: none; }
-:root[data-glow="none"] .card { filter: none; }
 
+/* 竖条上下各内缩 --pc-bar-inset-y：它比卡片矮一截，是设计稿定的比例。
+   跟 Java 的 TrioCardPainter 用的是同一个键，两边必须同时动。 */
 .bar {
   width: var(--pc-bar-w);
+  margin: var(--pc-bar-inset-y) 0;
   border-radius: var(--pc-radius);
   background: var(--accent);
   flex: none;
 }
 
-/* 内容体：宽度从 0 长到自然宽，锚在竖条右侧 —— "不断变长的长条"就是它 */
 .body {
   display: flex;
   align-items: stretch;
@@ -115,6 +72,8 @@
 }
 :root[data-highlight="none"] .box { box-shadow: none; }
 
+/* 图标格是正方形，边长 = 图标 + 上下各一份内边距 —— 与 Java 的
+   boxHeight() 是同一个式子，所以两边永远等高。 */
 .icon {
   width: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
   display: grid;

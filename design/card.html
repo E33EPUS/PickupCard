@@ -3,6 +3,8 @@
 <head>
 <meta charset="utf-8">
 <title>PickupCard · 三段式卡面草稿</title>
+<!-- tokens.css 必须在 theme.css 之前：前者是唯一参数真源，后者只用不定义 -->
+<link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="theme.css">
 <style>
 /* ---- 草稿页面自身，不进 token 转换 ---- */
@@ -25,7 +27,9 @@ button { background:#262B38; color:#BFC6D4; border:1px solid #FFFFFF1F;
 button:hover { border-color:#55EBFF66; color:#EBEFF6; }
 input[type=range] { width:110px; vertical-align:middle; }
 .board { display:inline-block; padding:16px 20px; border-radius:8px; }
-.rows { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+.rows { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
+/* 右缘对齐 = M2 定的默认版式（卡右缘固定，左缘随名字长短伸缩）。
+   这一份之前写的是 align-items:flex-start，是没跟上定案 —— 已对齐。 */
 .zoom2 { zoom:2; }
 </style>
 </head>
@@ -45,7 +49,7 @@ input[type=range] { width:110px; vertical-align:middle; }
   <label><input type="radio" name="sh" value="none"> 无</label>
   <label>偏移 <input type="range" id="sdy" min="0" max="8" value="3"><span id="sdy-v">3</span></label>
   <label>模糊 <input type="range" id="sblur" min="0" max="16" value="6"><span id="sblur-v">6</span></label>
-  <label>浓度 <input type="range" id="sstr" min="0" max="1" step="0.05" value="0.35"><span id="sstr-v">0.35</span></label>
+  <label>浓度 <input type="range" id="sstr" min="0" max="255" step="1" value="90"><span id="sstr-v">90</span></label>
   <div class="sep"></div>
   <span>顶部高光</span>
   <label><input type="radio" name="hl" value="on" checked> 有</label>
@@ -131,7 +135,8 @@ const bind = (id, cssVar) => {
 };
 bind('sdy', '--pc-shadow-dy'); bind('sblur', '--pc-shadow-blur');
 document.getElementById('sstr').oninput = e => {
-  root.style.setProperty('--pc-shadow-strength', e.target.value);
+  // 浓度只有一份真源：--pc-shadow-alpha（0-255），Java 读的是同一个键
+  root.style.setProperty('--pc-shadow-alpha', e.target.value);
   document.getElementById('sstr-v').textContent = e.target.value;
 };
 </script>
