@@ -94,6 +94,15 @@ repositories {
     }
 }
 
+// 【为什么用 JarJar 而不是 implementation】Forge 1.20.1 的开发环境不走 -cp：
+// 引导阶段用 -DlegacyClassPath.file 指向 build/classpath/runClient_minecraftClasspath.txt，
+// 那个文件只列 MC 与 Forge 的库。所以只写 implementation 时，编译过、单元测试过
+// （测试走 testRuntimeClasspath），但 runClient 里 mod 的类加载器看不到它 ——
+// 症状是 NoClassDefFoundError，且只在真的去画的那一刻才炸。
+// jarJar 是 FG6 的"把库打进 jar 并同时进开发环境"的入口：引导模块路径上已经带着
+// JarJarFileSystems，就是为这件事准备的。顺带把发布要打的 native 也一起办了。
+jarJar.enable()
+
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
     annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
@@ -111,10 +120,84 @@ dependencies {
     // 开发与测试期：native 直接进 classpath，LWJGL 的 SharedLibraryLoader 自己解压到临时目录。
     // 【发布前必做】四平台 native 必须 JiJ 进 jar，否则玩家侧第一次画卡就是 UnsatisfiedLinkError。
     runtimeOnly 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-windows'
+    // 进开发环境 + 打进 jar（四个平台都要，缺平台的症状是玩家侧 UnsatisfiedLinkError）
+    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1'
+    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-windows'
+    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-linux'
+    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-macos'
+    jarJar 'org.lwjgl:lwjgl-nanovg:3.3.1:natives-macos-arm64'
 
     testImplementation platform('org.junit:junit-bom:5.11.4')
     testImplementation 'org.junit.jupiter:junit-jupiter'
     testImplementation 'org.junit.platform:junit-platform-launcher'
+}
+
+// ---------------------------------------------------------------------------
+// 开发期把 NanoVG 塞进 runClient 的 legacy classpath
+// ---------------------------------------------------------------------------
+// 【为什么需要这一段】Forge 1.20.1 的 dev 启动不走 JVM 的 -cp：引导类
+// BootstrapLauncher 用 -DlegacyClassPath.file 指向 FG 生成的
+// build/classpath/runClient_minecraftClasspath.txt，而那个文件只列 MC 与 Forge 的库。
+// 所以第三方库只写 implementation 的话：编译过、单元测试过（测试走 testRuntimeClasspath）、
+// 但 runClient 里 mod 的类加载器看不见它 —— 报错是 NoClassDefFoundError，
+// 而且只在真的去画的那一刻才炸。
+// 【为什么不用别的办法】FG6 的 minecraft 配置不接受额外 artifact，也没有
+// minecraftImplementation 之类的东西；jarJar 只管往 jar 里打（发布用），不影响 dev 启动。
+// 所以这里做最直白的一件事：FG 写完那个文件之后，我们把该进去的 jar 追加上去。
+// 【失败要响】追加前先确认文件存在，缺文件直接抛，不然会退化成一个"跑起来但没引擎"的
+// 静默失败 —— 那正是这个项目一直在治的病。
+def nvgDevNatives = {
+    def os = System.getProperty('os.name').toLowerCase(Locale.ROOT)
+    def arch = System.getProperty('os.arch').toLowerCase(Locale.ROOT)
+    if (os.contains('windows')) {
+        return 'natives-windows'
+    }
+    if (os.contains('mac') || os.contains('darwin')) {
+        return arch.contains('aarch64') || arch.contains('arm') ? 'natives-macos-arm64' : 'natives-macos'
+    }
+    return 'natives-linux'
+}()
+
+configurations {
+    nvgDev
+}
+
+dependencies {
+    nvgDev 'org.lwjgl:lwjgl-nanovg:3.3.1'
+    nvgDev "org.lwjgl:lwjgl-nanovg:3.3.1:${nvgDevNatives}"
+}
+
+// ---------------------------------------------------------------------------
+// 开发期：把 NanoVG 摊进我们自己的 classes 目录
+// ---------------------------------------------------------------------------
+// 【为什么不能靠 classpath】Forge 的 dev 启动器把游戏类加载器建在一个"层"上，
+// 而那个层只吃 legacyClassPath 文件里的条目。实测证明过三件事：
+//   1) implementation / runtimeOnly 只让编译和单元测试通过，runClient 里看不见
+//      （报 NoClassDefFoundError）；
+//   2) 往 FG 生成的 legacy classpath 文件追加会被 runClient 自己的 action 覆盖；
+//   3) 用 jvmArg 覆盖 -DlegacyClassPath.file 会让 BootstrapLauncher 直接崩
+//      （它拿那个值去 Paths.get，不接受我们换文件）。
+// 【所以走这条】我们的 classes 目录本身就是类加载器的一个根，摊进去就一定能看见 ——
+// 效果等同于 shade，但只在开发期做（发布走 jarJar，不污染 jar）。
+// 【失败要响】找不到 jar 直接抛，不留下一个"能跑但没引擎"的静默状态。
+tasks.register('unpackNvgForDev', Copy) {
+    dependsOn 'compileJava'
+    def jars = configurations.nvgDev
+    def binding = jars.files.find { it.name.startsWith('lwjgl-nanovg-3.3.1.jar') }
+    def natives = jars.files.find { it.name.contains('natives') }
+    if (binding == null || natives == null) {
+        throw new GradleException("NanoVG 开发期摊平失败：nvgDev 里没有绑定或 native")
+    }
+    // 绑定：Java 类；native：各平台目录下的 dll/so/dylib（LWJGL 按 <os>/<arch>/... 的资源路径找）
+    from(zipTree(binding)) { include 'org/lwjgl/nanovg/**' }
+    from(zipTree(natives)) { include 'windows/**', 'linux/**', 'macos/**' }
+    into layout.buildDirectory.dir('classes/java/main')
+    outputs.upToDateWhen { false }
+    doLast { logger.lifecycle("NanoVG 开发期摊平完成 -> build/classes/java/main") }
+}
+
+tasks.matching { it.name == 'runClient' }.configureEach {
+    dependsOn 'unpackNvgForDev'
 }
 
 tasks.named('processResources', ProcessResources).configure {

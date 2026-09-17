@@ -2,6 +2,10 @@ package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.render.CardSlot;
 import com.niuqu.pickupcard.render.shape.ShapeBatch;
+import com.niuqu.pickupcard.render.nvg.NvgCanvas;
+import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
+import com.niuqu.pickupcard.rarity.RarityAccent;
+import com.niuqu.pickupcard.style.StyleModel;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -43,6 +47,7 @@ public final class DevCardScreen extends Screen {
     private boolean stats = true;
     /** 形状层 spike：只画矢量图元，不画卡。用来回答"形状到底画得出来吗"。 */
     private boolean spike;
+    private NvgCanvas nvg;
 
     public DevCardScreen() {
         super(Component.literal("PickupCard Harness"));
@@ -146,9 +151,53 @@ public final class DevCardScreen extends Screen {
         probe.roundRect(20, 140, 90, 24, 12f, 0x5A000000);            // #4 圆角
         probe.flush();
 
+        paintNvgProbe(gui);
+
         ShapeBatch.Stats st = batch.stats();
         gui.drawString(font, "shape spike: shapes=" + st.shapes()
                 + " flushes=" + st.flushes() + " merges=" + st.merges(), 8, 8, 0xFFFFFFFF, true);
+    }
+
+    /**
+     * NanoVG 探针：用矢量引擎画两张卡的外壳（竖条 + 图标格 + 名字框），坐标写死，不画图标与文字。
+     * <p>
+     * 【为什么放在 spike 页】这一页已经有自动化截图（harness 的 pickupcard-harness-spike），
+     * 所以"引擎画出来对不对"不需要新开一条验证链。第二张的竖条只画 45%，是验入场动画那一段。
+     * <p>
+     * 【为什么先 gui.flush()】前面的形状走的是原版缓冲批次，而 NanoVG 是直接 GL：
+     * 不先把批次交出去，直接 GL 那些调用会先改掉状态，批次再冲出来就错位了。
+     */
+    private void paintNvgProbe(GuiGraphics gui) {
+        gui.flush();
+        if (nvg == null) {
+            nvg = NvgCanvas.create();
+        }
+        if (nvg == null || !nvg.valid()) {
+            gui.drawString(font, "nvg: no context (see log)", 8, 176, 0xFFFF4D6D, true);
+            return;
+        }
+        StyleModel style = StyleModel.defaults();
+        float h = style.boxHeight();
+        Minecraft mc = Minecraft.getInstance();
+        nvg.begin(width, height, (float) mc.getWindow().getGuiScale());
+        try {
+            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f);
+            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f);
+        } finally {
+            nvg.end();
+        }
+        // 这行字是"GL 状态还回来了吗"的活证据：它走原版批次，而批次要等直接 GL 画完之后
+        // 才冲出去 —— 状态没还干净，它就不出来（或者花掉）。
+        gui.drawString(font, "nvg: ctx ok  bar=100% / 45%", 8, 176, 0xFF7DFF8A, true);
+    }
+
+    @Override
+    public void removed() {
+        if (nvg != null) {
+            nvg.close();
+            nvg = null;
+        }
+        super.removed();
     }
 
     /** 由自动驱动切换 spike 页。 */
