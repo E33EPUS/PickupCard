@@ -91,6 +91,11 @@ public final class DevHarness {
         private static final int QUIT_AFTER_SHOT = 40;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
+        /** 卡样例页之后的最后一页：形状层 spike（不画卡，只画矢量图元）。 */
+        private static final int SPIKE_PAGE = PAGES.size();
+        private static final int TOTAL_PAGES = PAGES.size() + 1;
+
+        private static DevCardScreen screen;
 
         private static int ticks;
         private static int page = -1;
@@ -112,9 +117,10 @@ public final class DevHarness {
                 if (mc.getOverlay() != null) return;
                 if (mc.screen instanceof DevCardScreen) return;
 
-                mc.setScreen(new DevCardScreen());
+                screen = new DevCardScreen();
+                mc.setScreen(screen);
                 PickupCard.LOGGER.info("[harness-auto] 已打开调试屏，共 {} 页，guiScale={}",
-                        PAGES.size(), mc.getWindow().getGuiScale());
+                        TOTAL_PAGES, mc.getWindow().getGuiScale());
                 advance(mc);
                 return;
             }
@@ -130,19 +136,25 @@ public final class DevHarness {
         /** 切到下一页：清屏 → 注入 → 从头计时。页用完了就收工。 */
         private static void advance(Minecraft mc) {
             page++;
-            if (page >= PAGES.size()) {
+            if (page >= TOTAL_PAGES) {
                 PickupCard.LOGGER.info("[harness-auto] 收工，退出客户端");
                 mc.stop();
                 return;
             }
             CardFixtures.clear();
-            for (CardFixtures.Fixture fixture : PAGES.get(page)) {
-                CardFixtures.inject(fixture);
+            if (page == SPIKE_PAGE) {
+                screen.setSpike(true);
+                PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: 形状层 spike", page + 1, TOTAL_PAGES);
+            } else {
+                screen.setSpike(false);
+                for (CardFixtures.Fixture fixture : PAGES.get(page)) {
+                    CardFixtures.inject(fixture);
+                }
+                PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: {}", page + 1, TOTAL_PAGES,
+                        PAGES.get(page).stream().map(CardFixtures.Fixture::label)
+                                .collect(java.util.stream.Collectors.joining(", ")));
             }
             sinceInject = 0;
-            PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: {}", page + 1, PAGES.size(),
-                    PAGES.get(page).stream().map(CardFixtures.Fixture::label)
-                            .collect(java.util.stream.Collectors.joining(", ")));
         }
 
         private static void capture(Minecraft mc) {

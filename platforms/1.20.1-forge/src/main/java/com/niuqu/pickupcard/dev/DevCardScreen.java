@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.render.CardSlot;
+import com.niuqu.pickupcard.render.shape.ShapeBatch;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
@@ -38,6 +39,8 @@ public final class DevCardScreen extends Screen {
     /** 辅助线默认开：上一版两个坐标 bug 都靠它一眼看穿。 */
     private boolean guides = true;
     private boolean stats = true;
+    /** 形状层 spike：只画矢量图元，不画卡。用来回答"形状到底画得出来吗"。 */
+    private boolean spike;
 
     public DevCardScreen() {
         super(Component.literal("PickupCard Harness"));
@@ -63,8 +66,12 @@ public final class DevCardScreen extends Screen {
     @Override
     public void render(GuiGraphics gui, int mouseX, int mouseY, float partialTick) {
         paintBackground(gui);
-        CardStage.INSTANCE.renderInto(gui, Minecraft.getInstance());
-        if (guides) paintGuides(gui);
+        if (spike) {
+            paintShapeSpike(gui);
+        } else {
+            CardStage.INSTANCE.renderInto(gui, Minecraft.getInstance());
+            if (guides) paintGuides(gui);
+        }
         if (stats) paintStats(gui);
         super.render(gui, mouseX, mouseY, partialTick);
     }
@@ -104,6 +111,33 @@ public final class DevCardScreen extends Screen {
             gui.fill(cx - 3, cy, cx + 3, cy + 1, 0xFF4DFF88);
             gui.fill(cx, cy - 3, cx + 1, cy + 3, 0xFF4DFF88);
         }
+    }
+
+    /**
+     * 形状层 spike：五个图元各画一个，坐标写死，颜色刻意避开辅助线的红/绿。
+     * <p>
+     * 上一版"外壳整层不可见、无日志可查"就死在形状绘制这条路上。所以这里第一件事不是
+     * 把卡画好看，而是<b>先证明一个形状能出来</b>——一个出不来，五十个也不用试。
+     */
+    private void paintShapeSpike(GuiGraphics gui) {
+        ShapeBatch batch = new ShapeBatch(gui);
+        float y = 40f;
+        batch.roundRect(20, y, 120, 24, 12, 0xFFE040FB);              // 胶囊填充（洋红）
+        batch.roundRectStroked(160, y, 120, 24, 12, 2f, 0xFF00E5FF);  // 胶囊描边（青）
+        batch.circle(300, y + 12, 14, 0xFFFF6E40);                    // 圆填充（橙）
+        batch.ring(345, y + 12, 14, 2f, 0xFF76FF03);                  // 圆环（黄绿）
+        batch.crescent(390, y + 12, 14, 6f, 0f, 12f, 0xFFFFD600);     // 月牙（琥珀）
+        batch.roundRectGradient(20, y + 40, 120, 24, 6, 0xFFFFFFFF, 0xFF3050FF); // 渐变
+        batch.flush();
+
+        ShapeBatch.Stats st = batch.stats();
+        gui.drawString(font, "shape spike: shapes=" + st.shapes()
+                + " flushes=" + st.flushes() + " merges=" + st.merges(), 8, 8, 0xFFFFFFFF, true);
+    }
+
+    /** 由自动驱动切换 spike 页。 */
+    public void setSpike(boolean value) {
+        this.spike = value;
     }
 
     private void paintStats(GuiGraphics gui) {
