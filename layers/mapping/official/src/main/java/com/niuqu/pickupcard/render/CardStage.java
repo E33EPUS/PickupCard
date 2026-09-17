@@ -172,10 +172,16 @@ public final class CardStage {
         }
 
         StyleModel style = styles.current(now).sanitized();
+        LayoutSettings layout = layoutSource.get().sanitized();
+        // 本帧的缩放：手动档直接用玩家给的；自动档看"账本里这几张塞不塞得进 HUD 带之上"。
+        // 用 live.size() 而不是"最终画出来的张数"是刻意的 —— 张数要先知道缩放才能定，
+        // 反过来又要先知道张数，会绕成环；用账本张数最多让卡比必要的稍小一点。
+        float scale = layout.scale(gui.guiHeight() - HudSafeZone.bottomInset(),
+                style.boxHeight(), live.size(), layout.separation());
         CardCanvas canvas = new CardCanvas(now,
                 new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(), style.bumpEnabled()),
-                style, settings, layoutSource.get().sanitized(),
-                gui.guiWidth(), gui.guiHeight());
+                style, settings, layout,
+                gui.guiWidth(), gui.guiHeight(), scale);
 
         // 退场播完的摘掉，剩下的才参与排布
         live.values().removeIf(view -> {
@@ -288,7 +294,8 @@ public final class CardStage {
         // 丢的是最老的那几张，它们在丢的这一刻本来就在堆顶之上、画布之外，玩家看不见；
         // 而且是从 live 里**摘掉**而不是"这一帧不画"：留下来的话，等新卡走掉时它们会突然冒出来。
         float cardHeight = CardMetrics.height(canvas, mc.font);
-        float separation = canvas.layout().separation();
+        // 间距跟着缩放走：卡缩到 60% 而缝还是 4px 的话，一摞卡会显得"缝比卡还宽"
+        float separation = canvas.layout().separation() * canvas.scale();
         int fits = StackLayout.fittingCount(canvas.guiHeight(), HudSafeZone.bottomInset(),
                 cardHeight, separation);
         if (fits >= 1 && fits < alive.size()) {
@@ -315,7 +322,7 @@ public final class CardStage {
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
                 sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
-                MARGIN_X, HudSafeZone.bottomInset(), canvas.layout().separation())) {
+                MARGIN_X, HudSafeZone.bottomInset(), separation)) {
             CardView view = alive.get(slot.index());
             // 右侧有东西就把这一张整体左移 —— 位移只发生在需要它的那些帧
             float x = slot.x() - HudSafeZone.shiftLeft(slot.x(), slot.width(),

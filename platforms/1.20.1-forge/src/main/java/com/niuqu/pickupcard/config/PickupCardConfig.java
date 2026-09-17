@@ -70,7 +70,8 @@ public final class PickupCardConfig {
                 VALUES.stickTo.get(),
                 VALUES.leftEdge.get(),
                 VALUES.appearMode.get(),
-                VALUES.separation.get().floatValue()).sanitized();
+                VALUES.separation.get().floatValue(),
+                VALUES.scalePercent.get()).sanitized();
     }
 
     /** 采样过滤三表。列表元素不做校验——坏规则由 FilterRule.parse 静默跳过。 */
@@ -186,6 +187,7 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.IntValue leftEdge;
         final ForgeConfigSpec.EnumValue<LayoutSettings.Appear> appearMode;
         final ForgeConfigSpec.DoubleValue separation;
+        final ForgeConfigSpec.IntValue scalePercent;
 
         // ---- [style] 外观：全部用 -1 表示"跟随主题" ----
         final ForgeConfigSpec.EnumValue<Theme> theme;
@@ -253,6 +255,13 @@ public final class PickupCardConfig {
             maxOnScreen = builder
                     .comment("同时在屏最多几张。超出的会挤掉最久没被碰过的那张。")
                     .defineInRange("maxOnScreen", 5, 1, 16);
+
+            scalePercent = builder
+                    .comment("卡片缩放（百分比）。0 = 自动：一摞卡塞不进 HUD 带之上就按比例缩小，",
+                            "最多缩到 60%，还不够才少显示几张。手动档 50..200。",
+                            "注意：预览面板按 100% 画，自动档的实际倍率要看游戏里的画面。")
+                    .defineInRange("scalePercent", LayoutSettings.AUTO_SCALE,
+                            LayoutSettings.AUTO_SCALE, LayoutSettings.MAX_SCALE_PERCENT);
 
             stickTo = builder
                     .comment("卡片靠屏幕哪一边停。一摞卡锚在屏幕下方，最新的贴底、旧的往上顶。",

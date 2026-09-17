@@ -38,7 +38,9 @@ import static org.lwjgl.nanovg.NanoVG.nvgRect;
 import static org.lwjgl.nanovg.NanoVG.nvgRestore;
 import static org.lwjgl.nanovg.NanoVG.nvgRoundedRect;
 import static org.lwjgl.nanovg.NanoVG.nvgSave;
+import static org.lwjgl.nanovg.NanoVG.nvgScale;
 import static org.lwjgl.nanovg.NanoVG.nvgScissor;
+import static org.lwjgl.nanovg.NanoVG.nvgTranslate;
 import static org.lwjgl.nanovg.NanoVG.nvgStroke;
 import static org.lwjgl.nanovg.NanoVG.nvgStrokeColor;
 import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
@@ -151,7 +153,13 @@ public final class NvgCardPainter {
                 nvgSave(vg);
                 // 退场：整张卡（外壳 + 竖条 + 微光 + 影子）一起淡，见类注释
                 nvgGlobalAlpha(vg, exitAlphaOf(canvas, slot));
-                paintShell(vg, style, slot.x(), slot.y(), slot.width(), slot.height(),
+                // 【缩放落在变换上】外壳一律按"未缩放的卡"画，位置与大小由这两个变换给。
+                // 这样竖条宽、圆角、描边、微光全都一起缩，不会出现"卡小了但边还是粗的"。
+                // NanoVG 的 scissor 也会被当前变换带走，所以 paintShell 里的裁剪框照样对。
+                float cardScale = canvas.scale();
+                nvgTranslate(vg, slot.x(), slot.y());
+                nvgScale(vg, cardScale, cardScale);
+                paintShell(vg, style, 0f, 0f, slot.width() / cardScale, slot.height() / cardScale,
                         accentOf(card), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise), rise, isHighlighted(card),
                         windowOf(canvas, slot, style, rise));
@@ -307,14 +315,18 @@ public final class NvgCardPainter {
         StyleModel style = canvas.style();
         CardView view = slot.view();
         Inbox.Card card = view.notice().payload();
-        float h = slot.height();
+        // 【内容全部在"未缩放单位"里算】缩放交给 pose；文字因此跟着一起缩，
+        // 而字形按 100% 栅格化后重采样 —— 缩小时略有锯齿，但比"卡小了字还在外面"强。
+        float cardScale = canvas.scale();
+        float h = slot.height() / cardScale;
+        float cardW = slot.width() / cardScale;
         float gap = style.gap();
         float barW = style.barWidth();
         float bodyX = barW + gap;
-        float bodyW = Math.max(0f, slot.width() - bodyX);
+        float bodyW = Math.max(0f, cardW - bodyX);
         float rise = canvas.contentOf(view);
         boolean clip = canvas.layout().appearMode() == LayoutSettings.Appear.CLIP;
-        RevealWindow win = RevealWindow.of(barW, gap, slot.width(), clip, rise);
+        RevealWindow win = RevealWindow.of(barW, gap, cardW, clip, rise);
         float shift = clip ? 0f : -(1f - rise) * bodyW;
         float alpha = exitAlphaOf(canvas, slot);
         float x = bodyX + shift;
@@ -322,6 +334,9 @@ public final class NvgCardPainter {
 
         gui.pose().pushPose();
         gui.pose().translate(slot.x(), slot.y(), 0f);
+        if (cardScale != 1f) {
+            gui.pose().scale(cardScale, cardScale, 1f);
+        }
         boolean revealing = rise < 1f;
         if (revealing) {
             scissor(gui, gui.pose(), win, h);
@@ -358,7 +373,7 @@ public final class NvgCardPainter {
             gui.drawString(font, name, Math.round(nameX + style.paddingH()), Math.round(textY),
                     fade(style.nameColor(), alpha), true);
         }
-        float countX = slot.width() + shift - style.paddingH() - font.width(count);
+        float countX = cardW + shift - style.paddingH() - font.width(count);
         gui.drawString(font, count, Math.round(countX), Math.round(textY), fade(accent, alpha), true);
 
         if (revealing) {
@@ -388,10 +403,13 @@ public final class NvgCardPainter {
      */
     public static void paintPreview(GuiGraphics gui, StyleModel style, float x, float y, float cardW,
                                     ItemStack icon, String name, String count, int accent,
-                                    boolean glow, boolean showName) {
+                                    boolean glow, boolean showName, float cardScale) {
         float h = style.boxHeight();
         float bodyX = style.barWidth() + style.gap();
         float gap = style.gap();
+        // 未缩放单位：内容按 100% 的尺寸算，缩放交给 pose 与 NanoVG 变换
+        float localW = cardW / cardScale;
+        float localH = h / cardScale;
 
         gui.flush();
         NvgCanvas nvg = NvgCanvas.shared();
@@ -399,30 +417,40 @@ public final class NvgCardPainter {
             float guiScale = (float) Minecraft.getInstance().getWindow().getGuiScale();
             nvg.begin(gui.guiWidth(), gui.guiHeight(), guiScale);
             try {
-                // 静止的最终态：竖条全开、窗口全开、不淡出
-                paintShell(nvg.handle(), style, x, y, cardW, h, accent, 1f, 0f, 1f, glow,
-                        RevealWindow.of(style.barWidth(), gap, cardW, false, 1f));
+                // 静止的最终态：竖条全开、窗口全开、不淡出。
+                // 【预览也要走缩放】预览要是按 100% 画，玩家把缩放调到 60% 时预览还在骗他。
+                long vg = nvg.handle();
+                nvgSave(vg);
+                nvgTranslate(vg, x, y);
+                nvgScale(vg, cardScale, cardScale);
+                paintShell(vg, style, 0f, 0f, localW, localH, accent, 1f, 0f, 1f, glow,
+                        RevealWindow.of(style.barWidth(), gap, localW, false, 1f));
+                nvgRestore(vg);
             } finally {
                 nvg.end();
             }
         }
 
         Font font = Minecraft.getInstance().font;
-        float scale = style.iconSize() / CardMetrics.ICON_PX;
+        float iconScale = style.iconSize() / CardMetrics.ICON_PX;
         gui.pose().pushPose();
-        gui.pose().translate(x + bodyX + h / 2f, y + h / 2f, 0f);
-        gui.pose().scale(scale, scale, 1f);
+        gui.pose().translate(x, y, 0f);
+        gui.pose().scale(cardScale, cardScale, 1f);
+        gui.pose().pushPose();
+        gui.pose().translate(bodyX + localH / 2f, localH / 2f, 0f);
+        gui.pose().scale(iconScale, iconScale, 1f);
         gui.renderItem(icon, -8, -8);
         gui.pose().popPose();
 
-        float textY = y + (h - font.lineHeight) / 2f;
+        float textY = (localH - font.lineHeight) / 2f;
         if (showName) {
             gui.drawString(font, name,
-                    Math.round(x + bodyX + h + gap + style.paddingH()), Math.round(textY),
+                    Math.round(bodyX + localH + gap + style.paddingH()), Math.round(textY),
                     style.nameColor(), true);
         }
-        gui.drawString(font, count, Math.round(x + cardW - style.paddingH() - font.width(count)),
+        gui.drawString(font, count, Math.round(localW - style.paddingH() - font.width(count)),
                 Math.round(textY), accent, true);
+        gui.pose().popPose();
     }
 
     // ------------------------------------------------------------------
@@ -431,7 +459,8 @@ public final class NvgCardPainter {
 
     /** 这一帧这张卡的隧道口。两种展开方式只差宽度，见 {@link RevealWindow#of}。 */
     private static RevealWindow windowOf(CardCanvas canvas, CardSlot slot, StyleModel style, float rise) {
-        return RevealWindow.of(style.barWidth(), style.gap(), slot.width(),
+        // 窗口是"卡内坐标"，所以要用未缩放的宽度（它在变换后的空间里被解释）
+        return RevealWindow.of(style.barWidth(), style.gap(), slot.width() / canvas.scale(),
                 canvas.layout().appearMode() == LayoutSettings.Appear.CLIP, rise);
     }
 
@@ -440,7 +469,7 @@ public final class NvgCardPainter {
         if (canvas.layout().appearMode() == LayoutSettings.Appear.CLIP) {
             return 0f;
         }
-        float bodyW = Math.max(0f, slot.width() - style.barWidth() - style.gap());
+        float bodyW = Math.max(0f, slot.width() / canvas.scale() - style.barWidth() - style.gap());
         return -(1f - rise) * bodyW;
     }
 

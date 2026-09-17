@@ -14,11 +14,25 @@ package com.niuqu.pickupcard.layout;
  *                   {@link Appear#CLIP} = 内容不动、可见范围从左往右扩大。
  * @param separation 两张卡之间的空隙（像素）。它跟卡内间隙（{@code style.gap}）不是一回事，
  *                   刻意分成两个键：一个是"卡与卡"，一个是"框与框"。
+ * @param scalePercent 卡片缩放百分比（100 = 原样）。{@link #AUTO_SCALE} = 自动：放不下就缩小
+ *                   （见 {@link #scale}）。它<b>不</b>属于主题：主题管长相，缩放管"塞不塞得下"。
  */
-public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, float separation) {
+public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, float separation,
+                             int scalePercent) {
 
     /** 卡片间距的默认值（像素）。 */
     public static final float DEFAULT_SEPARATION = 4f;
+
+    /** {@code scalePercent} = 自动：按"这一摞卡塞不塞得进可用高度"决定缩放。 */
+    public static final int AUTO_SCALE = 0;
+    /** 手动缩放的上下限（百分比）。 */
+    public static final int MIN_SCALE_PERCENT = 50;
+    public static final int MAX_SCALE_PERCENT = 200;
+    /**
+     * 自动缩放的<b>下限</b>：再小就看不清名字了 —— 到了这一步应该少显示几张卡
+     * （{@code StackLayout#fittingCount} 会接着丢掉放不下的），而不是把卡缩成一条缝。
+     */
+    public static final int MIN_AUTO_PERCENT = 60;
 
     /** 卡片靠哪一边停。 */
     public enum Side {
@@ -83,7 +97,38 @@ public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, floa
      * 名字会被软目标往左顶（{@link #autoLeftEdge} 的注释里写了这件事）。
      */
     public static LayoutSettings defaults() {
-        return new LayoutSettings(Side.LEFT, AUTO_LEFT_EDGE, Appear.SLIDE, DEFAULT_SEPARATION);
+        return new LayoutSettings(Side.LEFT, AUTO_LEFT_EDGE, Appear.SLIDE, DEFAULT_SEPARATION,
+                AUTO_SCALE);
+    }
+
+    /**
+     * 这一帧该用多大的缩放（1.0 = 100%）。
+     * <p>
+     * 【自动档怎么算】需要的高度 = 张数 × 卡高 + 间距（全按 100% 算），可用高度不够时按比例缩，
+     * 下限 {@link #MIN_AUTO_PERCENT}%；装得下就恒为 100% —— <b>空着的屏幕不该把卡撑大</b>。
+     * <p>
+     * 【为什么要它】高缩放档下画布很矮（guiScale 4 的 320×180，让开 HUD 带只剩 105px），
+     * 一摞 5 张按原尺寸是画到屏幕外面的。从前只有"丢张数"这一条路，于是玩家一次捡 5 样东西
+     * 只能看见 2 张；有了缩放，先把卡收小（最多收到 60%），还不够才丢。
+     *
+     * @param available  卡堆可用的高度（屏幕高 − HUD 带）
+     * @param cardHeight 100% 时一张卡的高
+     * @param cards      这一帧想放几张
+     * @param gap        卡与卡之间的间距（100% 时）
+     */
+    public float scale(float available, float cardHeight, int cards, float gap) {
+        if (scalePercent > 0) {
+            return scalePercent / 100f;
+        }
+        if (cards <= 0 || cardHeight <= 0f || available <= 0f) {
+            return 1f;
+        }
+        float needed = cards * cardHeight + gap * Math.max(0, cards - 1);
+        if (needed <= available) {
+            return 1f;
+        }
+        float ratio = available / needed;
+        return Math.max(MIN_AUTO_PERCENT / 100f, Math.min(1f, ratio));
     }
 
     /** 外部来的值一律过一遍：配置文件是玩家可改的，非法值不该变成崩溃或卡片消失。 */
@@ -93,7 +138,10 @@ public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, floa
                 // -1 = 自动（跟着画布算），其余是绝对 x。负数只许是 -1，别的负数按 0 处理
                 leftEdge == AUTO_LEFT_EDGE ? AUTO_LEFT_EDGE : Math.max(0, leftEdge),
                 appearMode == null ? Appear.SLIDE : appearMode,
-                Math.max(0f, Math.min(32f, separation)));
+                Math.max(0f, Math.min(32f, separation)),
+                // 0 = 自动；给了数值就夹进 50..200 —— 300% 会把卡顶出屏幕，10% 没人看得见
+                scalePercent == AUTO_SCALE ? AUTO_SCALE
+                        : Math.max(MIN_SCALE_PERCENT, Math.min(MAX_SCALE_PERCENT, scalePercent)));
     }
 
     /**

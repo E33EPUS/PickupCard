@@ -164,6 +164,8 @@ public final class PickupCardConfigScreen extends Screen {
         cell("展开方式", cycle(v.appearMode, LayoutSettings.Appear.values(),
                 PickupCardConfigScreen::appearName),
                 "火车 = 整块滑出来；拉幕 = 可见范围一点点变宽（先露图标）");
+        cell("卡片缩放", percent(v.scalePercent, eff.scalePercent()),
+                "100% 原样。「自动」= 一摞卡塞不进 HUD 带之上就按比例缩，最多缩到 60%");
         cell("同屏上限", number(v.maxOnScreen, settings.maxOnScreen(), 1, 16, 1, " 张"),
                 "同时在屏最多几张。GUI 缩放越大、画布越小，放得下的越少");
         cell("排队上限", new NvgButton("排队上限", () -> "暂未实现", null),
@@ -285,8 +287,21 @@ public final class PickupCardConfigScreen extends Screen {
         } else {
             float w = showName ? Math.max(60f, Math.min(150f, this.width - x - PAD - 4)) : 58f;
             NvgCardPainter.paintPreview(gui, style, x, y, w,
-                    new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true, showName);
+                    new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true, showName,
+                    previewScale());
         }
+    }
+
+    /**
+     * 预览该用多大的缩放。
+     * <p>
+     * 【为什么自动档在预览里恒为 100%】自动倍率取决于"游戏里那摞卡有几张、屏幕多高"，
+     * 而预览面板是另一块画布 —— 用它算出来的倍率画在面板里只会骗人。手动档是玩家的明确
+     * 选择，预览照它画；自动档的真实倍率看游戏画面（行里的说明也写了这句）。
+     */
+    private static float previewScale() {
+        int pct = PickupCardConfig.layoutSnapshot().scalePercent();
+        return pct > LayoutSettings.AUTO_SCALE ? pct / 100f : 1f;
     }
 
     /**
@@ -303,17 +318,20 @@ public final class PickupCardConfigScreen extends Screen {
         ItemStack[] icons = {
                 new ItemStack(Items.NETHER_STAR), new ItemStack(Items.BEACON), new ItemStack(Items.STONE)};
 
+        // 【尺寸全部乘上预览缩放】位置由 StackLayout 按传进去的尺寸算：卡缩了、位置不缩，
+        // 三张就会各自跑到与原布局无关的地方去。
+        float s = previewScale();
         List<StackLayout.Size> sizes = new ArrayList<>();
         for (int i = widths.length - 1; i >= 0; i--) {      // 最新的排第一（StackLayout 的约定）
-            sizes.add(new StackLayout.Size(widths[i], style.boxHeight()));
+            sizes.add(new StackLayout.Size(widths[i] * s, style.boxHeight() * s));
         }
         // 【为什么这里的底部留白是个小数字】这一块是"模拟屏"，不是真屏幕 —— 原版 HUD
         // 不在这个 90px 高的面板里，套 HudSafeZone 会把卡顶到面板外面去。
         for (StackLayout.Slot slot : StackLayout.stack(sizes, Math.max(1, (int) w), h, layout,
-                6, 4, layout.separation())) {
+                6, 4, layout.separation() * s)) {
             int i = widths.length - 1 - slot.index();
             NvgCardPainter.paintPreview(gui, style, x + slot.x(), y + slot.y(), slot.width(),
-                    icons[i], samples[i][0], samples[i][1], accents[i], i == 0, showName);
+                    icons[i], samples[i][0], samples[i][1], accents[i], i == 0, showName, s);
         }
     }
 
@@ -563,6 +581,24 @@ public final class PickupCardConfigScreen extends Screen {
 
     private NvgSlider styleTime(ForgeConfigSpec.LongValue config, long shown, long min, long max, long step) {
         return time(config, shown, min, max, step);
+    }
+
+    /**
+     * 卡片缩放：0 是个真值（「自动」），格式与锚点那一档同形。
+     * <p>
+     * 【为什么要把 1..49 夹到 50】滑条上 0 是"自动"，1..49 是空档 —— 不夹的话界面会显示
+     * "10%" 而生效的是 50%（{@code LayoutSettings#sanitized} 会夹），那就是"设了等于没设"。
+     */
+    private NvgSlider percent(ForgeConfigSpec.IntValue config, int shown) {
+        return new NvgSlider("", LayoutSettings.AUTO_SCALE, LayoutSettings.MAX_SCALE_PERCENT, 5,
+                () -> (double) config.get(),
+                v -> {
+                    int pct = (int) Math.round(v);
+                    config.set(pct <= LayoutSettings.AUTO_SCALE ? LayoutSettings.AUTO_SCALE
+                            : Math.max(LayoutSettings.MIN_SCALE_PERCENT, pct));
+                    changed();
+                },
+                v -> v <= LayoutSettings.AUTO_SCALE ? "自动" : Math.round(v) + "%");
     }
 
     /** 竖条位置：-1 是个真值（「自动」），所以范围与格式都跟普通滑条不同。 */

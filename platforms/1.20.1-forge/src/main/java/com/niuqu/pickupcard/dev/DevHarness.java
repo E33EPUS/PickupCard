@@ -426,8 +426,20 @@ public final class DevHarness {
                     com.niuqu.pickupcard.layout.StackLayout.fittingCount(
                             mc.getWindow().getGuiScaledHeight(),
                             com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
-                            CardStage.INSTANCE.previewStyle().boxHeight(),
-                            PickupCardConfig.layoutSnapshot().separation()));
+                            // 用**本帧生效的**卡高与间距算（乘上当前缩放），否则这行日志会
+                            // 在缩放档下说"放得下 7 张"而排布实际只放得下 5 张
+                            CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
+                            PickupCardConfig.layoutSnapshot().separation() * effectiveScale(mc)));
+        }
+
+        /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式）。 */
+        private static float effectiveScale(Minecraft mc) {
+            return PickupCardConfig.layoutSnapshot().scale(
+                    mc.getWindow().getGuiScaledHeight()
+                            - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
+                    CardStage.INSTANCE.previewStyle().boxHeight(),
+                    Math.max(1, CardStage.INSTANCE.stats().live()),
+                    PickupCardConfig.layoutSnapshot().separation());
         }
 
         private static void capture(Minecraft mc, String suffix) {

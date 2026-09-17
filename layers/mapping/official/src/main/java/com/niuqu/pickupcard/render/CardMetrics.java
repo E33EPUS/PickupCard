@@ -41,9 +41,9 @@ public final class CardMetrics {
     private CardMetrics() {
     }
 
-    /** 三个框的统一高度。 */
+    /** 三个框的统一高度（已按缩放放大到屏幕像素）。 */
     public static float height(CardCanvas canvas, Font font) {
-        return canvas.style().boxHeight();
+        return canvas.style().boxHeight() * canvas.scale();
     }
 
     /** 这张卡允许的最大宽度。 */
@@ -64,7 +64,7 @@ public final class CardMetrics {
         if (canvas.settings().showItemName()) {
             infoBox += gap + font.width(fittedName(canvas, font, card, count));
         }
-        return style.barWidth() + gap + style.boxHeight() + gap + infoBox;
+        return (style.barWidth() + gap + style.boxHeight() + gap + infoBox) * canvas.scale();
     }
 
     /**
@@ -80,11 +80,14 @@ public final class CardMetrics {
         // 先算"除了名字之外固定要占的宽度"，剩下的才是名字能用的
         float fixed = style.barWidth() + gap + style.boxHeight() + gap
                 + style.paddingH() * 2f + gap + font.width(canvas.countText(count));
-        float room = Math.max(0f, maxWidth(canvas) - fixed);
+        // 【全部在"未缩放单位"里算】文字是 pose 缩放后画的，字形本身按 100% 栅格化；
+        // 屏宽上限与玩家设的名字宽度都是<b>屏幕像素</b>，所以除回缩放才是这里的可用宽度。
+        float scale = canvas.scale();
+        float room = Math.max(0f, maxWidth(canvas) / scale - fixed);
         // 玩家自己设了上限就用更严的那个（0 = 没设，按屏宽比例）
         int limit = canvas.settings().nameMaxWidth();
         if (limit > 0) {
-            room = Math.min(room, limit);
+            room = Math.min(room, limit / scale);
         }
         if (font.width(name) <= room) {
             return name;
