@@ -1,0 +1,77 @@
+/* ===========================================================================
+   PickupCard · 唯一真源
+   ---------------------------------------------------------------------------
+   这个文件的 :root 是全部可调参数的唯一定义处。流程：
+
+     design/tokens.css  ──tools/css_tokens.py──▶  assets/pickupcard/styles/*.json
+                                                        │
+                                                        └─▶ Java（StyleModel）
+
+   HTML 草稿直接引本文件，所以浏览器里看到的和游戏里用的是同一组数。
+   这就是把"手抄"换成"编译"的最小版本。
+
+   【规则】:root 里只准出现下面这些名字（--pc-*），别的名字抽取器会直接失败退出，
+   不会静默忽略。原因：静默失败最毒——上一版用 AUI 时 radial-gradient 不解析也不报错，
+   改十版设计都不知道为什么没变化。
+
+   【单位】长度一律带 px，抽取器会剥掉；颜色 #RRGGBB / #RRGGBBAA；
+   开关用 0 / 1；时长用毫秒数字（不带单位）。
+   =========================================================================== */
+
+:root {
+  /* ---- 几何：谁比谁宽、谁比谁高，全在这里，两边共用 ---- */
+  --pc-radius: 6px;          /* 三个框的圆角半径 */
+  --pc-pad-h: 6px;           /* 框内水平内边距 */
+  --pc-pad-v: 4px;           /* 框内垂直内边距（卡高 = 图标 + 上下各一份） */
+  --pc-gap: 4px;             /* 框与框之间、名字与数量之间的间隙 */
+  --pc-icon: 24px;           /* 物品图标边长（原版物品是 16px） */
+  --pc-bar-w: 5px;           /* 稀有度竖条宽度 */
+  --pc-bar-inset-y: 2px;     /* 竖条上下各内缩多少 —— 0 = 与卡片齐平 */
+
+  /* ---- 材质 ---- */
+  --pc-fill-top: #262B38D1;      /* 框底色（上端） */
+  --pc-fill-bottom: #161A22DB;   /* 框底色（下端，与上端相同即纯色） */
+  --pc-border: #FFFFFF2E;        /* 框描边 */
+  --pc-highlight: #FFFFFF3C;     /* 顶部高光线，alpha=00 即不画 */
+  --pc-shadow-alpha: 90;         /* 投影不透明度 0-255，0 = 不画 */
+  --pc-shadow-dy: 3px;           /* 投影下移量 */
+  --pc-shadow-blur: 6px;         /* 投影模糊半径，有效区间约 0-8 */
+  --pc-glow-alpha: 46;           /* 稀有度微光不透明度，0 = 不画 */
+
+  /* ---- 文字 ---- */
+  --pc-name: #EBEFF6F0;      /* 物品名颜色 */
+
+  /* ---- 稀有度强调色（竖条 + 数量同色）---- */
+  /* 装了 RarityCore 时由它接管，这里的值作为无联动时的兜底 */
+  --pc-accent-common: #9AA4AD;
+  --pc-accent-uncommon: #FFD83D;
+  --pc-accent-rare: #55EBFF;
+  --pc-accent-epic: #D78BFF;
+  --pc-accent-xp: #7DFF8A;
+
+  /* ---- 动画 ---- */
+  --pc-enter-ms: 620;        /* 入场总时长；竖条占前 30%，内容从 18% 起跑 */
+  --pc-bump-ms: 300;         /* 合并时数字跳动时长 */
+  --pc-enter-enabled: 1;
+  --pc-bump-enabled: 1;
+  --pc-glow-pulse: 1;
+}
+
+/* ===========================================================================
+   预设：浅色。强调色要压深一档，否则黄/青会糊在白底上 ——
+   这是浅色主题唯一不能靠"把底色换白"解决的部分。
+   =========================================================================== */
+:root[data-theme="light"] {
+  --pc-fill-top: #FFFFFFF2;
+  --pc-fill-bottom: #E9ECF3F7;
+  --pc-border: #1B1F2724;
+  --pc-highlight: #FFFFFFCC;
+  --pc-shadow-alpha: 70;
+  --pc-name: #1B1F27F0;
+
+  --pc-accent-common: #6B7480;
+  --pc-accent-uncommon: #C99200;
+  --pc-accent-rare: #0089A8;
+  --pc-accent-epic: #A64FD1;
+  --pc-accent-xp: #2E9E45;
+}

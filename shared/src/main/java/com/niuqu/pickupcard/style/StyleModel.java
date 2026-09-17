@@ -22,8 +22,9 @@ import org.jetbrains.annotations.Nullable;
  * @param paddingH       框内水平内边距
  * @param paddingV       框内垂直内边距（决定框高：图标 + 上下各一份）
  * @param gap            框与框之间、名字与数量之间的间隙
- * @param iconScale      物品图标倍率（原版物品 16px，1.5 = 24px）
+ * @param iconSize       物品图标边长（px）。原版物品贴图是 16px，卡上再放大。
  * @param barWidth       稀有度竖条的宽度（px）
+ * @param barInsetY      竖条上下各内缩多少（px）。0 = 与卡片齐平；大于 0 时竖条比卡片矮一截。
  * @param fillTop        框底色（玻璃拟态的深色半透明）
  * @param fillBottom     框底色下端（两色相同 = 纯色）
  * @param border         框描边色
@@ -43,8 +44,9 @@ public record StyleModel(int cornerRadius,
                          int paddingH,
                          int paddingV,
                          int gap,
-                         float iconScale,
+                         int iconSize,
                          int barWidth,
+                         int barInsetY,
                          int fillTop,
                          int fillBottom,
                          int border,
@@ -62,7 +64,7 @@ public record StyleModel(int cornerRadius,
 
     public static StyleModel defaults() {
         return new StyleModel(
-                6, 6, 4, 4, 1.5f, 5,
+                6, 6, 4, 4, 24, 5, 2,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 0x3CFFFFFF, 90, 3, 6, 46,
                 0xF0EBEFF6,
@@ -76,8 +78,9 @@ public record StyleModel(int cornerRadius,
                 Math.max(2, paddingH),
                 Math.max(2, paddingV),
                 Math.max(0, gap),
-                Math.max(1f, Math.min(4f, iconScale)),
+                Math.max(8, Math.min(64, iconSize)),
                 Math.max(1, Math.min(24, barWidth)),
+                Math.max(0, Math.min(16, barInsetY)),
                 fillTop, fillBottom, border, highlight,
                 Math.max(0, Math.min(255, shadowAlpha)),
                 Math.max(0, Math.min(16, shadowOffsetY)),
@@ -89,11 +92,7 @@ public record StyleModel(int cornerRadius,
                 enterEnabled, bumpEnabled, glowPulseEnabled);
     }
 
-    /** 图标边长（px）。框高由它加两份垂直内边距推出来。 */
-    public float iconSize() {
-        return 16f * iconScale;
-    }
-
+    // iconSize() 是 record 自带的存取器，不要再定义一遍
     /** 三个框的统一高度。图标装得下，名字也就装得下。 */
     public float boxHeight() {
         return iconSize() + paddingV * 2f;
@@ -113,8 +112,9 @@ public record StyleModel(int cornerRadius,
                     i(geo, "paddingH", 6),
                     i(geo, "paddingV", 4),
                     i(geo, "gap", 4),
-                    f(geo, "iconScale", 1.5f),
+                    i(geo, "iconSize", 24),
                     i(geo, "barWidth", 5),
+                    i(geo, "barInsetY", 2),
                     color(mat, "fillTop", 0xD1262B38),
                     color(mat, "fillBottom", 0xDB161A22),
                     color(mat, "border", 0x2EFFFFFF),

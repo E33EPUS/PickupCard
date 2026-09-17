@@ -144,8 +144,11 @@ public final class TrioCardPainter implements CardPainter {
         // 3) 竖条最后画、盖在上面 —— 它是挡板，内容从它后面出来
         float bar = canvas.barOf(slot.view());
         if (bar > 0.001f) {
-            float barH = h * bar;
-            float barY = (h - barH) / 2f;
+            // 竖条上下各内缩 barInsetY：它比卡片矮一截，是设计稿定的比例
+            float inset = style.barInsetY();
+            float fullH = Math.max(0f, h - inset * 2f);
+            float barH = fullH * bar;
+            float barY = inset + (fullH - barH) / 2f;
             batch.roundRect(0, barY, barW, barH, Math.min(radius, barW / 2f), accent);
         }
 

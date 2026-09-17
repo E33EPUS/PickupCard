@@ -1,0 +1,23 @@
+{
+  "_comment": "由 tools/css_tokens.py 从 design/tokens.css 生成，不要手改。 预设：浅色。",
+  "material": {
+    "fillTop": "#FFFFFFF2",
+    "fillBottom": "#E9ECF3F7",
+    "border": "#1B1F2724",
+    "highlight": "#FFFFFFCC",
+    "shadowAlpha": 70,
+    "shadowOffsetY": 3,
+    "shadowBlur": 6,
+    "glowAlpha": 46
+  },
+  "text": {
+    "nameColor": "#1B1F27F0"
+  },
+  "accent": {
+    "common": "#6B7480",
+    "uncommon": "#C99200",
+    "rare": "#0089A8",
+    "epic": "#A64FD1",
+    "xp": "#2E9E45"
+  }
+}

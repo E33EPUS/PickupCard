@@ -1,12 +1,13 @@
 {
-  "_comment": "PickupCard 默认主题（三段式）。纯几何/材质参数，改完一秒内生效；资源包同路径可整体覆盖。颜色写法 #RRGGBBAA。",
+  "_comment": "由 tools/css_tokens.py 从 design/tokens.css 生成，不要手改。",
   "geometry": {
     "cornerRadius": 6,
     "paddingH": 6,
     "paddingV": 4,
     "gap": 4,
-    "iconScale": 1.5,
-    "barWidth": 5
+    "iconSize": 24,
+    "barWidth": 5,
+    "barInsetY": 2
   },
   "material": {
     "fillTop": "#262B38D1",
@@ -20,6 +21,13 @@
   },
   "text": {
     "nameColor": "#EBEFF6F0"
+  },
+  "accent": {
+    "common": "#9AA4AD",
+    "uncommon": "#FFD83D",
+    "rare": "#55EBFF",
+    "epic": "#D78BFF",
+    "xp": "#7DFF8A"
   },
   "animation": {
     "enterMs": 620,

@@ -87,7 +87,7 @@ public final class BaselineCardPainter implements CardPainter {
         gui.fill(0, 0, ACCENT_BAR, h, accent);
 
         float gap = style.gap();
-        float iconPx = CardMetrics.ICON_PX * style.iconScale();
+        float iconPx = CardMetrics.ICON_PX * style.iconSize();
         float textY = (h - font.lineHeight) / 2f;
         float x = style.paddingH();
 
