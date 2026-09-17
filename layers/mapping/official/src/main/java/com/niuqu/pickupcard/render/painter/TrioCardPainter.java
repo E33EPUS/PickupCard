@@ -56,8 +56,9 @@ public final class TrioCardPainter implements CardPainter {
     private static final float ENTER_RISE = 8f;
     /** 退场时的下沉量。 */
     private static final float EXIT_DROP = 12f;
-    /** 影子往四周放大的量，给软化边缘留出铺开的地方。 */
-    private static final float SHADOW_SPREAD = 3f;
+    /** 影子比卡片往四周放大的量。 */
+    private static final float SHADOW_SPREAD = 2f;
+
     /** pose 变换用的复用向量，避免逐顶点分配。 */
     private static final Vector3f POS = new Vector3f();
 
@@ -122,11 +123,20 @@ public final class TrioCardPainter implements CardPainter {
         float nameX = boxX + h + gap;
         float nameW = Math.max(0f, bodyW - h - gap);
 
-        // 1) 影子：同一个圆角矩形，边缘按 blur 软化（不新增 pass）
+        // 1) 影子：一张硬边圆角矩形。
+        //    【为什么是硬边】模糊档试过两条路，都撞在同一个未定位的问题上：
+        //      (a) SDF 软化（把距离场过渡带加宽）
+        //      (b) 多层由淡到浓的硬边矩形叠加
+        //    两者都让阴影区域出现 alpha=1 的纯色块（实测：纯黑像素 16791 / 24411），
+        //    而"只画一张半透明硬边矩形"完全正常（纯黑像素 14）。
+        //    共同点是"同一块形状被多份半透明覆盖"——根因没定位之前先不用模糊，
+        //    宁可要一个正确的硬边投影，也不要一个会糊成黑块的柔和阴影。
+        //    证据与复现步骤见 docs/plan-ui.md。
         if (style.shadowAlpha() > 0) {
-            batch.shadow(boxX - SHADOW_SPREAD, style.shadowOffsetY() - SHADOW_SPREAD,
-                    bodyW + SHADOW_SPREAD * 2f, h + SHADOW_SPREAD * 2f,
-                    radius, style.shadowBlur() / 2f, black(style.shadowAlpha()));
+            float spread = SHADOW_SPREAD;
+            batch.roundRect(boxX - spread, style.shadowOffsetY() - spread,
+                    bodyW + spread * 2f, h + spread * 2f,
+                    radius + spread, withAlpha(0x000000, style.shadowAlpha()));
         }
 
         // 2) 两个框

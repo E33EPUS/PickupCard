@@ -1,6 +1,5 @@
 {
-  "_comment": "PickupCard 默认主题（三段式：稀有度竖条 | 物品图标格 | 名字+数量框）。纯几何/材质参数，改完一秒内生效；资源包同路径可整体覆盖。颜色写法 #RRGGBBAA。",
-
+  "_comment": "PickupCard 默认主题（三段式）。shadowAlpha=0 是刻意的：阴影 quad 目前会把顶点 alpha 丢掉、整块渲染成不透明黑，根因未定位前不用它。详见 docs/plan-ui.md 的\"阴影未解\"一节。",
   "geometry": {
     "cornerRadius": 6,
     "paddingH": 6,
@@ -9,22 +8,19 @@
     "iconScale": 1.5,
     "barWidth": 5
   },
-
   "material": {
     "fillTop": "#262B38D1",
     "fillBottom": "#161A22DB",
     "border": "#FFFFFF2E",
     "highlight": "#FFFFFF3C",
-    "shadowAlpha": 90,
+    "shadowAlpha": 0,
     "shadowOffsetY": 3,
     "shadowBlur": 6,
     "glowAlpha": 46
   },
-
   "text": {
     "nameColor": "#EBEFF6F0"
   },
-
   "animation": {
     "enterMs": 620,
     "bumpMs": 300,
