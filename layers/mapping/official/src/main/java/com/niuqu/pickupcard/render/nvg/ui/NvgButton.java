@@ -37,7 +37,7 @@ public final class NvgButton extends NvgWidget {
     }
 
     @Override
-    public void draw(NvgUi ui) {
+    protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         if (action == null) {
             // 只读：底更暗、不画描边 —— "这里有个东西，但它现在点不动"

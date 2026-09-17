@@ -70,8 +70,29 @@ public abstract class NvgWidget {
         return pressed ? palette.wellPressed : (hovered || focused) ? palette.wellHover : palette.well;
     }
 
-    /** 画自己（形状 + 登记文字，都在 {@code ui} 上）。 */
-    public abstract void draw(NvgUi ui);
+    /**
+     * 画自己。<b>final</b>：界面靠这一次调用记下"这一帧画过谁"，子类只实现 {@link #paint}。
+     * <p>
+     * 【为什么控件要自己记这件事】"控件在、也能点，就是没画"是自绘界面的专属故障：没有原版
+     * {@code children()} 那种"加了就会被画"的保证，漏一次绘制调用的症状是**屏幕上一块空白、
+     * 而点击完全正常**（配置界面重构时标签列就这么整列空过）。控件自己知道有没有被画过，
+     * 界面每帧问一次{@code paintedIn}就够了 —— 不记账的话这种 bug 只有肉眼能发现。
+     */
+    public final void draw(NvgUi ui) {
+        this.paintedFrame = ui.now;
+        paint(ui);
+    }
+
+    /** 子类在这里画自己（形状 + 登记文字）。 */
+    protected abstract void paint(NvgUi ui);
+
+    /** 这一帧画过我吗（{@code frame} 用 {@link NvgUi#now}）。 */
+    public final boolean paintedIn(long frame) {
+        return paintedFrame == frame;
+    }
+
+    /** 子类的绘制实现里要记的帧号 —— 就是当前这一帧的时刻。 */
+    private long paintedFrame = -1L;
 
     // ------------------------------------------------------------------
     // 事件：屏幕把真实鼠标事件转给控件，命中就吃掉

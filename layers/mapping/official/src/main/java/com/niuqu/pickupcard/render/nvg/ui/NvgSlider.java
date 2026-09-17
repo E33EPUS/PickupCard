@@ -86,7 +86,7 @@ public final class NvgSlider extends NvgWidget {
     }
 
     @Override
-    public void draw(NvgUi ui) {
+    protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         double ratio = SliderMath.positionOf(value.get(), min, max);
 

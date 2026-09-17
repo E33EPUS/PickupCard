@@ -386,6 +386,7 @@ public final class DevHarness {
                 capture(mc, "stack");
                 PickupCard.LOGGER.info("[harness-auto] 布局页（长名样例在摞里）: {}", configState(mc));
                 PickupCard.LOGGER.info("[harness-auto] 配置列: {}", columnDump(mc));
+                checkPainted(mc);
                 return;
             }
             if (configTicks >= WARMUP_TICKS + 88) {
@@ -403,6 +404,23 @@ public final class DevHarness {
         private static String columnDump(Minecraft mc) {
             return mc.screen instanceof PickupCardConfigScreen screen ? screen.columnDump()
                     : "(不是配置界面)";
+        }
+
+        /**
+         * 控件自检：屏幕上的控件，这一帧是不是<b>全部</b>都被画过。
+         * <p>【为什么这条必须自动报】"控件在、也能点、就是没画"这种 bug 全绿通过：点击有效、
+         * 布局数字正确、单测也不管绘制 —— 只有人盯着截图才看得出，而这次真的漏了整整一列
+         * （标签列四条标签一个都没画，是复核截图转写文字时发现的）。控件自己记着"这帧画过没有"，
+         * 所以这里能一眼报出来。
+         */
+        private static void checkPainted(Minecraft mc) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return;
+            if (screen.paintedCount() == screen.widgetCount()) {
+                PickupCard.LOGGER.info("[harness-auto] 控件自检：{} 个控件这一帧全部画过", screen.widgetCount());
+            } else {
+                PickupCard.LOGGER.error("[harness-auto] 控件自检没过：共 {} 个控件，这一帧只画了 {} 个 —— 有控件漏了绘制调用",
+                        screen.widgetCount(), screen.paintedCount());
+            }
         }
 
         /**

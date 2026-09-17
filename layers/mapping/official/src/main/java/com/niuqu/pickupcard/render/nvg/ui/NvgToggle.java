@@ -32,7 +32,7 @@ public final class NvgToggle extends NvgWidget {
     }
 
     @Override
-    public void draw(NvgUi ui) {
+    protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         boolean on = state.get();
         float pillW = Math.min(26f, w * 0.32f);

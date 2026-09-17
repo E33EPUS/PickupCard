@@ -108,9 +108,35 @@ public final class PickupCardConfigScreen extends Screen {
             hover = Math.max(hover, row.hover.at(now));
         }
         return String.format(java.util.Locale.ROOT,
-                "页=%s 样例=%s 预览卡区=(x%.0f y%.0f w%.0f h%.0f) 换页=%.2f 强调条=%.2f 换样例=%.2f 最大行悬停=%.2f",
+                "页=%s 样例=%s 预览卡区=(x%.0f y%.0f w%.0f h%.0f) 换页=%.2f 强调条=%.2f 换样例=%.2f 最大行悬停=%.2f 画了=%s",
                 section.label, sample.label, card.x(), card.y(), card.w(), card.h(),
-                pageAnim.at(now), tabAccentAnim.at(now), previewAnim.at(now), hover);
+                pageAnim.at(now), tabAccentAnim.at(now), previewAnim.at(now), hover, paintedDump());
+    }
+
+    /**
+     * 这一帧画过几个控件 —— <b>"控件在、也能点、就是没画"的自检</b>。
+     * <p>【为什么要有这一行】标签列在重构里整列没画过一次：点击照旧有效、单测照旧全绿，
+     * 只有截图能看出来。控件自己记了"这帧画过没有"（见 {@code NvgWidget#draw}），
+     * 界面每帧数一遍 —— 数出来不是满的，就是漏了绘制调用。
+     */
+    private String paintedDump() {
+        return paintedCount() + "/" + widgetCount();
+    }
+
+    /** 这一帧画过几个控件。 */
+    public int paintedCount() {
+        int painted = 0;
+        for (NvgWidget w : widgets()) {
+            if (w.paintedIn(now)) {
+                painted++;
+            }
+        }
+        return painted;
+    }
+
+    /** 这一帧一共有几个控件。 */
+    public int widgetCount() {
+        return widgets().size();
     }
 
     /**
@@ -293,7 +319,7 @@ public final class PickupCardConfigScreen extends Screen {
         }
 
         @Override
-        public void draw(NvgUi ui) {
+        protected void paint(NvgUi ui) {
             NvgPalette p = ui.palette;
             boolean on = selected.getAsBoolean();
             ui.well(x, y, w, h, on ? p.wellHover : wellColor(p));
@@ -496,6 +522,12 @@ public final class PickupCardConfigScreen extends Screen {
             if (ui != null) {
                 drawChrome(ui);
                 drawTabAccent(ui);
+                // 【标签列必须自己画一遍】它不参与配置列的裁剪与换页淡入（换页时它不动），
+                // 所以不在下面那个循环里 —— 重构时漏掉这一行，屏幕上就是"标签列空着、只有
+                // 一条强调条"，而点击照样有效（控件在、只是没画）。
+                for (NvgWidget w : tabButtons) {
+                    w.draw(ui);
+                }
                 // 配置项那一列：裁剪到视口里 —— 滚出去的行不许糊在标签列或预览列上。
                 // 形状（NanoVG）与文字（原版批次）两套裁剪由 pushClip 一次设好。
                 if (itemsScroll != null) {

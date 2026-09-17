@@ -84,7 +84,7 @@ public final class NvgTextField extends NvgWidget {
     }
 
     @Override
-    public void draw(NvgUi ui) {
+    protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         ui.well(x, y, w, h, wellColor(p));
         String shown = editing ? draft : value.get();
