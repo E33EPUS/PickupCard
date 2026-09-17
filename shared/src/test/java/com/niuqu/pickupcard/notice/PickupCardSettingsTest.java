@@ -32,7 +32,7 @@ class PickupCardSettingsTest {
 
     @Test
     void switchesSurviveSanitizing() {
-        PickupCardSettings off = new PickupCardSettings(1_000L, 100L, true, 500L, 3,
+        PickupCardSettings off = new PickupCardSettings(1_000L, 100L, true, 3,
                 CountFormat.PLAIN, false, false, true, 0).sanitized();
         assertTrue(!off.enabled(), "总开关不该被夹没了");
         assertTrue(!off.showItemName());
@@ -40,7 +40,7 @@ class PickupCardSettingsTest {
     }
 
     private static PickupCardSettings settingsWithNameWidth(int width) {
-        return new PickupCardSettings(1_000L, 100L, true, 500L, 3,
+        return new PickupCardSettings(1_000L, 100L, true, 3,
                 CountFormat.PLUS, true, true, false, width).sanitized();
     }
 }

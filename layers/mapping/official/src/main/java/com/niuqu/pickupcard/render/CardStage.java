@@ -178,8 +178,21 @@ public final class CardStage {
                 gui.guiWidth(), gui.guiHeight());
 
         // 退场播完的摘掉，剩下的才参与排布
-        live.values().removeIf(view -> view.exiting()
-                && CardTimeline.exit(now, view.exitStartAt(), settings.exitMs()) >= 1f);
+        live.values().removeIf(view -> {
+            boolean done = view.exiting()
+                    && CardTimeline.exit(now, view.exitStartAt(), settings.exitMs()) >= 1f;
+            if (done) {
+                Inbox.INSTANCE.forgetLeft(view.key());
+            }
+            return done;
+        });
+
+        // 淡回播完的复位 —— 不做这一步的话 exitStartAt 还挂着，它下一次退场会从半路开始
+        for (CardView view : live.values()) {
+            if (view.reviving() && canvas.reviveOf(view) >= 1f) {
+                view.endRevive();
+            }
+        }
         if (live.isEmpty()) {
             lastSlots = List.of();
             return;
@@ -242,10 +255,10 @@ public final class CardStage {
                 live.put(merged.notice().key(), new CardView(merged.notice()));
             } else {
                 if (view.exiting()) {
-                    // 合并会把退场撤销（absorbMerge 里 exitStartAt = NO_EXIT）—— 这是刻意设计的
-                    // 「救回来」，但它在屏幕上就是"淡到一半突然全不透明"。同样进日志。
-                    PickupCard.LOGGER.info("[救回] key={}：淡出被合并撤销，不透明度回到 1",
-                            merged.notice().key());
+                    // 合并撤销退场，但**不是瞬间回到全不透明**：CardView#beginRevive 记下起点，
+                    // 之后 160ms 补回去（用户 2026-09-17 选的这一档）。同样进日志。
+                    PickupCard.LOGGER.info("[救回] key={}：淡出改播淡回（{}ms 补回全不透明）",
+                            merged.notice().key(), CardTimeline.REVIVE_MS);
                 }
                 view.absorbMerge(merged.notice(), now);
             }
@@ -281,6 +294,7 @@ public final class CardStage {
         if (fits >= 1 && fits < alive.size()) {
             for (CardView dropped : new ArrayList<>(alive.subList(fits, alive.size()))) {
                 live.remove(dropped.key());
+                Inbox.INSTANCE.forgetLeft(dropped.key());   // 它不会再画了，账本那边也别留着
             }
             alive = new ArrayList<>(alive.subList(0, fits));
         }

@@ -19,6 +19,15 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     }
 
     /**
+     * 「淡回」的时长：被救回时，不透明度从当前位置补回 1 所需的时间。
+     * <p>
+     * 【为什么不是瞬间回到 1】从前那一版就是瞬间的 —— 屏幕上看是「淡到一半突然全不透明」，
+     * 也就是用户 2026-09-17 报的那个 bug。他在三个选项里选了这一档（淡回）：160ms 刚好
+     * 让人觉得「这张卡又活了」，又不至于慢到像重播一遍入场。
+     */
+    public static final long REVIVE_MS = 160L;
+
+    /**
      * 入场两段的窗口 —— 2026-09-17 定的节奏，配 {@code --pc-enter-ms: 480}：
      * <pre>
      *   0 ──── 240ms ───── 403ms ──── 480ms

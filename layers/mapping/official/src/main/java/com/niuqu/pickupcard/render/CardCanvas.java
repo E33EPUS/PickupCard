@@ -3,6 +3,7 @@ package com.niuqu.pickupcard.render;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.style.CardTimeline;
+import com.niuqu.pickupcard.style.Easing;
 import com.niuqu.pickupcard.style.StyleModel;
 
 /**
@@ -56,6 +57,35 @@ public record CardCanvas(long now,
     public float exitOf(CardView view) {
         if (!view.exiting()) return 0f;
         return CardTimeline.exit(now, view.exitStartAt(), settings.exitMs());
+    }
+
+    /** 淡回进度 ∈ [0,1]，1 = 已经回到全不透明；没在淡回时是 0。 */
+    public float reviveOf(CardView view) {
+        if (!view.reviving()) {
+            return 0f;
+        }
+        long ms = CardTimeline.REVIVE_MS;
+        return ms <= 0L ? 1f : Easing.clamp01((now - view.reviveAt()) / (float) ms);
+    }
+
+    /**
+     * 这一帧该给这张卡的不透明度：退场是 1 → 0；淡回是从「撤消那一刻的 alpha」→ 1。
+     * <p>
+     * 【为什么两件事写在同一个方法里】外壳（NanoVG 的 {@code nvgGlobalAlpha}）与内容（图标的
+     * 调制色、文字的颜色）必须拿到同一个数 —— 分散在两处迟早对不上，而「内容没跟着淡」
+     * 正是这类 bug 的样子。
+     */
+    public float exitAlphaOf(CardView view) {
+        if (view.reviving()) {
+            // 撤消那一刻的不透明度：按「退场已经播到哪儿」算，跟当时画出的那一帧一致
+            float from = 1f - Easing.easeOutCubic(
+                    CardTimeline.exit(view.reviveAt(), view.exitStartAt(), settings.exitMs()));
+            return from + (1f - from) * Easing.easeOutCubic(reviveOf(view));
+        }
+        if (!view.exiting()) {
+            return 1f;
+        }
+        return 1f - Easing.easeOutCubic(exitOf(view));
     }
 
     /** 数量该怎么写（`+64` / `×64` / `+1.2K`…）。 */

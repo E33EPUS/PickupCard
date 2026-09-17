@@ -20,6 +20,8 @@ public final class CardView {
     private Notice<Inbox.Card> notice;
     private long lastBumpAt = -1L;
     private long exitStartAt = NO_EXIT;
+    /** 淡回的起点（被救回时记）；{@code NO_EXIT} = 没在淡回。 */
+    private long reviveAt = NO_EXIT;
 
     public CardView(Notice<Inbox.Card> notice) {
         this.notice = notice;
@@ -41,15 +43,46 @@ public final class CardView {
         return exitStartAt;
     }
 
+    /** 正在退场。淡回中的卡不算（它是活的：既不该被摘掉，也不该被再判一次退场）。 */
     public boolean exiting() {
-        return exitStartAt != NO_EXIT;
+        return exitStartAt != NO_EXIT && reviveAt == NO_EXIT;
     }
 
-    /** 合并：换掉账本快照，顺便让数字跳一下，并把正在退场的卡拽回来。 */
+    /** 正在淡回：退场被撤销，不透明度从撤消那一刻往回补到 1。 */
+    public boolean reviving() {
+        return reviveAt != NO_EXIT;
+    }
+
+    /** 淡回是从哪一刻开始的（画 alpha 用）。 */
+    public long reviveAt() {
+        return reviveAt;
+    }
+
+    /**
+     * 被救回（同一个物品又捡到了）：不瞬间回到全不透明，而是从「退场已经播到哪儿」补回去，
+     * 时长见 {@link com.niuqu.pickupcard.style.CardTimeline#REVIVE_MS}。
+     */
+    public void beginRevive(long now) {
+        if (exitStartAt != NO_EXIT && reviveAt == NO_EXIT) {
+            reviveAt = now;
+        }
+    }
+
+    /** 淡回播完：这一张重新算「活着」（exitStartAt 一起清，否则下次退场会从半路开始）。 */
+    public void endRevive() {
+        if (reviveAt != NO_EXIT) {
+            exitStartAt = NO_EXIT;
+            reviveAt = NO_EXIT;
+        }
+    }
+
+    /** 合并：换掉账本快照，顺便让数字跳一下。正在退场的那张改播「淡回」。 */
     public void absorbMerge(Notice<Inbox.Card> merged, long now) {
         this.notice = merged;
         this.lastBumpAt = now;
-        this.exitStartAt = NO_EXIT;
+        if (exitStartAt != NO_EXIT) {
+            beginRevive(now);
+        }
     }
 
     /** 开始退场。已经在退场中的不重来（否则每 tick 都会被推后）。 */

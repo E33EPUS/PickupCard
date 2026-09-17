@@ -9,30 +9,16 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MergeWindowTest {
 
     @Test
-    @DisplayName("窗口 <= 0 表示彻底关掉合并")
-    void zeroWindowDisablesMerge() {
-        assertFalse(MergeWindow.shouldMerge(true, true, 0L, 0L));
-        assertFalse(MergeWindow.shouldMerge(true, true, 0L, -5L));
+    @DisplayName("合并关掉时一律不并：调用方于是每次单开一张")
+    void disabledNeverMerges() {
+        assertFalse(MergeWindow.shouldMerge(true, true, false));
     }
 
     @Test
     @DisplayName("item 或外观任一对不上就不并")
     void bothKeysMustMatch() {
-        assertFalse(MergeWindow.shouldMerge(false, true, 0L, 1_200L));
-        assertFalse(MergeWindow.shouldMerge(true, false, 0L, 1_200L));
-        assertTrue(MergeWindow.shouldMerge(true, true, 0L, 1_200L));
-    }
-
-    @Test
-    @DisplayName("边界是闭区间：正好等于窗口仍算并")
-    void boundaryIsInclusive() {
-        assertTrue(MergeWindow.shouldMerge(true, true, 1_200L, 1_200L));
-        assertFalse(MergeWindow.shouldMerge(true, true, 1_201L, 1_200L));
-    }
-
-    @Test
-    @DisplayName("负的间隔（时钟回拨/乱序）当作刚发生，并起来")
-    void negativeIntervalCountsAsNow() {
-        assertTrue(MergeWindow.shouldMerge(true, true, -50L, 1_200L));
+        assertFalse(MergeWindow.shouldMerge(false, true, true), "不是同一个物品");
+        assertFalse(MergeWindow.shouldMerge(true, false, true), "同一物品但外观档位不同");
+        assertTrue(MergeWindow.shouldMerge(true, true, true));
     }
 }

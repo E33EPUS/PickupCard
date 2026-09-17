@@ -131,7 +131,7 @@ public final class Inbox {
         boolean firstTime = seen.markAndCheckFirst(key);
         Card card = new Card(content, emphasized);
         NoticeQueue.Outcome<Card> outcome = queue.absorb(key, look, card, count, firstTime, now,
-                settings().mergeEnabled(), settings().mergeWindowMs(), settings().maxOnScreen());
+                settings().mergeEnabled(), settings().maxOnScreen());
 
         for (Notice<Card> evicted : outcome.evicted()) {
             pending.add(new Event.Evicted(evicted));
@@ -145,6 +145,14 @@ public final class Inbox {
             }
         }
         return false;
+    }
+
+    /**
+     * 渲染层把一张卡的退场播完了：账本这边也把「离开中」的记忘掉（此后再捡到同一个物品
+     * 就是新的一张卡，而不是"救回一张已经不在屏幕上的卡"）。
+     */
+    public void forgetLeft(String key) {
+        queue.forgetLeft(key);
     }
 
     /**

@@ -137,13 +137,15 @@ public final class NvgCardPainter {
             for (CardSlot slot : slots) {
                 float rise = canvas.contentOf(slot.view());
                 Inbox.Card card = slot.view().notice().payload();
-                if (slot.view().exiting()) {
+                if (slot.view().exiting() || slot.view().reviving()) {
                     // 【为什么要这一行】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。
                     // 这件事只有逐帧数值能定死：alpha 一路单调到 0 说明问题在绘制那一路；
                     // alpha 中途跳回 1 就是这张卡被救回来 / 重挂了（见 CardView#absorbMerge）。
                     // 退场只有十几帧，不会刷屏。
-                    PickupCard.LOGGER.info("[退场] key={} 进度={} alpha={}", slot.view().key(),
-                            String.format(java.util.Locale.ROOT, "%.2f", canvas.exitOf(slot.view())),
+                    PickupCard.LOGGER.info("[退场/淡回] key={} 进度={} alpha={}", slot.view().key(),
+                            String.format(java.util.Locale.ROOT, "%.2f",
+                                    slot.view().reviving() ? canvas.reviveOf(slot.view())
+                                            : canvas.exitOf(slot.view())),
                             String.format(java.util.Locale.ROOT, "%.2f", exitAlphaOf(canvas, slot)));
                 }
                 nvgSave(vg);
@@ -451,7 +453,7 @@ public final class NvgCardPainter {
      * 曲线取 easeOutCubic：快出慢停，{@code Easing} 里本来就注着"透明度的默认选择"。
      */
     private static float exitAlphaOf(CardCanvas canvas, CardSlot slot) {
-        return 1f - Easing.easeOutCubic(canvas.exitOf(slot.view()));
+        return canvas.exitAlphaOf(slot.view());
     }
 
     private static int accentOf(Inbox.Card card) {

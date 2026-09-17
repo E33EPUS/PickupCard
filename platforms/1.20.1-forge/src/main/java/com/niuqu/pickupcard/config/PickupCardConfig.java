@@ -53,7 +53,6 @@ public final class PickupCardConfig {
                 VALUES.holdMs.get(),
                 VALUES.exitMs.get(),
                 VALUES.mergeEnabled.get(),
-                VALUES.mergeWindowMs.get(),
                 VALUES.maxOnScreen.get(),
                 VALUES.countFormat.get(),
                 VALUES.enabled.get(),
@@ -178,7 +177,6 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.LongValue holdMs;
         final ForgeConfigSpec.LongValue exitMs;
         final ForgeConfigSpec.BooleanValue mergeEnabled;
-        final ForgeConfigSpec.LongValue mergeWindowMs;
         final ForgeConfigSpec.IntValue maxOnScreen;
         final ForgeConfigSpec.EnumValue<CountFormat> countFormat;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
@@ -241,15 +239,11 @@ public final class PickupCardConfig {
 
             builder.pop();
 
-            builder.comment("合并：短时间内连续捡同一种东西，并成一张卡而不是弹一堆").push("merge");
+            builder.comment("合并：同一种东西连着捡，并成一张卡而不是弹一堆").push("merge");
             mergeEnabled = builder
-                    .comment("开：2 秒内连捡 64 个钻石是一张卡的数字在滚。",
-                            "关：捡几次弹几张。")
+                    .comment("开：连捡 64 个钻石是一张卡的数字在滚。",
+                            "关：捡几次弹几张（同物品在屏上只能有一张，旧的那张让位）。")
                     .define("enabled", true);
-
-            mergeWindowMs = builder
-                    .comment("合并窗口（毫秒）。超过这个间隔就单开一张新卡。")
-                    .defineInRange("windowMs", 1_200L, 0L, 10_000L);
             builder.pop();
 
             builder.comment("布局").push("layout");
