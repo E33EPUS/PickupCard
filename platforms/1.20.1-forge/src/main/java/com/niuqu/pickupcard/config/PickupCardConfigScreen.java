@@ -311,7 +311,9 @@ public final class PickupCardConfigScreen extends Screen {
                     lo.preview().w() + 4f, Math.max(0f, lo.preview().h() - 12f), p.radius,
                     0x40202A38);
         } else {
-            ui.text("预览：窗口太窄，已收起", contentLeft(), this.height - 12f, p.textDim);
+            // 【为什么右对齐】底部那行左边是悬停说明（drawHint），左对齐会跟它叠在一起
+            // —— 第一版就是这么写的，截图里两段字糊成一团。
+            ui.textRight("预览已收起（窗口太窄）", lo.items().right(), this.height - 12f, p.textDim);
         }
     }
 
