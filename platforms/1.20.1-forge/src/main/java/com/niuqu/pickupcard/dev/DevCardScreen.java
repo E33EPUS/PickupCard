@@ -5,6 +5,7 @@ import com.niuqu.pickupcard.render.shape.ShapeBatch;
 import com.niuqu.pickupcard.render.nvg.NvgCanvas;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.rarity.RarityAccent;
+import com.niuqu.pickupcard.style.RevealWindow;
 import com.niuqu.pickupcard.style.StyleModel;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.Minecraft;
@@ -186,8 +187,11 @@ public final class DevCardScreen extends Screen {
         Minecraft mc = Minecraft.getInstance();
         nvg.begin(width, height, (float) mc.getWindow().getGuiScale());
         try {
-            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f, 0f);
-            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f, 0f);
+            // 两根静态探针：一个全长竖条、一个 45% 长，只看"画出来了没有"。
+            // 窗口给满开的 —— 这里探的是 NanoVG 这条链路，不是入场那个隧道口。
+            RevealWindow open = RevealWindow.of(style.barWidth(), style.gap(), 150f, false, 1f);
+            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f, 0f, open);
+            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f, 0f, open);
         } finally {
             nvg.end();
         }

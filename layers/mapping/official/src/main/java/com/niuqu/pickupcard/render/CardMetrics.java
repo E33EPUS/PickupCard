@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.render;
 
 import com.niuqu.pickupcard.pickup.CardContent;
+import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraft.client.gui.Font;
 import net.minecraft.network.chat.Component;
@@ -23,8 +24,14 @@ public final class CardMetrics {
     /** 原版物品图标是 16×16，卡上的实际大小再乘主题里的倍率。 */
     public static final float ICON_PX = 16f;
 
-    /** 卡宽上限占屏宽的比例。 */
-    public static final float MAX_WIDTH_RATIO = 0.70f;
+    /**
+     * 卡宽上限占屏宽的比例。
+     * <p>
+     * 【为什么是引用而不是再来一个 0.70】它和竖条锚点的"要给右边留多少"是<b>同一个数</b>：
+     * 卡宽上限比锚点预留宽更大的话，每隔一段时间就会出现"卡宽到顶、竖条被软目标顶歪"的
+     * 组合。两个地方各写一份，调了一处另一处不会跟着动 —— 上一版就是这么漂的。
+     */
+    public static final float MAX_WIDTH_RATIO = LayoutSettings.CONTENT_WIDTH_RATIO;
 
     /** 名字被截断时补在末尾的省略号。 */
     private static final String ELLIPSIS = "…";

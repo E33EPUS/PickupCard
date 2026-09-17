@@ -61,3 +61,26 @@ tools/verify_targets.py    ← 结构守卫（CI 第一道闸）
 - **卡宽跟名字走**：`CardMetrics` 现量现算，所以画法必须适配可变宽度。
   "定宽贴图横拉"是上一版走不通的路（见 `decision-rendering.md`）。
 - **同屏上限由账本管**：`maxOnScreen` 满员时淘汰最久没被碰过的那张，渲染层不参与取舍。
+
+## 渲染路径：哪条是生产、哪条是回退、哪条是死的
+
+画一张卡要过几套代码，是接手时最容易走错的地方（"有个 SDF 还有个 NanoVG，到底留哪个？"）。
+所以列成一张表，**改卡面前先读它**：
+
+| 路径 | 状态 | 在哪 | 改卡面时要不要动 |
+| --- | --- | --- | --- |
+| 原版两趟（物品图标 + 中文文字） | **活的，不可替代** | `TrioCardPainter.body()` / `contentOnly()` | 要（文字用哪段、图标画多大只在这里） |
+| DOM 草稿 | **活的，视觉真源** | `design/theme.css` + `measure.html` | 要，**而且先动它** —— 它是真源，游戏跟它 |
+| NanoVG 外壳 | **生产** | `platforms/*/render/nvg/NvgCardPainter.java` | 要 |
+| SDF 整卡回退 | 活的，**第二份实现** | `TrioCardPainter` 的 `paint()`+`chrome()`+`barShapes()` | 要（NanoVG native 起不来时走它） |
+| SDF 形状层 | **活的、承重** | `render/shape/ShapeBatch` + `assets/*/shaders/core/gui_shape.*` | 要：**两条路径的影子与微光都靠它**；harness 的滑条/辅助线也用它 |
+| ~~`BaselineCardPainter`~~ | **已删**（2026-09-17） | — | 不 |
+
+### 这张表存在的理由（一次真实的账）
+
+同一条卡几何有 **3 个实现**（DOM / NanoVG / SDF 回退），于是每次改卡面都要改三处。
+2026-09-17 修"内容穿透竖条"那个 bug 时，裁剪补进了 3 条绘制路径、**漏了第 4 处**
+（NanoVG 的影子批没有窗口），用户第二遍才报回来；同一轮还发现 SDF 回退里**竖条被自己的
+裁剪吃掉**。**同一个几何写 N 遍，就一定会有 N-1 遍是错的** —— 后面要收口的话，方向是把
+"三个框"抽成一份纯数据（bar/icon/info 的 x/w/r），两个后端各自只负责"把盒子画出来"，
+那时 `compare.py` 那条"两边必须逐项对齐"的税才会消失。

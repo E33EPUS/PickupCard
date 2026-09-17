@@ -194,6 +194,35 @@ def test_fixed_edge_is_detected(align, expect):
     assert measure.fixed_edge(measure.metrics(m)) == expect
 
 
+def test_anchor_metric_sees_the_bottom_edge():
+    """
+    【这条抓的是锚点】把整堆往下挪 200px，指标就该正好少 200/卡高 —— 方向、尺度都要对。
+
+    为什么非要这条：四张卡的几何一模一样，"整堆被放到了屏幕另一头"逐张比结构是看不出来的。
+    handoff 记的那次翻车就是这么过去的（游戏底锚、草稿顶锚、方向相反，门禁全绿）。
+    """
+    size = (900, 1200)
+    cards = stack(size=size, **BASE)
+    h = cards[0].h
+    top = measure.measure_cards(render(cards, lambda c: ACCENTS[2][1], size), [ACCENTS[2]])
+    for c in cards:
+        c.y += 200
+    low = measure.measure_cards(render(cards, lambda c: ACCENTS[2][1], size), [ACCENTS[2]])
+    key = "最新那张下缘距底边 / 卡高"
+    assert measure.metrics(low)[key] == pytest.approx(
+        measure.metrics(top)[key] - 200 / h, abs=0.02)
+
+
+def test_accent_order_is_top_to_bottom():
+    """自上而下的颜色顺序必须原样报出来 —— 锚在右下角时，它是唯一认得出"谁是最新那张"的东西。"""
+    size = (900, 840)
+    palette = [ACCENTS[0], ACCENTS[1], ACCENTS[2], ACCENTS[3]]
+    cards = stack(widths=[30 * S, 46 * S, 60 * S, 84 * S], size=size)
+    rgb = {id(c): pal[1] for c, pal in zip(cards, palette)}
+    m = measure.measure_cards(render(cards, lambda c: rgb[id(c)], size), palette)
+    assert measure.accent_order(m) == [pal[0] for pal in palette]
+
+
 def test_checkerboard_background_is_rejected():
     """
     棋盘底、世界画面、辅助线都会让"按背景切段"失效。测量页必须拒收这种输入 ——

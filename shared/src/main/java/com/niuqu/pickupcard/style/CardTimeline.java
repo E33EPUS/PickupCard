@@ -23,7 +23,30 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     /** 内容从入场总时长的 18% 起跑 —— 与竖条尾部留一点重叠，两条动画才不会显得脱节。 */
     private static final float CONTENT_START = 0.18f;
 
-    /** 入场进度 ∈ [0,1]。未启用时恒为 1（直接出现在终点）。 */
+    /**
+     * 竖条展开的缓动 = 草稿里 grow 那档的 {@code cubic-bezier(.2,.9,.3,1)}。
+     * <p>
+     * 【为什么必须由本类兑现，而不是"留给渲染层顺手 easing 一下"】这正是它丢过一次的原因：
+     * 本类原来把 {@code enter()} 归一化完就交出去，注释写着"easing 在渲染层做"——
+     * 而渲染层<b>没有做</b>，于是竖条和内容都是匀速动，玩家看到的评价是"很僵硬，没有曲线"。
+     * 一条只写在注释里的约定，等于没有。
+     */
+    private static final CubicBezier BAR_CURVE = CubicBezier.BAR;
+
+    /**
+     * 内容滑出的缓动 = {@link CubicBezier#CONTENT}（Material 标准曲线）。
+     * <p>
+     * 草稿原来那条是 {@code cubic-bezier(.22,.9,.28,1)}，前段陡到 t=0.25 就走 0.757 ——
+     * 用户真机上的评价是"冲得太快/持续时间太短"。换这条之后 t=0.25 只走 0.237。
+     * **草稿的 {@code --draft-ease-content} 同步换成同一条**，两边不允许不一致。
+     */
+    private static final CubicBezier CONTENT_CURVE = CubicBezier.CONTENT;
+
+    /**
+     * 入场进度 ∈ [0,1]，<b>是归一化的钟，不是曲线</b>。未启用时恒为 1（直接出现在终点）。
+     * 曲线各自加在 {@link #bar} 与 {@link #content} 上：两段的起跑时刻不同，共用一个
+     * 已经加过缓动的 t 会把"先开竖条、再出内容"的错峰压掉。
+     */
     public float enter(long now, long bornAt) {
         if (!enterEnabled || enterMs <= 0L) return 1f;
         return Easing.clamp01((now - bornAt) / (float) enterMs);
@@ -36,7 +59,7 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
      * 表达的。合成一条就会出现"竖条还没长完、内容已经开始挤出来"，看起来像卡在了半路。
      */
     public float bar(long now, long bornAt) {
-        return window(enter(now, bornAt), 0f, BAR_END);
+        return BAR_CURVE.at(window(enter(now, bornAt), 0f, BAR_END));
     }
 
     /**
@@ -44,7 +67,7 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
      * 入场位移与缩放也用它——两处必须同源，否则外壳和文字会错位。
      */
     public float content(long now, long bornAt) {
-        return window(enter(now, bornAt), CONTENT_START, 1f);
+        return CONTENT_CURVE.at(window(enter(now, bornAt), CONTENT_START, 1f));
     }
 
     /** 把 [0,1] 的总进度映射到子区间 [a,b] 上的 [0,1]。 */

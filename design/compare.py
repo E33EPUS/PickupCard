@@ -92,6 +92,7 @@ def measure_one(path: Path, expect: int | None, bg=None):
         "m": m,
         "metrics": mm,
         "fixed": measure.fixed_edge(mm) if mm else None,
+        "order": measure.accent_order(m) if mm else None,
         "px": int(round(mm["卡高"])) if mm else None,
         "flat": flat,
         "bg": bg,
@@ -160,6 +161,19 @@ def table(first: dict, second: dict) -> int:
     print(f"  {'固定的是哪条边':<26}{fa:>10}{fb:>10}{mark}")
     if fa != fb:
         bad.append(f"固定边 {fa} vs {fb}")
+
+    # 【为什么要比颜色顺序】"最新的那张"在右下角锚定里只认得出位置、认不出身份：四张卡的
+    # 几何一模一样。顺序反了（新的在下面 vs 老的在上面）逐张比结构是查不出来的，
+    # 而它正是那次翻车真正错的地方。
+    oa, ob = first["order"], second["order"]
+    ja, jb = " → ".join(oa or []), " → ".join(ob or [])
+    mark = "" if oa == ob else "  ← 差得多"
+    # 单独一块：这两串比数字列长得多，塞进 10 字符的列里会糊成一团
+    print("  强调色自上而下（谁在最上面）")
+    print(f"    设计  {ja}")
+    print(f"    实现  {jb}{mark}")
+    if oa != ob:
+        bad.append(f"颜色顺序 {ja} vs {jb}")
 
     res = 1.0 / min(first["px"], second["px"])
     print()

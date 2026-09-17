@@ -21,6 +21,20 @@ public final class CubicBezier {
     /** CSS 的 ease，退场淡出用。 */
     public static final CubicBezier EASE = new CubicBezier(0.25f, 0.1f, 0.25f, 1f);
 
+    /**
+     * 内容滑出的曲线（Material 标准曲线）。
+     * <p>
+     * 【为什么不用草稿原来那条 {@link #SLOT}】2026-09-17 用户真机反馈："持续时间太短，
+     * 冲得太快"。{@code SLOT} 前段极陡（t=0.25 已经走了 0.757），560ms 的入场里内容
+     * 386ms 就到位了 —— 那正是"冲出来"的观感来源。这条在 t=0.25 只走 0.237，出洞的过程
+     * 才看得见。
+     * <p>
+     * **这是一次故意的偏离草稿**，所以草稿那边也同步改了（{@code --draft-ease-content}）：
+     * 偏离可以，两边不一致不行 —— 否则下次拿草稿对游戏，对出来的是个假差异。
+     * 卡片换位那条（{@code CardMove}）仍走 {@link #SLOT}，没动。
+     */
+    public static final CubicBezier CONTENT = new CubicBezier(0.4f, 0f, 0.2f, 1f);
+
     private static final int NEWTON_STEPS = 8;
     private static final int BISECTION_STEPS = 40;
     private static final float EPSILON = 1e-5f;

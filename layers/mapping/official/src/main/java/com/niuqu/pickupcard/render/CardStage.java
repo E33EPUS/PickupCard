@@ -42,11 +42,24 @@ public final class CardStage {
 
     public static final CardStage INSTANCE = new CardStage();
 
-    /** 距屏幕右/下边的留白。将来接配置（layout.anchor / margin）时从这里长出去。 */
-    private static final int MARGIN_X = 16;
-    private static final int MARGIN_Y = 16;
+    /** 距屏幕左边的留白（右缘对齐时也就是右边距）。 */
+    public static final int MARGIN_X = 16;
+    /**
+     * 距屏幕<b>下边</b>的留白 —— 不是审美数字，是**躲开原版 HUD**。
+     * <p>
+     * 【为什么是 52】MC 的底部那条带是固定的逻辑像素：快捷栏 182×22 贴着底边、水平居中，
+     * 血量/饥饿在 {@code H-39} 那条线，护甲与气泡在 {@code H-49}。整条带横跨
+     * {@code W/2±91} —— 而卡堆在右半边，正好压上去。用户报的"弹窗和物品栏位置重叠"
+     * 就是这么来的，算出来是 95×27 逻辑像素一整片盖住血量。
+     * <p>
+     * 取 52 = 护甲那一行（H−49）再留 3px 缝。**代价要认**：240 高的画布上，5 张卡只用到
+     * 240−52 = 188 里的一半多（够）；但 guiScale 5 的画布只有 144 高，144−52 = 92 只放得下
+     * 4 张 —— 所以那一档要把"最多几张"调小（配置界面里有这个键）。改小是玩家的选择，
+     * 少画一张卡却不告诉他才是 bug。
+     */
+    public static final int MARGIN_Y = 52;
     /** 卡与卡之间的间隙。跟卡内间隙（style.gap）不是一回事，刻意分开。 */
-    private static final float STACK_GAP = 4f;
+    public static final float STACK_GAP = 4f;
 
 
     /** 插入序 = 从老到新，正好是排布要的顺序。 */
@@ -229,8 +242,8 @@ public final class CardStage {
 
     /** 量尺寸 → 排布 → 把两边按序拼起来。 */
     private List<CardSlot> layout(CardCanvas canvas, Minecraft mc) {
-        // 【最新的排在最上面】草稿里新槽位是 unshift 到队首、旧卡被往下挤。
-        // live 是插入序（老 -> 新），所以这里反过来：index 0 = 最新 = 最上面。
+        // 【index 0 = 最新】草稿里新槽位是 unshift 到队首（slots[0] 即最新），StackLayout 按
+        // 同一个约定收：最新那张贴着底线、旧的往上顶。live 是插入序（老 -> 新），所以反过来。
         List<CardView> alive = new ArrayList<>(live.values());
         Collections.reverse(alive);
         List<StackLayout.Size> sizes = new ArrayList<>(alive.size());
@@ -243,7 +256,8 @@ public final class CardStage {
         List<CardSlot> slots = new ArrayList<>(alive.size());
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
-                sizes, canvas.guiWidth(), canvas.layout(), MARGIN_X, MARGIN_Y, STACK_GAP)) {
+                sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
+                MARGIN_X, MARGIN_Y, STACK_GAP)) {
             CardView view = alive.get(slot.index());
             slots.add(new CardSlot(view, slot.x(), move.y(view.notice().key(), slot.y(), now),
                     slot.width(), slot.height()));

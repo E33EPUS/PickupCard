@@ -23,11 +23,14 @@
 html, body { margin:0; padding:0; height:100%; background:#000; overflow:hidden; }
 #board { position:fixed; inset:0; background:#000; }
 
-/* 竖排、从下往上堆、**左缘对齐** —— 与 Java 的 StackLayout 同一条规则：
-   最新的一张贴底，卡间距 6px，左边距 16px（= LayoutSettings 的默认 leftEdge）。
-   左边固定意味着"一摞卡的竖条成一条竖线"，右缘随名字长短伸缩。 */
-/* 顶锚：与 StackLayout 一致（草稿 animation.html 也是 TOP_Y=16 往下排） */
-.rows { position:absolute; left:16px; top:16px;
+/* 锚在**下方**、**竖条左缘对齐** —— 与 Java 的 StackLayout 逐字同一条规则：
+   最新的一张贴底，卡间距 4px，右下各留 16px（= LayoutSettings 的默认 MARGIN_X，
+   配合默认的 Side.RIGHT）。右缘固定意味着"内容再长也只是往左伸，永不溢出屏幕"。
+
+   【DOM 顺序 = 从上到下 = 从老到新】最上面那张是最老的（石头），贴着底边的是最新的（龙蛋）。
+   顺序也是门禁的一部分：compare.py 会把两侧的强调色顺序摆出来比。
+   下面这四张必须与 Java 侧 CardFixtures.measure() 逐字一致，否则对照表量的是两组不同的卡。 */
+.rows { position:absolute; left:160px; bottom:52px;
         display:flex; flex-direction:column; gap:4px; align-items:flex-start; }
 </style>
 </head>

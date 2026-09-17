@@ -198,11 +198,13 @@ public final class PickupCardConfig {
             holdMs = builder
                     .comment("一张卡在屏上停留多久（毫秒），从最近一次被刷新算起。",
                             "连捡同一件东西会不断刷新这个计时，所以连捡时不会闪。")
-                    .defineInRange("holdMs", 2_600L, 200L, 60_000L);
+                    .defineInRange("holdMs", 4_000L, 200L, 60_000L);
 
             exitMs = builder
-                    .comment("退场动画时长（毫秒）。渲染层按它决定退场动画播多久。")
-                    .defineInRange("exitMs", 320L, 0L, 5_000L);
+                    .comment("退场动画时长（毫秒）：最老的那张被顶出屏幕后淡出多久。",
+                            "渲染层按它决定退场动画播多久；0 = 卡片直接消失。",
+                            "320 → 480：真机反馈是「淡出这一下太快」。")
+                    .defineInRange("exitMs", 480L, 0L, 5_000L);
 
             builder.pop();
 
@@ -224,20 +226,24 @@ public final class PickupCardConfig {
                     .defineInRange("maxOnScreen", 5, 1, 16);
 
             stickTo = builder
-                    .comment("卡片靠屏幕哪一边停。同时出现多张时，它们自上而下排列。",
-                            "  LEFT  = 卡片左边尽量停在下面 leftEdge 的位置，内容往右伸展。推荐。",
-                            "          一摞卡排下来，左边的稀有度竖条成一条竖线。",
+                    .comment("卡片靠屏幕哪一边停。一摞卡锚在屏幕下方，最新的贴底、旧的往上顶。",
+                            "  LEFT  = 卡片左边尽量停在 leftEdge 的位置，内容往右伸展。推荐（默认）。",
+                            "          一摞卡排下来，稀有度竖条成一条竖线 —— 卡的长短不影响竖条在哪。",
                             "  RIGHT = 卡片右边固定不动，左边随内容长短伸缩。",
-                            "          内容再长也只是往左伸，永远不会超出屏幕右边。")
+                            "          内容再长也只是往左伸，永远不会超出屏幕右边；",
+                            "          代价是卡越宽竖条越靠左，一摞卡的竖条参差。")
                     .defineEnum("stickTo", LayoutSettings.Side.LEFT);
 
             leftEdge = builder
-                    .comment("只有上面选了 LEFT 才有用：卡片左边想停在离屏幕左边多少像素的地方。",
-                            "注意这是「想停在这儿」，不是「一定停在这儿」——",
-                            "内容太长、右边放不下时，卡片会自动往左让，不会把内容挤出屏幕。",
-                            "屏幕宽度会随玩家的界面缩放大小变化，所以别设得太靠右；",
-                            "设得比屏幕还宽，这一项就等于没设。")
-                    .defineInRange("leftEdge", 16, 0, 4000);
+                    .comment("只有上面选了 LEFT 才有用：竖条左缘想停在离屏幕左边多少像素的地方。",
+                            "-1（默认）= 自动：让最宽的那张卡右缘正好落在右边距上（跟着画布算）。",
+                            "  画布宽度随 GUI 缩放剧烈变化（guiScale 3 是 426 宽、5 只剩 256），",
+                            "  写死一个绝对数会在另一种缩放下被右边界夹住 —— 那时竖条又参差了，",
+                            "  而配置里那个数看着还挺正常。所以默认交给自动。",
+                            ">= 0 = 绝对 x（草稿 animation.html 里那个「锚点 X」滑块就是这个）。",
+                            "两种都是「想停在这儿」而不是「一定停在这儿」——",
+                            "名字比预留宽度还长时，那张卡会自动往左让，不把内容挤出屏幕。")
+                    .defineInRange("leftEdge", LayoutSettings.AUTO_LEFT_EDGE, -1, 4000);
 
             appearMode = builder
                     .comment("卡片出现时怎么展开。",

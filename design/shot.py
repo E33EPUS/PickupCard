@@ -65,7 +65,7 @@ def launch(pw):
 
 
 def shoot(html: Path, out: Path, width: int, height: int, dsf: int,
-          geometry: Path | None, full_page: bool = False) -> int:
+          geometry: Path | None, full_page: bool = False, wait_ms: int = 0) -> int:
     from playwright.sync_api import sync_playwright
 
     if not html.is_file():
@@ -80,6 +80,10 @@ def shoot(html: Path, out: Path, width: int, height: int, dsf: int,
         page.wait_for_load_state("load")
         # 图片没加载完就拍，会拍到图标位置上的空白 —— 那张图看着"正常"，但少了两块像素
         page.evaluate("() => Promise.all([...document.images].map(i => i.decode().catch(() => {})))")
+        # 【为什么要能等】动画草稿是"拍哪一帧都合法"的页面：不等就只能拍到入场途中那一张卡，
+        # 而人想看的是"堆起来是什么样"。定时动画的产物因此必须可复现，不能靠手快。
+        if wait_ms:
+            page.wait_for_timeout(wait_ms)
         if geometry is not None:
             data = page.evaluate(GEOMETRY_JS)
             geometry.parent.mkdir(parents=True, exist_ok=True)
@@ -105,11 +109,13 @@ def main() -> int:
     ap.add_argument("--dsf", type=int, default=4, help="设备像素比。越大边缘量得越准")
     ap.add_argument("--geometry", action="store_true", help="同时导出 DOM 矩形 JSON")
     ap.add_argument("--full-page", action="store_true", help="整页截图（草稿页比视口高时用）")
+    ap.add_argument("--wait", type=int, default=0, metavar="MS", help="拍之前先等这么多毫秒（动画草稿用）")
     args = ap.parse_args()
 
     out = args.out or args.html.with_suffix(".png")
     geom = out.with_suffix(".geometry.json") if args.geometry else None
-    return shoot(args.html, out, args.width, args.height, args.dsf, geom, args.full_page)
+    return shoot(args.html, out, args.width, args.height, args.dsf, geom,
+                 args.full_page, args.wait)
 
 
 if __name__ == "__main__":

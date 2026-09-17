@@ -24,6 +24,11 @@ minecraft {
             property 'forge.logging.markers', ''
             property 'forge.logging.console.level', 'debug'
             mods { pickupcard { source sourceSets.main } }
+            // 它自带的截图钩子（client/DevShot.java）：入场时间线 / 退场时间线 / 配置界面四页
+            // 用 -Pdevshot=true -Pconfigshot=true -Pfadeshot=true 打开，产物在 run/screenshots/
+            property 'pickupcard.devshot', (findProperty('devshot') ?: 'false')
+            property 'pickupcard.configshot', (findProperty('configshot') ?: 'false')
+            property 'pickupcard.fadeshot', (findProperty('fadeshot') ?: 'false')
         }
         server {
             workingDirectory project.file('run-server')

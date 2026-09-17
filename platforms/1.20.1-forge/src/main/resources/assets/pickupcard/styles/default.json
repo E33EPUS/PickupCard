@@ -3,7 +3,7 @@
   "geometry": {
     "cornerRadius": 4,
     "paddingH": 4,
-    "paddingV": 3,
+    "paddingV": 2,
     "gap": 3,
     "iconSize": 16,
     "barWidth": 4,
@@ -30,7 +30,7 @@
     "xp": "#7DFF8A"
   },
   "animation": {
-    "enterMs": 560,
+    "enterMs": 800,
     "bumpMs": 300,
     "enterEnabled": true,
     "bumpEnabled": true,

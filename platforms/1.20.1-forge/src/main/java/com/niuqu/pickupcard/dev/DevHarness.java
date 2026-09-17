@@ -1,7 +1,9 @@
 package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.PickupCard;
+import com.niuqu.pickupcard.config.PickupCardConfig;
 import com.niuqu.pickupcard.config.PickupCardConfigScreen;
+import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
@@ -88,10 +90,21 @@ public final class DevHarness {
         private static final int WARMUP_TICKS = 80;
         /** 展开到一半时先拍一张 —— 只看"已经就位"的稳态，等于没验动画。 */
         private static final int MID_SHOT = 8;
+        /** 刚起步的一帧：内容还大幅偏左，专门用来验"隧道口"有没有真的裁在竖条右侧。 */
+        private static final int EARLY_SHOT = 3;
         /** 开屏后等入场动画播完再拍。 */
         private static final int SHOT_AFTER_OPEN = 40;
         /** 截图是异步落盘的，给它足够时间再退出。 */
         private static final int QUIT_AFTER_SHOT = 40;
+        /**
+         * 退场淡出：稳态那张拍完之后再推一张把最老的挤掉，隔 3 tick（约 150ms）拍中段。
+         * <p>
+         * 【为什么非要多拍这一张】只看稳态的截图，等于没验过任何动画 —— 退场这条以前只有
+         * 12px 位移、没有淡出，而"到底淡没淡"在静止的图上根本看不出来。拍早了那张还没开始
+         * 淡，拍晚了它已经下线，所以这两个数是朝着 320ms 的中段取的。
+         */
+        private static final int EXIT_PUSH_AFTER = SHOT_AFTER_OPEN + 2;
+        private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
         /** 卡样例页之后的形状层 spike 页（不画卡，只画矢量图元）。 */
@@ -153,7 +166,13 @@ public final class DevHarness {
             }
 
             sinceInject++;
-            if (sinceInject == MID_SHOT) {
+            if (sinceInject == EARLY_SHOT) {
+                // 【为什么还要更早的一帧】入场刚起步那几 tick 才是"隧道口"唯一说了算的时刻：
+                // 内容还大幅偏左，有没有裁剪、裁剪线在不在竖条右侧，只有这时候看得出来。
+                // 中段那帧（MID_SHOT）是按"入场播到一半"挑的，而那正是曲线把内容推得
+                // 差不多到位的时候 —— 拍出来两张几乎一样，等于没验。
+                if (page != MEASURE_PAGE) capture(mc, "early");
+            } else if (sinceInject == MID_SHOT) {
                 // 测量页不拍中途：展开到一半的卡几何是变的，量出来的数没有意义
                 if (page != MEASURE_PAGE) capture(mc, "mid");
             } else if (sinceInject == SHOT_AFTER_OPEN) {
@@ -174,10 +193,61 @@ public final class DevHarness {
                 capture(mc, null);
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 40) {
+            // 【为什么不直接改配置值】那样只能证明"配置→渲染"通，证明不了"按钮→配置"通。
+            // 这里发的是**真实鼠标事件**（mouseClicked → 按钮 → 写配置 → 渲染重读），
+            // 把整条链一起验掉 —— handoff 待办里那条"配置界面没点过"就是它。
+            if (configTicks == WARMUP_TICKS + 26) {
+                PickupCard.LOGGER.info("[harness-auto] 第 1 页控件: {}", configLabels(mc));
+                clickByLabel(mc, "布局");                // 切到「布局」页
+                PickupCard.LOGGER.info("[harness-auto] 点『布局』页控件: {}", configLabels(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 40) {
+                capture(mc, "p2");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 46) {
+                LayoutSettings.Side before = PickupCardConfig.layoutSnapshot().stickTo();
+                clickByLabel(mc, "贴边");
+                LayoutSettings.Side after = PickupCardConfig.layoutSnapshot().stickTo();
+                PickupCard.LOGGER.info("[harness-auto] 点『贴边』：{} → {}（变了才算这条链通）",
+                        before, after);
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 56) {
                 PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
                 mc.stop();
             }
+        }
+
+        /**
+         * 按标签找控件、点它的中心。
+         * <p>
+         * 【为什么不按"屏幕比例"点】第一版写成 {@code height * 1.0}，正好落在按钮下沿之外 ——
+         * 点击静默地什么都没发生，日志里只看到"值没变"，跟"功能坏了"长得一模一样。
+         * 按标签找 + 用它自己的 bounds，换分辨率、换列宽都不用改，点不中还会现形（找不到就报）。
+         */
+        private static void clickByLabel(Minecraft mc, String label) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return;
+            for (var child : screen.children()) {
+                if (child instanceof net.minecraft.client.gui.components.AbstractWidget w
+                        && w.getMessage().getString().contains(label)) {
+                    screen.mouseClicked(w.getX() + w.getWidth() / 2.0,
+                            w.getY() + w.getHeight() / 2.0, 0);
+                    return;
+                }
+            }
+            PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
+        }
+
+        /** 界面上现在有哪些控件（按标签）。日志里留一份 —— 截图看不出"第 2 页到底有没有那几项"。 */
+        private static String configLabels(Minecraft mc) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return "(不是配置界面)";
+            return screen.children().stream()
+                    .filter(net.minecraft.client.gui.components.AbstractWidget.class::isInstance)
+                    .map(net.minecraft.client.gui.components.AbstractWidget.class::cast)
+                    .map(w -> w.getMessage().getString())
+                    .collect(java.util.stream.Collectors.joining(" | "));
         }
 
         /** 切到下一页：清屏 → 注入 → 从头计时。页用完了就收工。 */
@@ -248,6 +318,23 @@ public final class DevHarness {
                         .collect(java.util.stream.Collectors.joining(", ")));
                 Screenshot.grab(mc.gameDirectory, "pickupcard-hud", mc.getMainRenderTarget(),
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
+                                m.getString()));
+            } else if (age == EXIT_PUSH_AFTER) {
+                // 再推一张：账本上限 5，这一张会挤掉最老的那张 —— 正好把"退场淡出"拍下来。
+                // 挑的是别页的样例（钻石），跟这一页那五件都不是同一样东西：同一样东西会被
+                // 合并窗口并进已有的卡里，那就根本轮不到淘汰，等着看退场只会拍到一张没动静的图。
+                CardFixtures.Fixture extra = CardFixtures.all().get(6);
+                CardFixtures.inject(extra);
+                PickupCard.LOGGER.info("[harness-auto] 推第 6 张（{}）触发退场", extra.label());
+            } else if (age == EXIT_SHOT_AFTER) {
+                CardStage.Stats s = CardStage.INSTANCE.stats();
+                PickupCard.LOGGER.info("[harness-auto] 退场中读数 cards={} painted={}",
+                        s.live(), s.painted());
+                PickupCard.LOGGER.info("[harness-auto] HUD 在屏: {}", CardStage.INSTANCE.lastSlots()
+                        .stream().map(slot -> slot.view().key())
+                        .collect(java.util.stream.Collectors.joining(", ")));
+                Screenshot.grab(mc.gameDirectory, "pickupcard-hud-exit", mc.getMainRenderTarget(),
+                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-exit -> {}",
                                 m.getString()));
             } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
                 PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");

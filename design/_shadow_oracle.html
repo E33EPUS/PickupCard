@@ -1,0 +1,10 @@
+<!DOCTYPE html><html><head><meta charset="utf-8"><style>
+/* 把草稿的"影子"这件事单独抽出来验：filter 在 .card 上，裁剪在 .tunnel 上。
+   问题只有一个：影子是跟着「裁剪后的可见形状」走，还是跟着「没裁剪的内容」走？ */
+body { margin:0; background:#111; }
+.card { display:flex; gap:3px; height:22px; width:max-content; position:absolute; left:40px; top:40px;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,1)); }
+.bar  { width:4px; background:#7DFF8A; flex:none; }
+.tunnel { overflow:hidden; width:100px; display:flex; }   /* 隧道口，左边就是竖条右缘+间隙 */
+.body { flex:none; width:100px; height:22px; background:#FFF; transform:translateX(-60%); }
+</style></head><body><div class="card"><div class="bar"></div><div class="tunnel"><div class="body"></div></div></div></body></html>

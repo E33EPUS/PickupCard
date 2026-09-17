@@ -336,6 +336,16 @@ def count_by_accent(m: dict) -> dict:
     return out
 
 
+def accent_order(m: dict) -> list:
+    """自上而下的强调色顺序。
+
+    【为什么非要有它】锚在右下角时，"最新的那张"只认得出位置、认不出身份 —— 四张卡的几何
+    一模一样。handoff 记的那次翻车（锚点反了 + 谁在最上面也反了）里，逐张比结构是查不出来
+    的，因为每张卡各自都长得对。颜色顺序是这条链上唯一对位置敏感的东西。
+    """
+    return [c["accent"] for c in m["cards"]]
+
+
 # 指标的分类与报告顺序。
 #   结构 = 由排版与主题决定，两边**必须一致**，不一致就是"没还原"；
 #   参考 = 绝对值，跟着分辨率走，不做比较；
@@ -349,6 +359,11 @@ METRICS = [
     (STRUCT, "图标格-名字框间距 / 卡高"),
     (STRUCT, "图标格宽 / 卡高"),
     (STRUCT, "级差 / 卡高"),
+    # 【为什么要单独盯锚点】四张卡的几何一模一样，所以"整堆被放到了屏幕另一头"这种错误，
+    # 逐张比结构**永远看不出来** —— handoff 记的那次翻车（游戏底锚、草稿顶锚、方向相反）
+    # 就是这么一路绿灯过去的。锚点只需要一条数：最靠下那张的下缘离图底边几个卡高。
+    # 底部锚定 ≈ 下边距/卡高（0.7 上下）；顶部锚定是这个数的好几倍，一眼分得开。
+    (STRUCT, "最新那张下缘距底边 / 卡高"),
     # 【为什么两条"极差"是内容项】右对齐时，左缘极差**完全**由卡宽分布决定，
     # 而卡宽跟着名字文字的宽度走 —— 浏览器和游戏不是一个字体，这个数永远不可能相等。
     # 真正属于结构的判决是"固定的是哪条边"（fixed_edge），它单列一行、必须一致。
@@ -376,6 +391,8 @@ def metrics(m: dict) -> dict:
     widths = [c["card"][1] - c["card"][0] + 1 for c in cards]
     tops = [c["card"][2] for c in cards]
     pitch = _median(np.diff(tops)) if len(tops) > 1 else float("nan")
+    # cards 是按行带从上到下排的，所以最后一张就是最靠下的那张（右下角锚定里的"最新"）
+    bottom_gap = m["size"][0] - 1 - max(c["card"][3] for c in cards)
     return {
         "卡高": h,
         "竖条宽 / 卡高": bar_w / h,
@@ -384,6 +401,7 @@ def metrics(m: dict) -> dict:
         "图标格-名字框间距 / 卡高": gap2 / h,
         "图标格宽 / 卡高": icon_w / h,
         "级差 / 卡高": pitch / h,
+        "最新那张下缘距底边 / 卡高": bottom_gap / h,
         "左缘极差 / 卡高": (max(lefts) - min(lefts)) / h,
         "右缘极差 / 卡高": (max(rights) - min(rights)) / h,
         "卡宽中位 / 卡高": _median(widths) / h,
