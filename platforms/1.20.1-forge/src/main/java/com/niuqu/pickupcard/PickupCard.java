@@ -1,7 +1,6 @@
 package com.niuqu.pickupcard;
 
 import com.niuqu.pickupcard.config.PickupCardConfig;
-import com.niuqu.pickupcard.filter.FilterRules;
 import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.dev.DevHarness;
 import com.niuqu.pickupcard.render.CardStage;
@@ -41,19 +40,18 @@ public final class PickupCard {
     /**
      * 一条拾取被过滤器丢掉了 —— 日志里说清楚是谁干的、怎么放行。
      * <p>
-     * 【为什么这条日志必须有】丢弃是<b>故意</b>的（内置忽略表就是用来挡刷屏物品的），
-     * 但"故意"不等于"可以无声"。玩家看到的是"我捡了东西但什么都没弹"，
-     * 而这句话和"mod 坏了"长得一模一样 —— 实测真有人捡了一路圆石来问这个。
+     * 【为什么这条日志必须有】默认已经什么都不丢了，所以这条只在玩家自己写了黑名单时才出现。
+     * 但它仍然必须有：被丢掉的拾取在玩家那边就是"什么都没发生"，和"mod 坏了"长得一模一样 ——
+     * 实测真有人捡了一路沙子来问这个（那时还是内置表在丢），而当时日志里一个字都没有。
      */
     private static void reportDroppedPickup(CardContent.Item item) {
         String id = BuiltInRegistries.ITEM.getKey(item.stack().getItem()).toString();
         if (!REPORTED_DROPS.add(id)) {
             return;
         }
-        LOGGER.info("拾取 {} 没有弹卡：被过滤器丢弃了。", id);
-        LOGGER.info("  内置忽略表当前包含 {}（可在 config/pickupcard-client.toml 的 [filter] 里"
-                + "把 useDefaultIgnoreList 设为 false 关掉）。", FilterRules.builtinIgnore());
-        LOGGER.info("  黑名单命中就删掉对应规则；想让某件物品无论如何都弹卡，加进 whitelist（白名单优先级最高）。");
+        LOGGER.info("拾取 {} 没有弹卡：命中了你写的黑名单。", id);
+        LOGGER.info("  黑名单现在是空的时候不该出现这条 —— 出现了就说明你在 config/pickupcard-client.toml");
+        LOGGER.info("  的 [filter] blacklist 里写了它。删掉那条规则，或者把它加进 whitelist（优先级最高）。");
         LOGGER.info("  这条每个物品只报一次。");
     }
     public static final Logger LOGGER = LoggerFactory.getLogger("PickupCard");

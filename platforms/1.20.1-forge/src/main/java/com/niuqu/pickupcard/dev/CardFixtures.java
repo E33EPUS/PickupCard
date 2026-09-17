@@ -66,8 +66,9 @@ public final class CardFixtures {
         list.add(new Fixture("xp", ItemStack.EMPTY, 137));
         list.add(new Fixture("long-name",
                 named(Items.DIAMOND_SWORD, "被铁砧改了名字的附魔钻石剑（超长名字边界测试）"), 1));
-        // 【别用圆石/泥土类】它们在内置忽略表里，会被过滤掉——而且是不报错地消失，
-        // 于是这一组样例又"悄悄变了"。样例卡要用一定不会被过滤的物品。
+        // 【为什么用钻石而不是圆石】内置忽略表已经删掉了，现在圆石也会弹卡。
+        // 留着钻石是因为它认得出、数量大、而且不会被任何默认规则牵动 ——
+        // 样例集最怕的就是"悄悄变了"，所以宁可挑一件绝不会有歧义的物品。
         list.add(new Fixture("big-count", new ItemStack(Items.DIAMOND), 99_999));
         list.add(new Fixture("short-name", named(Items.STONE, "石"), 1));
         list.add(new Fixture("cjk", named(Items.NETHERITE_INGOT, "下界合金锭"), 64));

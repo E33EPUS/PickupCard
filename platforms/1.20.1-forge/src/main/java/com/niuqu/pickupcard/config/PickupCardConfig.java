@@ -64,8 +64,7 @@ public final class PickupCardConfig {
         return new FilterSettings(
                 List.copyOf(VALUES.blacklist.get()),
                 List.copyOf(VALUES.whitelist.get()),
-                List.copyOf(VALUES.muteList.get()),
-                VALUES.useDefaultIgnoreList.get());
+                List.copyOf(VALUES.muteList.get()));
     }
 
     /** 配置项的定义。行为偏好与 {@link PickupCardSettings}/{@link FilterSettings} 对应。 */
@@ -77,7 +76,6 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.LongValue mergeWindowMs;
         final ForgeConfigSpec.IntValue maxOnScreen;
         final ForgeConfigSpec.EnumValue<CountFormat> countFormat;
-        final ForgeConfigSpec.BooleanValue useDefaultIgnoreList;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> muteList;
@@ -149,17 +147,13 @@ public final class PickupCardConfig {
 
             builder.comment("过滤。规则写法：minecraft:stone = 物品，#forge:ores = tag，@somebotania = 整个 mod")
                     .push("filter");
-            useDefaultIgnoreList = builder
-                    .comment("内置默认忽略表（泥土/圆石/沙子类刷屏物品），整体开关。",
-                            "白名单永远压过黑名单与内置表。")
-                    .define("useDefaultIgnoreList", true);
-
             blacklist = builder
-                    .comment("黑名单：命中则不弹卡。")
+                    .comment("黑名单：命中则不弹卡。默认是空的 —— 也就是说默认每一次拾取都会弹卡，",
+                            "包括泥土、圆石、沙子。嫌刷屏就往这里加（例如 minecraft:cobblestone）。")
                     .defineList("blacklist", List.of(), o -> o instanceof String);
 
             whitelist = builder
-                    .comment("白名单：命中则永远弹卡并强调（含内置表忽略的物品）。")
+                    .comment("白名单：命中则永远弹卡并强调。优先级最高，压过黑名单。")
                     .defineList("whitelist", List.of(), o -> o instanceof String);
 
             muteList = builder

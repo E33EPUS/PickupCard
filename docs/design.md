@@ -108,7 +108,9 @@ RarityBridge.resolve(stack) → RarityInfo{ level, accentColor }
 
 - 匹配语法：`minecraft:stone`（物品 id）/ `#forge:ores`（tag）/ `@somebotania`（mod id）。
 - 语义：**黑**=不弹卡；**白**=永远弹并强调（优先于黑）；**静音**=弹卡但无稀有音效、且压制原版拾取音。
-- 内置默认忽略表（泥土/圆石/沙子类），可整体关掉。
+- **默认什么都不丢**：每一次拾取都弹卡。想安静由玩家自己往黑名单里写（默认空）。
+  （曾经有过一张"内置忽略表"默认挡掉泥土/圆石/沙子一类，已删除——它让玩家捡到沙子时
+  完全没有任何反馈，和 mod 坏了分不出来。见 FilterRules 的类注释。）
 - 双入口：TOML lists + 客户端命令（`RegisterClientCommandsEvent`：
   `/pickupcard <ignore|allow|mute> <add|remove|list> <规则>`），命令改动写回 TOML。
 

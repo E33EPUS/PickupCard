@@ -216,6 +216,10 @@ public final class DevHarness {
                 CardStage.Stats s = CardStage.INSTANCE.stats();
                 PickupCard.LOGGER.info("[harness-auto] HUD 读数 cards={} painted={} layout={}us",
                         s.live(), s.painted(), s.layoutMicros());
+                // 在屏的是哪几张：「少了我的那张卡」是最常见的问题，不能靠推断
+                PickupCard.LOGGER.info("[harness-auto] HUD 在屏: {}", CardStage.INSTANCE.lastSlots()
+                        .stream().map(slot -> slot.view().key())
+                        .collect(java.util.stream.Collectors.joining(", ")));
                 Screenshot.grab(mc.gameDirectory, "pickupcard-hud", mc.getMainRenderTarget(),
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
                                 m.getString()));

@@ -7,11 +7,16 @@ import java.util.List;
  * 的命运。没有 MC、没有配置文件、没有时钟，所以"白名单压过黑名单"这类优先级问题
  * 都被测试钉死，不靠手感。
  *
+ * <p>【默认什么都不丢】这里曾经有一张"内置忽略表"（泥土/圆石/沙子一类），默认开启、
+ * 命中即丢弃。它的本意是别让挖一片海滩刷满屏幕，实际效果是：玩家捡了沙子，屏幕上一片
+ * 安静、日志里一个字也没有 —— 和"mod 坏了"完全分不出来（这是实测踩到的）。
+ * 现在没有默认忽略表：**默认每一次拾取都会弹卡**，想安静由玩家自己往黑名单里写。
+ * "不替他决定该看见什么"比"替他省掉几张卡"重要。
+ *
  * <p>优先级（从上往下短路）：
  * <ol>
  *   <li>白名单 → 永远弹卡 + 强调</li>
  *   <li>黑名单 → 丢弃</li>
- *   <li>内置忽略表（可整体关闭）→ 丢弃</li>
  *   <li>静音名单 → 照常弹卡，但静音</li>
  *   <li>都不中 → 普通弹卡</li>
  * </ol>
@@ -19,30 +24,6 @@ import java.util.List;
  * 静音了某件白名单物品，那是更晚、更明确的意图，应该赢。
  */
 public final class FilterRules {
-
-    /**
-     * 内置忽略表：怎么刷屏都不该弹卡的泥土级物品。刻意保持短——宁可让玩家偶尔看到
-     * 一张圆石卡，也不要替他静音掉本想看见的东西；嫌多他自己加黑名单就是。
-     */
-    /**
-     * 内置忽略表的只读视图。
-     * <p>
-     * 【为什么要暴露它】"这条拾取为什么没弹卡"必须能在日志里回答清楚，而回答里要列出
-     * 具体是哪些物品 —— 在日志字符串里再抄一份清单就成了第二真源，早晚和这里不一致。
-     */
-    public static List<String> builtinIgnore() {
-        return BUILTIN_IGNORE;
-    }
-
-    private static final List<String> BUILTIN_IGNORE = List.of(
-            "minecraft:dirt",
-            "minecraft:cobblestone",
-            "minecraft:cobbled_deepslate",
-            "minecraft:gravel",
-            "minecraft:sand",
-            "minecraft:red_sand",
-            "minecraft:netherrack",
-            "minecraft:wheat_seeds");
 
     /**
      * 一条拾取的判定结果。
@@ -64,7 +45,6 @@ public final class FilterRules {
             return new Decision(true, true, anyMatch(subject, settings.muteList()));
         }
         if (anyMatch(subject, settings.blacklist())) return Decision.DROP;
-        if (settings.useBuiltinIgnore() && anyMatch(subject, BUILTIN_IGNORE)) return Decision.DROP;
         if (anyMatch(subject, settings.muteList())) return new Decision(true, false, true);
         return Decision.PLAIN;
     }
