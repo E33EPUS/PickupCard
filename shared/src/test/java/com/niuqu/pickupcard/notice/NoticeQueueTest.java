@@ -18,8 +18,8 @@ class NoticeQueueTest {
     @DisplayName("同一物品合并：数量累加，代数 +1")
     void mergesSameItem() {
         NoticeQueue<String> q = queue();
-        q.absorb("diamond", "rare", "diamond-stack", 32, true, 1_000L, MergeMode.STRICT, 5);
-        var outcome = q.absorb("diamond", "rare", "diamond-stack", 64, false, 1_500L, MergeMode.STRICT, 5);
+        q.absorb("diamond", "rare", "diamond-stack", 32, true, 1_000L, MergeMode.SAME_NBT, 5);
+        var outcome = q.absorb("diamond", "rare", "diamond-stack", 64, false, 1_500L, MergeMode.SAME_NBT, 5);
 
         assertEquals(NoticeQueue.Change.MERGED, outcome.change());
         assertEquals(96, outcome.notice().count());
@@ -41,10 +41,10 @@ class NoticeQueueTest {
     @DisplayName("只要那张卡还在屏上，隔多久都合并（合并窗口已删）")
     void mergesAsLongAsTheCardIsAlive() {
         NoticeQueue<String> q = queue();
-        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.STRICT, 5);
-        q.absorb("other", "l", "s", 1, true, 100L, MergeMode.STRICT, 5);
+        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
+        q.absorb("other", "l", "s", 1, true, 100L, MergeMode.SAME_NBT, 5);
 
-        var outcome = q.absorb("diamond", "rare", "s", 1, false, 5_000L, MergeMode.STRICT, 5);
+        var outcome = q.absorb("diamond", "rare", "s", 1, false, 5_000L, MergeMode.SAME_NBT, 5);
 
         assertEquals(NoticeQueue.Change.MERGED, outcome.change(), "卡还在就该并，不是顶掉重来");
         assertEquals(2, outcome.notice().count());
@@ -56,8 +56,8 @@ class NoticeQueueTest {
     @DisplayName("合并被关掉时，每次都单开一张；旧卡走淘汰通道（否则界面上会留两张同名卡）")
     void mergeDisabled() {
         NoticeQueue<String> q = queue();
-        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.NONE, 5);
-        var outcome = q.absorb("diamond", "rare", "s", 1, false, 10L, MergeMode.NONE, 5);
+        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.NEVER, 5);
+        var outcome = q.absorb("diamond", "rare", "s", 1, false, 10L, MergeMode.NEVER, 5);
         assertEquals(NoticeQueue.Change.ADDED, outcome.change());
         assertEquals(1, outcome.evicted().size());
         assertEquals("diamond", outcome.evicted().get(0).key());
@@ -68,8 +68,8 @@ class NoticeQueueTest {
     @DisplayName("外观不同不许合并：同名物品换档会串档位")
     void differentLookDoesNotMerge() {
         NoticeQueue<String> q = queue();
-        q.absorb("sword", "common", "s", 1, true, 0L, MergeMode.STRICT, 5);
-        var outcome = q.absorb("sword", "epic", "s", 1, false, 100L, MergeMode.STRICT, 5);
+        q.absorb("sword", "common", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
+        var outcome = q.absorb("sword", "epic", "s", 1, false, 100L, MergeMode.SAME_NBT, 5);
         assertEquals(NoticeQueue.Change.ADDED, outcome.change());
     }
 
@@ -77,8 +77,8 @@ class NoticeQueueTest {
     @DisplayName("不同物品互不干扰，各自一张卡")
     void differentKeysAreIndependent() {
         NoticeQueue<String> q = queue();
-        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.STRICT, 5);
-        q.absorb("iron", "common", "s", 1, true, 10L, MergeMode.STRICT, 5);
+        q.absorb("diamond", "rare", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
+        q.absorb("iron", "common", "s", 1, true, 10L, MergeMode.SAME_NBT, 5);
         assertEquals(2, q.size());
         assertEquals(1, q.find("diamond").orElseThrow().count());
     }
@@ -87,11 +87,11 @@ class NoticeQueueTest {
     @DisplayName("超过在屏上限时，淘汰最久没被碰过的那张，并且把被淘汰的报回来")
     void evictsTheLeastRecentlyTouched() {
         NoticeQueue<String> q = queue();
-        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.STRICT, 2);
-        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.STRICT, 2);
+        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 2);
+        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.SAME_NBT, 2);
         // 碰一下 a：它变最新，于是被挤掉的应该是 b
-        q.absorb("a", "l", "s", 1, false, 20L, MergeMode.STRICT, 2);
-        var outcome = q.absorb("c", "l", "s", 1, true, 30L, MergeMode.STRICT, 2);
+        q.absorb("a", "l", "s", 1, false, 20L, MergeMode.SAME_NBT, 2);
+        var outcome = q.absorb("c", "l", "s", 1, true, 30L, MergeMode.SAME_NBT, 2);
 
         assertEquals(2, q.size());
         assertTrue(q.find("a").isPresent(), "刚被碰过的 a 应该活着");
@@ -114,14 +114,14 @@ class NoticeQueueTest {
     @DisplayName("淡出中的卡被同一个物品救回：并回去，不重新排队、不挤掉下一张")
     void rescuesACardThatIsStillFading() {
         NoticeQueue<String> q = queue();
-        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.STRICT, 2);
-        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.STRICT, 2);
-        var evicting = q.absorb("c", "l", "s", 1, true, 20L, MergeMode.STRICT, 2);
+        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 2);
+        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.SAME_NBT, 2);
+        var evicting = q.absorb("c", "l", "s", 1, true, 20L, MergeMode.SAME_NBT, 2);
         assertEquals(1, evicting.evicted().size(), "c 进来时挤掉了最久的 a");
         assertEquals("a", evicting.evicted().get(0).key());
         assertTrue(q.isLeaving("a"));
 
-        var rescued = q.absorb("a", "l", "s", 1, false, 100L, MergeMode.STRICT, 2);
+        var rescued = q.absorb("a", "l", "s", 1, false, 100L, MergeMode.SAME_NBT, 2);
 
         assertEquals(NoticeQueue.Change.MERGED, rescued.change(), "淡出中的同名卡应该被救回");
         assertEquals(2, rescued.notice().count(), "数量要累加到它身上");
@@ -134,12 +134,12 @@ class NoticeQueueTest {
     @DisplayName("退场播完（渲染层通知）之后，同名拾取就是新的一张卡")
     void afterTheFadeFinishesTheNameIsFreeAgain() {
         NoticeQueue<String> q = queue();
-        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.STRICT, 2);
-        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.STRICT, 2);
-        q.absorb("c", "l", "s", 1, true, 20L, MergeMode.STRICT, 2);
+        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 2);
+        q.absorb("b", "l", "s", 1, true, 10L, MergeMode.SAME_NBT, 2);
+        q.absorb("c", "l", "s", 1, true, 20L, MergeMode.SAME_NBT, 2);
         q.forgetLeft("a");
 
-        var outcome = q.absorb("a", "l", "s", 1, false, 1_000L, MergeMode.STRICT, 2);
+        var outcome = q.absorb("a", "l", "s", 1, false, 1_000L, MergeMode.SAME_NBT, 2);
         assertEquals(NoticeQueue.Change.ADDED, outcome.change());
         assertEquals(1, outcome.notice().count(), "新的一张卡只记这一次");
     }
@@ -148,7 +148,7 @@ class NoticeQueueTest {
     @DisplayName("停留超时才退场，刚进来的不退")
     void sweepRespectsHold() {
         NoticeQueue<String> q = queue();
-        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.STRICT, 5);
+        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
 
         assertTrue(q.sweep(500L, 2_000L).isEmpty(), "还在停留期内");
         assertEquals(1, q.size());
@@ -161,8 +161,8 @@ class NoticeQueueTest {
     @DisplayName("合并会刷新停留计时：连捡不停，卡就不该消失")
     void mergeRefreshesLifetime() {
         NoticeQueue<String> q = queue();
-        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.STRICT, 5);
-        q.absorb("a", "l", "s", 1, false, 1_500L, MergeMode.STRICT, 5);
+        q.absorb("a", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
+        q.absorb("a", "l", "s", 1, false, 1_500L, MergeMode.SAME_NBT, 5);
 
         assertTrue(q.sweep(2_500L, 2_000L).isEmpty(),
                 "1.5s 时被刷新过，2.5s 时不该退场");
@@ -172,8 +172,8 @@ class NoticeQueueTest {
     @DisplayName("快照按最久没被碰过排前，DOM 反序就是最新在上")
     void snapshotOrder() {
         NoticeQueue<String> q = queue();
-        q.absorb("old", "l", "s", 1, true, 0L, MergeMode.STRICT, 5);
-        q.absorb("new", "l", "s", 1, true, 100L, MergeMode.STRICT, 5);
+        q.absorb("old", "l", "s", 1, true, 0L, MergeMode.SAME_NBT, 5);
+        q.absorb("new", "l", "s", 1, true, 100L, MergeMode.SAME_NBT, 5);
 
         var snap = q.snapshot();
         assertEquals("old", snap.get(0).key());

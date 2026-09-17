@@ -241,11 +241,11 @@ public final class PickupCardConfig {
 
             builder.comment("合并：哪些拾取算同一件东西（一张卡的数字在滚，还是弹好几张）").push("merge");
             mergeMode = builder
-                    .comment("STRICT（默认）：同名同 NBT —— 改名、附魔、自定义数据各占一张卡。",
-                            "TYPE：同名就并，忽略 NBT（附魔书、药水会并成一张）。",
-                            "TYPE_NAMED：同名就并，但改过名字的不并。",
-                            "NONE：从不合并，每次拾取单开一张（一次捡 20 样东西会看到 20 张）。")
-                    .defineEnum("mode", com.niuqu.pickupcard.notice.MergeMode.STRICT);
+                    .comment("SAME_NBT（默认）：同名同 NBT —— 改名、附魔、自定义数据各占一张卡。",
+                            "SAME_ITEM：同名就并，忽略 NBT（附魔书、药水会并成一张）。",
+                            "SAME_ITEM_KEEP_NAMED：同名就并，但改过名字的不并。",
+                            "NEVER：从不合并，每次拾取单开一张（一次捡 20 样东西会看到 20 张）。")
+                    .defineEnum("mode", com.niuqu.pickupcard.notice.MergeMode.SAME_NBT);
             builder.pop();
 
             builder.comment("布局").push("layout");

@@ -9,7 +9,7 @@ import net.minecraft.world.item.Rarity;
  * 从 ItemStack 抽出两把键：一把认人，一把认脸。
  * <p>
  * 【为什么要两把】{@code key} 答"是不是同一个东西"，{@code lookKey} 答"该不该长得一样"。
- * 粒度由 {@link MergeMode} 决定：STRICT 档两把都要对得上，放宽的档位只看身份键 ——
+ * 粒度由 {@link MergeMode} 决定：SAME_NBT 档两把都要对得上，放宽的档位只看身份键 ——
  * 只比物品会让"普通附魔书"和"经验修补附魔书"并进同一张卡，
  * 而它们的稀有度档位不同，卡面就会跟内容对不上。
  * <p>
@@ -25,7 +25,7 @@ public final class ItemIdentity {
     }
 
     /**
-     * 最细的身份键：物品 id + 完整 NBT。两个用处 —— STRICT 档的键，以及
+     * 最细的身份键：物品 id + 完整 NBT。两个用处 —— SAME_NBT 档的键，以及
      * <b>「第一次见这个物品」的判据</b>（放宽的档位下它固定用这把键，否则刷屏的 NEW
      * 角标会天天报到：那角标问的是物品，不是这一次拾取）。
      * <p>
@@ -58,7 +58,7 @@ public final class ItemIdentity {
      * 外观键：稀有度 + 是否附魔 + 是否有损耗。这三样决定卡面档位与特效，
      * 任意一项不同就不该共用一张卡。
      * <p>
-     * 【为什么只有 STRICT 档给真的外观键】放宽的档位是玩家明确要求「同名就并」的 ——
+     * 【为什么只有 SAME_NBT 档给真的外观键】放宽的档位是玩家明确要求「同名就并」的 ——
      * 再用外观键把它挡回来，那一档就等于没设。空串表示「外观不参与判定」。
      */
     public static String lookOf(ItemStack stack, MergeMode mode) {

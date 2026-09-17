@@ -57,7 +57,7 @@ public final class NoticeQueue<T> {
     /**
      * 收下一次拾取。
      *
-     * @param mergeMode    合并粒度（哪些拾取算同一件东西）；{@link MergeMode#NONE} = 从不合并
+     * @param mergeMode    合并粒度（哪些拾取算同一件东西）；{@link MergeMode#NEVER} = 从不合并
      * @param maxOnScreen  同时在屏上限；超出的按"最久没被碰过"淘汰
      * @return 发生的改动；被淘汰的那张卡会作为结果返回（调用方据此让 DOM 播退场）
      */

@@ -17,38 +17,38 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 class MergeModeTest {
 
     @Test
-    @DisplayName("只有 STRICT 档把 NBT 编进身份键")
+    @DisplayName("只有 SAME_NBT 档把 NBT 编进身份键")
     void onlyStrictUsesNbt() {
-        assertTrue(MergeMode.STRICT.usesNbt());
-        assertFalse(MergeMode.TYPE.usesNbt());
-        assertFalse(MergeMode.TYPE_NAMED.usesNbt());
-        assertFalse(MergeMode.NONE.usesNbt());
+        assertTrue(MergeMode.SAME_NBT.usesNbt());
+        assertFalse(MergeMode.SAME_ITEM.usesNbt());
+        assertFalse(MergeMode.SAME_ITEM_KEEP_NAMED.usesNbt());
+        assertFalse(MergeMode.NEVER.usesNbt());
     }
 
     @Test
-    @DisplayName("只有 STRICT 档比外观档位 —— 别的档位要比就等于没设")
+    @DisplayName("只有 SAME_NBT 档比外观档位 —— 别的档位要比就等于没设")
     void onlyStrictUsesLook() {
-        assertTrue(MergeMode.STRICT.usesLook());
-        assertFalse(MergeMode.TYPE.usesLook());
-        assertFalse(MergeMode.TYPE_NAMED.usesLook());
-        assertFalse(MergeMode.NONE.usesLook());
+        assertTrue(MergeMode.SAME_NBT.usesLook());
+        assertFalse(MergeMode.SAME_ITEM.usesLook());
+        assertFalse(MergeMode.SAME_ITEM_KEEP_NAMED.usesLook());
+        assertFalse(MergeMode.NEVER.usesLook());
     }
 
     @Test
-    @DisplayName("NONE 每次都新身份；TYPE_NAMED 只对改过名字的那么做")
+    @DisplayName("NEVER 每次都新身份；SAME_ITEM_KEEP_NAMED 只对改过名字的那么做")
     void uniquePerPickup() {
         for (boolean named : new boolean[]{true, false}) {
-            assertTrue(MergeMode.NONE.uniquePerPickup(named), "从不合并：每次都要新身份");
-            assertEquals(named, MergeMode.TYPE_NAMED.uniquePerPickup(named),
-                    "TYPE_NAMED：只有改过名字的那件要单独一张卡");
-            assertFalse(MergeMode.TYPE.uniquePerPickup(named));
-            assertFalse(MergeMode.STRICT.uniquePerPickup(named));
+            assertTrue(MergeMode.NEVER.uniquePerPickup(named), "从不合并：每次都要新身份");
+            assertEquals(named, MergeMode.SAME_ITEM_KEEP_NAMED.uniquePerPickup(named),
+                    "SAME_ITEM_KEEP_NAMED：只有改过名字的那件要单独一张卡");
+            assertFalse(MergeMode.SAME_ITEM.uniquePerPickup(named));
+            assertFalse(MergeMode.SAME_NBT.uniquePerPickup(named));
         }
     }
 
     @Test
     @DisplayName("默认是最严的那一档")
     void defaultsToStrict() {
-        assertEquals(MergeMode.STRICT, MergeMode.defaults());
+        assertEquals(MergeMode.SAME_NBT, MergeMode.defaults());
     }
 }
