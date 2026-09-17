@@ -236,6 +236,19 @@ public final class DevHarness {
                 capture(mc, "p2");
                 return;
             }
+            if (configTicks == WARMUP_TICKS + 44) {
+                // 列几何进日志：截图看得出"好不好看"，看不出"在哪一档退让、收没收预览"
+                if (mc.screen instanceof PickupCardConfigScreen screen) {
+                    PickupCard.LOGGER.info("[harness-auto] 配置列: {}", screen.columnDump());
+                    float before = screen.scrollOffsetForHarness();
+                    screen.scrollForHarness(-1);
+                    float after = screen.scrollOffsetForHarness();
+                    PickupCard.LOGGER.info("[harness-auto] 配置列滚一格: 偏移 {} → {}（动没动都要看得见）",
+                            Math.round(before), Math.round(after));
+                    PickupCard.LOGGER.info("[harness-auto] 滚动后列几何: {}", screen.columnDump());
+                }
+                return;
+            }
             if (configTicks == WARMUP_TICKS + 46) {
                 LayoutSettings.Side before = PickupCardConfig.layoutSnapshot().stickTo();
                 clickByLabel(mc, "贴边");

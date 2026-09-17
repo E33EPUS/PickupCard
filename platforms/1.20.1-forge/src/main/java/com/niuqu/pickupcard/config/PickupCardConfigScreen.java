@@ -7,6 +7,9 @@ import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.render.nvg.ui.NvgButton;
 import com.niuqu.pickupcard.render.nvg.ui.NvgPalette;
+import com.niuqu.pickupcard.render.nvg.ui.ConfigLayout;
+import com.niuqu.pickupcard.render.nvg.ui.NvgScroll;
+import com.niuqu.pickupcard.render.nvg.ui.ScrollMath;
 import com.niuqu.pickupcard.render.nvg.ui.NvgSlider;
 import com.niuqu.pickupcard.render.nvg.ui.NvgTextField;
 import com.niuqu.pickupcard.render.nvg.ui.NvgToggle;
@@ -54,6 +57,43 @@ public final class PickupCardConfigScreen extends Screen {
     private static final int SIDE_H = 18;
     private static final int SIDE_STEP = 20;
 
+    /** 给 harness 看的列几何（只读）：三列到底摆在哪、预览收没收起。 */
+    public String columnDump() {
+        ConfigLayout lo = layout();
+        return String.format(java.util.Locale.ROOT,
+                "tabs=(x%.0f w%.0f h%.0f%s) items=(x%.0f w%.0f h%.0f) preview=%s 行数=%d 可见行=%d 偏移=%.0f",
+                lo.tabs().x(), lo.tabs().w(), lo.tabs().h(), lo.tabsOnTop() ? " 顶排" : "",
+                lo.items().x(), lo.items().w(), lo.items().h(),
+                lo.previewVisible() ? String.format(java.util.Locale.ROOT, "w%.0f", lo.preview().w())
+                        : "收起",
+                rows.size(),
+                Math.max(1, (int) (lo.items().h() / Math.max(1, rowStep(Math.max(1, rows.size()))))),
+                itemsScroll == null ? 0f : itemsScroll.offset());
+    }
+
+    /** 给 harness 用：让配置项那一列滚一格（走的是和真人滚轮同一条路）。 */
+    public boolean scrollForHarness(double delta) {
+        return mouseScrolled(this.width / 2.0, this.height / 2.0, delta);
+    }
+
+    /** 给 harness 用：当前滚动偏移。 */
+    public float scrollOffsetForHarness() {
+        return itemsScroll == null ? 0f : itemsScroll.offset();
+    }
+
+    /** 三列几何（每次现算，纯函数）。 */
+    private ConfigLayout layout() {
+        return ConfigLayout.compute(this.width, this.height);
+    }
+
+    /** 配置项那一列的滚动视口；每帧按当前几何重建（画布会变，视口跟着变）。 */
+    private NvgScroll itemsScroll;
+
+    /** 这一帧配置项内容有多高（滚动的依据）。 */
+    private float itemsContentHeight() {
+        return rows.size() * rowStep(Math.max(1, rows.size()));
+    }
+
     /** 分类名抄旧版：通用 / 动画 / 位置与堆叠 / 外观。 */
     private enum Section {
         GENERAL("通用"),
@@ -100,8 +140,10 @@ public final class PickupCardConfigScreen extends Screen {
         palette = NvgPalette.of(CardStage.INSTANCE.previewStyle());
         PickupCardConfig.Values v = PickupCardConfig.VALUES;
 
-        int y = SIDE_TOP;
-        for (Section s : Section.values()) {
+        ConfigLayout lo = layout();
+        Section[] sections = Section.values();
+        for (int i = 0; i < sections.length; i++) {
+            Section s = sections[i];
             Section target = s;
             NvgButton b = new NvgButton(s.label,
                     () -> (s == section ? "▸ " : "  ") + s.label,
@@ -109,10 +151,11 @@ public final class PickupCardConfigScreen extends Screen {
                         section = target;
                         pendingRebuild = true;
                     });
-            b.at(PAD, y, SIDE_W, SIDE_H);
+            ConfigLayout.Rect cell = lo.tabRect(i, sections.length);
+            b.at(cell.x(), cell.y(), cell.w(), cell.h());
             sideButtons.add(b);
-            y += SIDE_STEP;
         }
+        itemsScroll = new NvgScroll(lo.items().x(), lo.items().y(), lo.items().w(), lo.items().h());
 
         switch (section) {
             case GENERAL -> buildGeneral(v);
@@ -196,12 +239,17 @@ public final class PickupCardConfigScreen extends Screen {
         rows.add(new Row(label, widget, hint));
     }
 
-    /** 逐行摆：一行两个格子，行高按画布自适应（guiScale 5 时画布只有 144 高）。 */
+    /** 逐行摆：**一行一项**（标签左、控件右），行高按画布自适应（guiScale 5 时画布只有 144 高）。 */
     private void layoutRows() {
-        int maxRows = Math.max(1, (rows.size() + 1) / 2);
-        int step = rowStep(maxRows);
+        if (itemsScroll == null) {
+            return;
+        }
+        int step = rowStep(Math.max(1, rows.size()));
+        float offset = itemsScroll.offset();
         for (int i = 0; i < rows.size(); i++) {
-            rows.get(i).widget().at(controlX(i % 2), rowsTop() + (i / 2) * step, controlW(), rowH());
+            // 扣掉滚动偏移：控件与它画出来的位置必须是同一个坐标系，否则点了会"选错行"
+            rows.get(i).widget().at(controlX(), rowsTop() + i * step - Math.round(offset),
+                    controlW(), rowH());
         }
     }
 
@@ -215,6 +263,7 @@ public final class PickupCardConfigScreen extends Screen {
             pendingRebuild = false;
             rebuild();
         }
+        layoutRows();       // 每帧刷一遍：滚一下、换一页、改窗口尺寸，位置都要跟上
         for (NvgWidget w : widgets()) {
             w.mouseMoved(mouseX, mouseY);
         }
@@ -223,9 +272,18 @@ public final class PickupCardConfigScreen extends Screen {
         try (NvgUi ui = NvgUi.begin(gui, palette, mouseX, mouseY, System.currentTimeMillis())) {
             if (ui != null) {
                 drawChrome(ui);
+                // 配置项那一列：裁剪到视口里 —— 滚出去的行不许糊在标签列或预览列上。
+                // 形状（NanoVG）与文字（原版批次）两套裁剪由 pushClip 一次设好。
+                if (itemsScroll != null) {
+                    itemsScroll.pushClip(ui);
+                }
                 drawLabels(ui);
                 for (NvgWidget w : widgets()) {
                     w.draw(ui);
+                }
+                if (itemsScroll != null) {
+                    drawScrollBar(ui);
+                    ui.popClip();
                 }
             }
         }
@@ -238,25 +296,49 @@ public final class PickupCardConfigScreen extends Screen {
     /** 底 + 标题 + 侧栏 + 预览面板 —— 全是 NanoVG 画的圆角块。 */
     private void drawChrome(NvgUi ui) {
         NvgPalette p = ui.palette;
-        ui.text(this.title.getString(), contentLeft(), 8f, 0xFFFFFFFF);
+        ConfigLayout lo = layout();
+        ui.text(this.title.getString(), contentLeft(), 6f, 0xFFFFFFFF);
         ui.text("改动即时生效，拨过的项会记进 config/pickupcard-client.toml",
-                contentLeft(), 18f, p.textDim);
-        ui.fillGradient(PAD - 2, SIDE_TOP - 6, SIDE_W + 4, this.height - SIDE_TOP - 14,
-                p.panel, 0x80202836);
-        ui.text("预览", contentLeft(), 30f, p.textDim);
-        ui.fillRoundRect(contentLeft() - 2, 40f, contentRight() - contentLeft() + 4,
-                previewHeight() - 4f, p.radius, 0x40202A38);
+                contentLeft(), 17f, p.textDim);
+        // 标签那一列：列排时是一竖条底，顶排时是一横条底
+        ui.fillGradient(lo.tabs().x() - 2f, lo.tabs().y() - 2f, lo.tabs().w() + 4f,
+                lo.tabs().h() + 4f, p.panel, 0x80202836);
+        // 预览列：面板底 + 标题（收掉时这两样都不画）
+        if (lo.previewVisible()) {
+            ui.text("预览", lo.preview().x(), lo.preview().y(), p.textDim);
+            ui.fillRoundRect(lo.preview().x() - 2f, lo.preview().y() + 10f,
+                    lo.preview().w() + 4f, Math.max(0f, lo.preview().h() - 12f), p.radius,
+                    0x40202A38);
+        } else {
+            ui.text("预览：窗口太窄，已收起", contentLeft(), this.height - 12f, p.textDim);
+        }
     }
 
     private void drawLabels(NvgUi ui) {
         for (Row row : rows) {
             NvgWidget w = row.widget();
             String text = ui.font().plainSubstrByWidth(row.label(), labelW());
-            ui.text(text, w.x() - labelW() - 4f, w.y() + (w.height() - 8) / 2f + 1f, ui.palette.textDim);
+            ui.text(text, labelX(), w.y() + (w.height() - 8) / 2f + 1f, ui.palette.textDim);
         }
     }
 
     /** 底部那行说明：悬停谁就说谁，这是这个界面唯一能自我解释的地方。 */
+    /** 需要滚动时才画的那条滚动条（细，不抢视线；位置一眼看出"还能往下"）。 */
+    private void drawScrollBar(NvgUi ui) {
+        float content = itemsContentHeight();
+        if (!itemsScroll.scrollable(content)) {
+            return;
+        }
+        ConfigLayout lo = layout();
+        float trackH = lo.items().h() - 8f;
+        float barH = Math.max(12f, trackH * (lo.items().h() / content));
+        float t = ScrollMath.maxOffset(content, lo.items().h()) <= 0f ? 0f
+                : itemsScroll.offset() / ScrollMath.maxOffset(content, lo.items().h());
+        float x = lo.items().right() - 3f;
+        float y = lo.items().y() + 4f + t * (trackH - barH);
+        ui.fillRoundRect(x, y, 3f, barH, 1.5f, ui.palette.textDim);
+    }
+
     private void drawHint(GuiGraphics gui, int mouseX, int mouseY) {
         String hint = null;
         for (Row row : rows) {
@@ -278,15 +360,22 @@ public final class PickupCardConfigScreen extends Screen {
 
     /** 单张样例卡（经验卡，那一档会亮微光）。 */
     private void drawPreview(GuiGraphics gui) {
+        ConfigLayout lo = layout();
+        if (!lo.previewVisible()) {
+            return;     // 收起了就别画 —— 挤成一条的预览比没有更难看
+        }
         StyleModel style = CardStage.INSTANCE.previewStyle();
         boolean showName = PickupCardConfig.snapshot().showItemName();
-        float x = contentLeft();
-        float y = 40f;
+        float x = lo.preview().x();
+        float y = lo.preview().y() + 12f;
+        float w = lo.preview().w();
+        float h = Math.max(20f, lo.preview().h() - 16f);
         if (section == Section.LAYOUT) {
-            renderStackPreview(gui, x, y, contentRight() - contentLeft(), previewHeight() - 8f, showName);
+            renderStackPreview(gui, x, y, w, h, showName);
         } else {
-            float w = showName ? Math.max(60f, Math.min(150f, this.width - x - PAD - 4)) : 58f;
-            NvgCardPainter.paintPreview(gui, style, x, y, w,
+            // 单卡预览：宽度按列宽收，但不小于一张卡的最小可读宽度
+            float cardW = showName ? Math.max(60f, Math.min(150f, w - 4f)) : 58f;
+            NvgCardPainter.paintPreview(gui, style, x, y, cardW,
                     new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true, showName,
                     previewScale());
         }
@@ -349,7 +438,13 @@ public final class PickupCardConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
+        ConfigLayout.Rect items = layout().items();
         for (NvgWidget w : widgets()) {
+            // 滚出视口的行不该还能被点到（它们的位置在视口外，只有 x 可能重合）
+            boolean rowWidget = rows.stream().anyMatch(r -> r.widget() == w);
+            if (rowWidget && (mouseY < items.y() || mouseY >= items.bottom())) {
+                continue;
+            }
             if (w.mouseClicked(mouseX, mouseY, button)) {
                 return true;
             }
@@ -382,7 +477,16 @@ public final class PickupCardConfigScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double delta) {
-        return true;        // 这一页不需要滚动：选项都摆得下（行高按画布自适应）
+        if (itemsScroll == null) {
+            return super.mouseScrolled(mouseX, mouseY, delta);
+        }
+        int step = rowStep(Math.max(1, rows.size()));
+        // 一格滚三行（按行不按像素：跨缩放档手感一致，见 ScrollMath）
+        if (itemsScroll.wheel(delta, itemsContentHeight(), step)) {
+            layoutRows();
+            return true;
+        }
+        return true;
     }
 
     @Override
@@ -481,27 +585,32 @@ public final class PickupCardConfigScreen extends Screen {
     // ------------------------------------------------------------------
 
     private int contentLeft() {
-        return PAD + SIDE_W + 8;
+        return Math.round(layout().items().x()) + 2;
     }
 
     private int contentRight() {
-        return Math.max(contentLeft() + 120, this.width - PAD);
+        return Math.round(layout().items().right()) - 2;
     }
 
-    private int colW() {
-        return Math.max(70, (contentRight() - contentLeft() - 8) / 2);
-    }
-
+    /** 控件那一格多宽：配置列宽的一部分，右对齐（一行一项，不再是一行两项）。 */
     private int controlW() {
-        return Math.max(52, Math.min(96, colW() * 3 / 5));
+        int room = Math.round(layout().items().w()) - 12;
+        return Math.max(48, Math.min(130, room * 45 / 100));
     }
 
+    /** 标签左缘：配置列左边留 6px。 */
+    private int labelX() {
+        return Math.round(layout().items().x()) + 6;
+    }
+
+    /** 标签能用多宽：从标签左缘到控件左缘。 */
     private int labelW() {
-        return Math.max(24, colW() - controlW() - 6);
+        return Math.max(24, controlX() - labelX() - 6);
     }
 
-    private int controlX(int column) {
-        return contentLeft() + column * (colW() + 8) + labelW() + 4;
+    /** 控件左缘：右对齐到配置列右缘留 6px。 */
+    private int controlX() {
+        return Math.round(layout().items().right()) - 6 - controlW();
     }
 
     /** 预览面板高度：布局页要摞三张卡，别人一张卡就够；画布矮时再压一压。 */
@@ -511,7 +620,8 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     private int rowsTop() {
-        return 36 + previewHeight() + 6;
+        // 预览已经搬到右边那一列了，配置项从这一列的顶上开始
+        return Math.round(layout().items().y()) + 2;
     }
 
     private int rowH() {
@@ -519,7 +629,7 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     private int rowStep(int maxRows) {
-        int room = this.height - rowsTop() - 24;
+        int room = Math.round(layout().items().h()) - 6;
         return Math.max(13, Math.min(22, room / Math.max(1, maxRows)));
     }
 
