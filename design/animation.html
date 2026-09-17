@@ -28,6 +28,20 @@ input[type=range] { width:160px; vertical-align:middle; }
         transition: transform .34s cubic-bezier(.22,.9,.28,1), opacity .28s ease; }
 .slot.leaving { opacity:0; }
 
+/* ===== 竖条自己也要有动画 ===== 隧道口先开，火车再出（两段式，内容延迟起跑） */
+.bar { transform-origin: center; }
+:root[data-bar="grow"]   .bar { transform: scaleY(0); }
+:root[data-bar="grow"]   .bar.out { transform: scaleY(1);
+        transition: transform .18s cubic-bezier(.2,.9,.3,1); }
+:root[data-bar="fade"]   .bar { opacity: 0; }
+:root[data-bar="fade"]   .bar.out { opacity: 1; transition: opacity .20s ease-out; }
+:root[data-bar="sweep"]  .bar { transform: scaleY(0); }
+:root[data-bar="sweep"]  .bar.out { transform: scaleY(1);
+        transition: transform .22s cubic-bezier(.2,.9,.3,1); }
+:root[data-bar="none"]   .bar { transform: none; opacity: 1; }
+/* sweep 档：竖条自己从右往左"铺"出来，更像隧道口被推开 */
+:root[data-bar="sweep"]  .bar { transform-origin: right center; }
+
 /* ===== 隧道口 ===== 竖条右侧的裁剪窗。尺寸由 JS 定死，动画期间不变形。 */
 .tunnel { overflow:hidden; display:flex; }
 .tunnel > .body { flex: none; }
@@ -41,6 +55,14 @@ input[type=range] { width:160px; vertical-align:middle; }
 :root[data-exit="wipe"] .tunnel { width:0 !important;
         transition: width .42s cubic-bezier(.22,.9,.28,1); }
 :root[data-exit="wipe"] .tunnel.out { width: var(--w) !important; }
+/* ===== 内容延迟起跑 ===== 必须写在所有 transition 简写之后：
+   简写会重置 transition-delay，写在前面等于没写（这个坑踩过一次）。 */
+:root[data-bar="grow"] .body.out, :root[data-bar="sweep"] .body.out,
+:root[data-bar="fade"] .body.out { transition-delay: .10s; }
+:root[data-bar="grow"] :root[data-exit="wipe"] .tunnel.out,
+:root[data-bar="sweep"] :root[data-exit="wipe"] .tunnel.out,
+:root[data-bar="fade"] :root[data-exit="wipe"] .tunnel.out { transition-delay: .10s; }
+
 </style>
 </head>
 <body>
@@ -61,8 +83,15 @@ input[type=range] { width:160px; vertical-align:middle; }
   <label><input type="radio" name="exit" value="train" checked> 火车（数字端先出）</label>
   <label><input type="radio" name="exit" value="wipe"> 拉幕（名字端先出）</label>
   <div class="sep"></div>
+  <div class="sep"></div>
+  <span>竖条动画</span>
+  <label><input type="radio" name="bar" value="grow" checked> 纵向展开</label>
+  <label><input type="radio" name="bar" value="sweep"> 从右铺开</label>
+  <label><input type="radio" name="bar" value="fade"> 淡入</label>
+  <label><input type="radio" name="bar" value="none"> 无</label>
+  <div class="sep"></div>
   <label>锚点 X <input type="range" id="anchor" min="0" max="380" value="320"><span id="anchor-v">320</span></label>
-  <label><input type="checkbox" id="rightalign"> 右边缘对齐</label>
+  <label><input type="checkbox" id="rightalign" checked> 右边缘对齐</label>
 </div>
 
 <div class="frame"><div class="stage" id="stage"></div></div>
@@ -142,7 +171,8 @@ function spawn() {
 
   // 两帧后再触发过渡：一帧让浏览器确认起始态，一帧让它开始动
   requestAnimationFrame(() => requestAnimationFrame(() => {
-    body.classList.add('out');
+    slot.querySelector('.bar').classList.add('out');   // 隧道口先开
+    body.classList.add('out');                         // 火车再出
     tunnel.classList.add('out');
   }));
 }
@@ -176,6 +206,9 @@ document.querySelectorAll('input[name=exit]').forEach(r =>
   r.onchange = () => { document.documentElement.dataset.exit = r.value; });
 
 document.documentElement.dataset.exit = 'train';
+document.documentElement.dataset.bar = 'grow';
+document.querySelectorAll('input[name=bar]').forEach(r =>
+  r.onchange = () => { document.documentElement.dataset.bar = r.value; });
 spawn(); tick();
 setTimeout(spawn, 400);
 setTimeout(spawn, 900);
