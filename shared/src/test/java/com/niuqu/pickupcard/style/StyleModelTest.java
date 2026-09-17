@@ -53,10 +53,10 @@ class StyleModelTest {
     @Test
     void numbersAreSanitized() {
         StyleModel parsed = StyleModel.parse(
-                "{\"geometry\": {\"cornerRadius\": -5, \"iconSize\": 99}, \"material\": {\"shadowAlpha\": 999}}");
+                "{\"geometry\": {\"cornerRadius\": -5, \"iconSize\": 99}, \"material\": {\"glowAlpha\": 999}}");
         assertEquals(0, parsed.cornerRadius());
         assertEquals(64, parsed.iconSize(), "图标边长夹到上限 64");
-        assertEquals(255, parsed.shadowAlpha());
+        assertEquals(255, parsed.glowAlpha());
     }
 
     @Test

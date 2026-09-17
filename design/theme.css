@@ -38,11 +38,7 @@
   gap: var(--pc-gap);
   height: calc(var(--pc-icon) + var(--pc-pad-v) * 2);
   width: max-content;
-  /* 投影浓度只有一份真源：--pc-shadow-alpha（0-255），和 Java 里同一把尺 */
-  filter: drop-shadow(0 var(--pc-shadow-dy) var(--pc-shadow-blur)
-                     rgba(0, 0, 0, calc(var(--pc-shadow-alpha) / 255)));
 }
-:root[data-shadow="none"] .card { filter: none; }
 
 /* 竖条上下各内缩 --pc-bar-inset-y：它比卡片矮一截，是设计稿定的比例。
    跟 Java 的 TrioCardPainter 用的是同一个键，两边必须同时动。 */
@@ -66,11 +62,9 @@
 .box {
   border-radius: var(--pc-radius);
   background: linear-gradient(var(--pc-fill-top), var(--pc-fill-bottom));
-  box-shadow: inset 0 1px 0 var(--pc-highlight);
   outline: 1px solid var(--pc-border);
   outline-offset: -1px;
 }
-:root[data-highlight="none"] .box { box-shadow: none; }
 
 /* 图标格是正方形，边长 = 图标 + 上下各一份内边距 —— 与 Java 的
    boxHeight() 是同一个式子，所以两边永远等高。 */

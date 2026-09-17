@@ -28,11 +28,12 @@ import org.jetbrains.annotations.Nullable;
  * @param fillTop        框底色（玻璃拟态的深色半透明）
  * @param fillBottom     框底色下端（两色相同 = 纯色）
  * @param border         框描边色
- * @param highlight      顶部高光线颜色（alpha 为 0 则不画）
- * @param shadowAlpha    投影不透明度（0 = 不画投影）
- * @param shadowOffsetY  投影下移量
- * @param shadowBlur     投影软边宽度（px）。0 = 硬边；>0 走 NanoVG 的 boxGradient 软边，有效区间约 0~8
  * @param glowAlpha      稀有度微光不透明度（0 = 不画）
+ *
+ * <p>【2026-09-17 删掉的两组参数】投影（浓度 / 下移 / 软边）与顶部那条 1px 高光。
+ * 用户的原话是"直接把影子和高光删了" —— 在草地这种有纹理的底上，投影读起来就是一圈脏边；
+ * 20px 高的框上也读不出什么"玻璃感"。删的是<b>参数本身</b>，不是"默认设成 0"：
+ * 留着能调、却一眼看不出差别的键，就是"改了没反应"的陷阱。
  * @param nameColor      物品名颜色
  * @param enterMs        入场动画时长
  * @param bumpMs         数字跳动时长
@@ -50,10 +51,6 @@ public record StyleModel(int cornerRadius,
                          int fillTop,
                          int fillBottom,
                          int border,
-                         int highlight,
-                         int shadowAlpha,
-                         int shadowOffsetY,
-                         int shadowBlur,
                          int glowAlpha,
                          int nameColor,
                          long enterMs,
@@ -66,7 +63,7 @@ public record StyleModel(int cornerRadius,
         return new StyleModel(
                 4, 4, 3, 3, 16, 4, 1,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
-                0x3CFFFFFF, 90, 2, 4, 46,
+                46,
                 0xF0EBEFF6,
                 560L, 300L, true, true, true);
     }
@@ -81,10 +78,7 @@ public record StyleModel(int cornerRadius,
                 Math.max(8, Math.min(64, iconSize)),
                 Math.max(1, Math.min(24, barWidth)),
                 Math.max(0, Math.min(16, barInsetY)),
-                fillTop, fillBottom, border, highlight,
-                Math.max(0, Math.min(255, shadowAlpha)),
-                Math.max(0, Math.min(16, shadowOffsetY)),
-                Math.max(0, Math.min(16, shadowBlur)),
+                fillTop, fillBottom, border,
                 Math.max(0, Math.min(255, glowAlpha)),
                 nameColor,
                 Math.max(0, enterMs),
@@ -118,10 +112,6 @@ public record StyleModel(int cornerRadius,
                     color(mat, "fillTop", 0xD1262B38),
                     color(mat, "fillBottom", 0xDB161A22),
                     color(mat, "border", 0x2EFFFFFF),
-                    color(mat, "highlight", 0x3CFFFFFF),
-                    i(mat, "shadowAlpha", 90),
-                    i(mat, "shadowOffsetY", 2),
-                    i(mat, "shadowBlur", 4),
                     i(mat, "glowAlpha", 46),
                     color(tex, "nameColor", 0xF0EBEFF6),
                     i(anim, "enterMs", 560),

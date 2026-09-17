@@ -42,10 +42,6 @@
   --pc-fill-top: #262B38D1;      /* 框底色（上端） */
   --pc-fill-bottom: #161A22DB;   /* 框底色（下端，与上端相同即纯色） */
   --pc-border: #FFFFFF2E;        /* 框描边 */
-  --pc-highlight: #FFFFFF3C;     /* 顶部高光线，alpha=00 即不画 */
-  --pc-shadow-alpha: 90;         /* 投影不透明度 0-255，0 = 不画 */
-  --pc-shadow-dy: 2px;           /* 投影下移量 */
-  --pc-shadow-blur: 4px;         /* 投影模糊半径，有效区间约 0-8 */
   --pc-glow-alpha: 46;           /* 稀有度微光不透明度，0 = 不画 */
 
   /* ---- 文字 ---- */
@@ -78,8 +74,6 @@
   --pc-fill-top: #FFFFFFF2;
   --pc-fill-bottom: #E9ECF3F7;
   --pc-border: #1B1F2724;
-  --pc-highlight: #FFFFFFCC;
-  --pc-shadow-alpha: 70;
   --pc-name: #1B1F27F0;
 
   --pc-accent-common: #6B7480;

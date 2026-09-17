@@ -44,10 +44,6 @@ SCHEMA = {
     "--pc-fill-top":        ("material", "fillTop", "color"),
     "--pc-fill-bottom":     ("material", "fillBottom", "color"),
     "--pc-border":          ("material", "border", "color"),
-    "--pc-highlight":       ("material", "highlight", "color"),
-    "--pc-shadow-alpha":    ("material", "shadowAlpha", "int"),
-    "--pc-shadow-dy":       ("material", "shadowOffsetY", "int"),
-    "--pc-shadow-blur":     ("material", "shadowBlur", "int"),
     "--pc-glow-alpha":      ("material", "glowAlpha", "int"),
     # 文字
     "--pc-name":            ("text", "nameColor", "color"),

@@ -138,16 +138,6 @@ public final class PickupCardConfigScreen extends Screen {
         y += itemStep();
         hint(addRenderableWidget(intSlider("左右内边距", v.stPaddingH, 0, 16, c1, y)),
                 "名字和框边之间的距离");
-        hint(addRenderableWidget(triToggle("顶部高光", v.stTopHighlight, c2, y)),
-                "框顶那条 1px 亮线；关了就没玻璃感");
-        y += itemStep();
-        hint(addRenderableWidget(intSlider("阴影浓度", v.stShadowAlpha, 0, 255, c1, y)),
-                "卡片投影的浓淡；0 = 不画投影");
-        hint(addRenderableWidget(intSlider("阴影模糊", v.stShadowBlur, 0, 16, c2, y)),
-                "投影边缘的软硬；0 = 硬边");
-        y += itemStep();
-        hint(addRenderableWidget(intSlider("阴影下移", v.stShadowOffsetY, 0, 8, c1, y)),
-                "投影往下偏几个像素");
     }
 
     private void buildAnim(PickupCardConfig.Values v) {

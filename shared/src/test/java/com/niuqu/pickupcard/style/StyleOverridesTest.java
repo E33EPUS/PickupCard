@@ -25,19 +25,12 @@ class StyleOverridesTest {
         assertEquals(THEME.enterMs(), out.enterMs());
     }
 
-    @Test
-    void turningHighlightOffZeroesItsAlpha() {
-        StyleModel off = StyleOverrides.builder().topHighlight(false).build().apply(THEME);
-        assertEquals(0, off.highlight() >>> 24, "alpha = 0 就是不画（主题里就是这个语义）");
-        assertEquals(THEME.highlight() & 0xFFFFFF, off.highlight() & 0xFFFFFF, "只动 alpha，不动颜色");
-    }
-
     /** 手写 TOML 可以填任意数字：覆盖之后仍然要被夹进合法区间。 */
     @Test
     void outOfRangeValuesAreClamped() {
-        StyleModel wild = StyleOverrides.builder().iconSize(9999).shadowAlpha(9999).build().apply(THEME);
+        StyleModel wild = StyleOverrides.builder().iconSize(9999).barWidth(999).build().apply(THEME);
         assertTrue(wild.iconSize() >= 8 && wild.iconSize() <= 64, "图标边长夹进 8..64，实际 " + wild.iconSize());
-        assertTrue(wild.shadowAlpha() >= 0 && wild.shadowAlpha() <= 255);
+        assertTrue(wild.barWidth() >= 1 && wild.barWidth() <= 24, "竖条宽夹进 1..24，实际 " + wild.barWidth());
     }
 
     @Test

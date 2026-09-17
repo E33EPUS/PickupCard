@@ -68,10 +68,11 @@ git 历史里翻到另外几个名字，得知道它们为什么没了：
 
 | 路径 | 状态 | 在哪 |
 | --- | --- | --- |
-| **NanoVG 矢量**（影子 / 微光 / 竖条 / 两个框 / 入场裁剪） | **唯一的生产路径** | `layers/mapping/official/…/render/nvg/NvgCardPainter` |
+| **NanoVG 矢量**（微光 / 竖条 / 两个框 / 入场裁剪） | **唯一的生产路径** | `layers/mapping/official/…/render/nvg/NvgCardPainter` |
 | 原版内容（物品图标 + 中文文字） | **活的，且必须有** | 同一个文件的 `content()` —— 那是 MC 自己的物品模型与字形图集，不是"第二种画法" |
 | DOM 草稿 | **活的，视觉真源** | `design/theme.css` + `measure.html` + `animation.html`：改外观**先动它** |
-| ~~SDF 形状层~~ | **已删**（2026-09-17） | 原 `render/shape/*` + `assets/*/shaders/core/gui_shape.*`；影子与微光改用 NanoVG 的 `nvgBoxGradient` 软边 |
+| ~~SDF 形状层~~ | **已删**（2026-09-17） | 原 `render/shape/*` + `assets/*/shaders/core/gui_shape.*` |
+| ~~投影 + 顶部高光~~ | **已删**（2026-09-17，用户："直接把影子和高光删了"） | 参数整组从 `tokens.css` → 主题 JSON → `StyleModel` / `StyleOverrides` → 配置界面删掉，不是"默认设成 0" |
 | ~~SDF 整卡回退~~ | **已删**（2026-09-17） | 原是 `TrioCardPainter.paint()/chrome()/barShapes()`：引擎起不来时降级用 |
 | ~~`BaselineCardPainter`~~ | **已删**（2026-09-17） | — |
 

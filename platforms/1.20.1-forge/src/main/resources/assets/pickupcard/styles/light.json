@@ -4,10 +4,6 @@
     "fillTop": "#FFFFFFF2",
     "fillBottom": "#E9ECF3F7",
     "border": "#1B1F2724",
-    "highlight": "#FFFFFFCC",
-    "shadowAlpha": 70,
-    "shadowOffsetY": 2,
-    "shadowBlur": 4,
     "glowAlpha": 46
   },
   "text": {

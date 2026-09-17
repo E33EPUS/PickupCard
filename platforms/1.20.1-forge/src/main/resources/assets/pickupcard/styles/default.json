@@ -13,10 +13,6 @@
     "fillTop": "#262B38D1",
     "fillBottom": "#161A22DB",
     "border": "#FFFFFF2E",
-    "highlight": "#FFFFFF3C",
-    "shadowAlpha": 90,
-    "shadowOffsetY": 2,
-    "shadowBlur": 4,
     "glowAlpha": 46
   },
   "text": {

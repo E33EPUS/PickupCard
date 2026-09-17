@@ -44,17 +44,6 @@ input[type=range] { width:110px; vertical-align:middle; }
 
 <div class="controls">
   <button id="btn-theme">切浅色</button>
-  <div class="sep"></div>
-  <span>阴影</span>
-  <label><input type="radio" name="sh" value="on" checked> 有</label>
-  <label><input type="radio" name="sh" value="none"> 无</label>
-  <label>偏移 <input type="range" id="sdy" min="0" max="8" value="3"><span id="sdy-v">3</span></label>
-  <label>模糊 <input type="range" id="sblur" min="0" max="16" value="6"><span id="sblur-v">6</span></label>
-  <label>浓度 <input type="range" id="sstr" min="0" max="255" step="1" value="90"><span id="sstr-v">90</span></label>
-  <div class="sep"></div>
-  <span>顶部高光</span>
-  <label><input type="radio" name="hl" value="on" checked> 有</label>
-  <label><input type="radio" name="hl" value="none"> 无</label>
 </div>
 
 <h2>五档强调色（竖条 + 数量同色）</h2>
@@ -86,7 +75,7 @@ input[type=range] { width:110px; vertical-align:middle; }
   </div>
 </div></div>
 
-<h2>2× 放大（看圆角 / 描边 / 高光）</h2>
+<h2>2× 放大（看圆角 / 描边 / 竖条）</h2>
 <div class="board stage"><div class="rows zoom2">
   <div class="card" style="--accent: var(--pc-accent-epic)">
     <div class="bar"></div>
@@ -125,20 +114,6 @@ document.getElementById('btn-theme').onclick = e => {
   const light = root.dataset.theme === 'light';
   root.dataset.theme = light ? 'dark' : 'light';
   e.target.textContent = light ? '切浅色' : '切深色';
-};
-document.querySelectorAll('input[name=sh]').forEach(r =>
-  r.onchange = () => root.dataset.shadow = r.value === 'on' ? '' : 'none');
-document.querySelectorAll('input[name=hl]').forEach(r =>
-  r.onchange = () => root.dataset.highlight = r.value === 'on' ? '' : 'none');
-const bind = (id, cssVar) => {
-  const el = document.getElementById(id), out = document.getElementById(id + '-v');
-  el.oninput = () => { root.style.setProperty(cssVar, el.value + 'px'); out.textContent = el.value; };
-};
-bind('sdy', '--pc-shadow-dy'); bind('sblur', '--pc-shadow-blur');
-document.getElementById('sstr').oninput = e => {
-  // 浓度只有一份真源：--pc-shadow-alpha（0-255），Java 读的是同一个键
-  root.style.setProperty('--pc-shadow-alpha', e.target.value);
-  document.getElementById('sstr-v').textContent = e.target.value;
 };
 </script>
 </body>

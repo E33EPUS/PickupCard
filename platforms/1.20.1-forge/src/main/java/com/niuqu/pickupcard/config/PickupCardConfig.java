@@ -116,22 +116,6 @@ public final class PickupCardConfig {
         if (barInset >= 0) {
             b.barInsetY(barInset);
         }
-        int shadowDy = VALUES.stShadowOffsetY.get();
-        if (shadowDy >= 0) {
-            b.shadowOffsetY(shadowDy);
-        }
-        int blur = VALUES.stShadowBlur.get();
-        if (blur >= 0) {
-            b.shadowBlur(blur);
-        }
-        int alpha = VALUES.stShadowAlpha.get();
-        if (alpha >= 0) {
-            b.shadowAlpha(alpha);
-        }
-        int highlight = VALUES.stTopHighlight.get();
-        if (highlight >= 0) {
-            b.topHighlight(highlight == 1);
-        }
         long enterMs = VALUES.stEnterMs.get();
         if (enterMs >= 0) {
             b.enterMs(enterMs);
@@ -183,10 +167,6 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.IntValue stIconSize;
         final ForgeConfigSpec.IntValue stBarWidth;
         final ForgeConfigSpec.IntValue stBarInsetY;
-        final ForgeConfigSpec.IntValue stShadowOffsetY;
-        final ForgeConfigSpec.IntValue stShadowBlur;
-        final ForgeConfigSpec.IntValue stShadowAlpha;
-        final ForgeConfigSpec.IntValue stTopHighlight;
         final ForgeConfigSpec.LongValue stEnterMs;
         final ForgeConfigSpec.LongValue stBumpMs;
         final ForgeConfigSpec.IntValue stEnterEnabled;
@@ -274,10 +254,6 @@ public final class PickupCardConfig {
             stIconSize = styleInt(builder, "iconSize", "物品图标边长（像素）。原版贴图是 16，取 16 = 不缩放最清晰", 64);
             stBarWidth = styleInt(builder, "barWidth", "稀有度竖条宽度（像素）", 24);
             stBarInsetY = styleInt(builder, "barInsetY", "竖条上下各内缩多少（像素）。0 = 与卡片齐平", 16);
-            stShadowOffsetY = styleInt(builder, "shadowOffsetY", "投影下移量（像素）", 16);
-            stShadowBlur = styleInt(builder, "shadowBlur", "投影模糊半径（像素）。0 = 硬边，有效区间约 0-8", 16);
-            stShadowAlpha = styleInt(builder, "shadowAlpha", "投影不透明度 0-255。0 = 不画投影", 255);
-            stTopHighlight = styleInt(builder, "topHighlight", "顶部那条 1px 高光。0 = 不画，1 = 画", 1);
             stEnterMs = builder
                     .comment("入场动画总时长（毫秒）。竖条占前 30%，内容从 18% 起跑。", "-1 = 跟随主题（默认）。")
                     .defineInRange("enterMs", -1L, -1L, 5_000L);

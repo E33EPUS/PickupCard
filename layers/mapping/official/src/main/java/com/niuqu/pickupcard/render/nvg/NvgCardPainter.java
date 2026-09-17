@@ -56,9 +56,10 @@ import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
  *   <li>同一轮里 SDF 回退那条还把<b>竖条自己</b>裁掉了。</li>
  * </ul>
  * 同一个几何写 N 遍，就一定会有 N-1 遍是错的。所以这里把绘制收到一处：
- * <b>影子、微光、竖条、两个内容框、入场裁剪全在 NanoVG 里</b>，SDF 图层与它的着色器
- * 一起删掉了。影子改用 NanoVG 自带的 {@code nvgBoxGradient}（见 {@link #softBox}），
- * 不用模糊也能拿到软边。
+ * <b>微光、竖条、两个内容框、入场裁剪全在 NanoVG 里</b>，SDF 图层与它的着色器一起删掉了。
+ * <p>
+ * <b>投影与顶部高光后来也删了</b>（用户 2026-09-17："直接把影子和高光删了"）——
+ * 参数一起从主题里拿掉，理由见 {@link StyleModel} 的类注释。
  *
  * <h2>为什么物品图标与文字还在原版</h2>
  * 它们不是"第二种画法"，而是 MC 自己拥有的两样东西：物品图标是 3D 模型 + 附魔光效 +
@@ -80,10 +81,6 @@ import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
  */
 public final class NvgCardPainter {
 
-    /** 影子比卡片往四周放大的量。 */
-    private static final float SHADOW_SPREAD = 2f;
-    /** 顶部高光的厚度，对应 CSS 里的 1px。 */
-    private static final float HIGHLIGHT_H = 1f;
     /** 稀有度微光往外扩的量与软边宽度。 */
     private static final float GLOW_SPREAD = 2f;
     private static final float GLOW_FEATHER = 3f;
@@ -187,39 +184,6 @@ public final class NvgCardPainter {
         float radius = Math.min(style.cornerRadius(), cardH / 2f);
 
         try (MemoryStack stack = MemoryStack.stackPush()) {
-            // 影子的浓度在颜色里预乘，退场那份交给 nvgGlobalAlpha —— 两件事分开算，
-            // 才不会出现"退场时影子没跟着淡"。
-            // 【两个浓度，不是一个】用户报过"影子一出来就是满的，看着像影子先到、卡片后到"：
-            // 内容的影子按**内容**露出的比例给浓度，竖条的影子按**竖条**长出来的比例给。
-            // 共用一个数就会出现"竖条才长一半、影子已经全浓度"，或者竖条在长而影子还没来。
-            float soft = style.shadowBlur() / 2f;
-            int contentShade = withAlpha(0x000000,
-                    Math.round(style.shadowAlpha() * Easing.clamp01(rise)));
-            int barShade = withAlpha(0x000000,
-                    Math.round(style.shadowAlpha() * Easing.clamp01(barFill)));
-
-            if ((contentShade >>> 24) != 0) {
-                // 【坐标纪律】影子按**屏幕绝对坐标**画。NanoVG 这条没有 pose（不像原版那条
-                // 可以先 translate 到卡原点），而窗口是卡片局部坐标 —— 所以在这里加一次卡原点，
-                // contentShadow 只吃屏幕坐标。
-                // 2026-09-17 第一次写的时候把局部坐标直接喂了进来：影子被画到屏幕左上角，
-                // 棋盘底截图上一眼就能看出来，而纯黑底的测量页（compare.py 的输入）**完全看不见**
-                // —— 这就是"阴影从来没被量过"那个盲点的第二个实例。
-                float winLeft = x + window.left();
-                float winRight = x + window.right();
-                float dy = y + style.shadowOffsetY();
-                float iconX = x + bodyX + bodyShift;
-                contentShadow(vg, stack, iconX, dy, cardH, cardH, radius, contentShade, soft, winLeft, winRight);
-                float nameX = iconX + cardH + gap;
-                float nameW = Math.max(0f, x + cardW - nameX);
-                if (nameW > 0f) {
-                    contentShadow(vg, stack, nameX, dy, nameW, cardH, radius, contentShade, soft, winLeft, winRight);
-                }
-            }
-            if ((barShade >>> 24) != 0) {
-                barShadow(vg, stack, style, x, y, cardH, barFill, barShade, soft);
-            }
-
             // 竖条在窗口左边，是"洞口"，不受窗口影响，单独画
             bar(vg, stack, style, x, y, cardH, radius, accent, barFill);
 
@@ -248,7 +212,7 @@ public final class NvgCardPainter {
     }
 
     /**
-     * 一个框：渐变底 -> 顶部 1px 高光 -> 内缩 1px 描边（顺序与 CSS 叠法一致）。
+     * 一个框：渐变底 -> 内缩 1px 描边（顺序与 CSS 叠法一致）。
      * <p>
      * 【描边为什么要内缩 0.5】草稿写的是 {@code outline: 1px / outline-offset: -1px}，
      * 那 1px 整条都在框内。NanoVG 的 stroke 是骑在路径上的（各出一半），照外框描会有
@@ -265,15 +229,6 @@ public final class NvgCardPainter {
                 color(stack, style.fillTop()), color(stack, style.fillBottom()), NVGPaint.mallocStack(stack));
         nvgFillPaint(vg, paint);
         nvgFill(vg);
-
-        if ((style.highlight() >>> 24) != 0) {
-            // CSS: box-shadow: inset 0 1px 0 <highlight> —— 贴着顶边的 1px 高光。
-            // 玻璃质感全靠这一条：没有它，框顶和框底一样暗，整块就是一片色块。
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, x + 0.5f, y + 0.5f, Math.max(0f, w - 1f), HIGHLIGHT_H, HIGHLIGHT_H / 2f);
-            nvgFillColor(vg, color(stack, style.highlight()));
-            nvgFill(vg);
-        }
 
         nvgBeginPath(vg);
         nvgRoundedRect(vg, x + 0.5f, y + 0.5f, Math.max(0f, w - 1f), Math.max(0f, h - 1f), radius);
@@ -299,21 +254,16 @@ public final class NvgCardPainter {
     }
 
     // ------------------------------------------------------------------
-    // 影子：NanoVG 里没有模糊，用 boxGradient 做软边
+    // 微光的软边：NanoVG 里没有模糊，用 boxGradient 做
     // ------------------------------------------------------------------
 
     /**
      * 一块<b>软边矩形</b>：矩形的边往外 {@code feather} 像素由 {@code argb} 渐变到全透明，
      * 矩形内部是实心 {@code argb}。
      *
-     * <p>【它替掉了什么】原先影子走 SDF 着色器（{@code gui_shape.fsh} 里那段 IQ 软化），
-     * 那条路要注册着色器、要自己的顶点格式、还要在 NanoVG 之外单独开一趟绘制。
-     * NanoVG 没有高斯模糊，但 {@code nvgBoxGradient} 干的正好是同一件事：一个从
-     * "框内实心"到"框外 N 像素处透明"的渐变。影子画在卡面<b>下面</b>，实心那部分被卡面
-     * 盖住，露出来的就只有外圈那条软边 —— 与 SDF 那条的观感一致。
-     *
-     * <p>【为什么收成一个私有函数】影子、微光、竖条影子全是它，参数不同而已。
-     * 之前这三种形状各写一遍，改一处忘一处就是用户看到的那条"影子还在穿透"。
+     * <p>【现在只有微光用它】投影删了之后，这是唯一还需要软边的地方（{@link #softBox} 的
+     * 名字是照着当年的用途留下的）。NanoVG 没有高斯模糊，但 {@code nvgBoxGradient} 干的
+     * 正好是这件事：一个从"框内实心"到"框外 N 像素处透明"的渐变。
      */
     private static void softBox(long vg, MemoryStack stack, float x, float y, float w, float h,
                                 float radius, float feather, int argb) {
@@ -330,57 +280,6 @@ public final class NvgCardPainter {
         nvgRect(vg, x - feather, y - feather, w + feather * 2f, h + feather * 2f);
         nvgFillPaint(vg, paint);
         nvgFill(vg);
-    }
-
-    /**
-     * 一处内容影子（图标格或名字框）。**必须跟内容一起被隧道口裁**。
-     * <p>
-     * 【这是用户报的第二遍同一个 bug】内容修好了、影子没有：影子原来是单独一趟、没有窗口，
-     * 于是内容被裁在竖条右边、它的影子却从竖条左边冒出来。草稿那边是 CSS
-     * {@code filter: drop-shadow} 加在 {@code .card} 上 —— 滤镜吃的是**裁剪之后**的可见形状。
-     * <p>
-     * 【为什么用几何求交而不是套一层 scissor】窗口左边切下去时，草稿那边是"被裁的形状"投的
-     * 影 —— 切面是竖直的、模糊照旧往外散。套 scissor 会把模糊也一起切掉（出现一条硬缝），
-     * 求交只切形状、模糊留着。
-     *
-     * @param x,y       影子矩形的左上角（**屏幕绝对坐标**）
-     * @param winLeft   隧道口左边界（屏幕绝对坐标，已贴现）
-     */
-    private static void contentShadow(long vg, MemoryStack stack,
-                                      float x, float y, float w, float h, float radius,
-                                      int color, float soft, float winLeft, float winRight) {
-        float spread = SHADOW_SPREAD;
-        float x0 = Math.max(x, winLeft);
-        float x1 = Math.min(x + w, winRight);
-        if (x1 - x0 <= 0.01f) {
-            return;
-        }
-        softBox(vg, stack, x0 - spread, y - spread, (x1 - x0) + spread * 2f, h + spread * 2f,
-                radius + spread, soft, color);
-    }
-
-    /**
-     * 竖条的影子（屏幕绝对坐标）。竖条在窗口左边、是"洞口"，所以它**不进**窗口 ——
-     * 跟草稿里的竖条一样。
-     * <p>
-     * 【2026-09-17 修】影子原先垂直居中（{@code inset + (full-barH)/2}），而竖条是从上往下长
-     * 的（见 {@link #bar}）—— 长到一半时影子已经四平八稳地摊在中间，比竖条还高一截。
-     * 现在跟着竖条的头走。
-     */
-    private static void barShadow(long vg, MemoryStack stack, StyleModel style, float x, float y,
-                                  float cardH, float barFill, int color, float soft) {
-        float filled = Easing.clamp01(barFill);
-        if (filled <= 0.01f) {
-            return;
-        }
-        float radius = Math.min(style.cornerRadius(), cardH / 2f);
-        float inset = style.barInsetY();
-        float full = Math.max(0f, cardH - inset * 2f);
-        float barH = full * filled;
-        float spread = Math.min(SHADOW_SPREAD, style.barWidth() / 2f);
-        softBox(vg, stack, x - spread, y + style.shadowOffsetY() + inset - spread,
-                style.barWidth() + spread * 2f, barH + spread * 2f,
-                Math.min(radius, style.barWidth() / 2f) + spread, soft, color);
     }
 
     // ------------------------------------------------------------------

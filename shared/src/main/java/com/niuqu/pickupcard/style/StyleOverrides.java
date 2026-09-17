@@ -25,10 +25,6 @@ public record StyleOverrides(OptionalInt cornerRadius,
                              OptionalInt iconSize,
                              OptionalInt barWidth,
                              OptionalInt barInsetY,
-                             OptionalInt shadowOffsetY,
-                             OptionalInt shadowBlur,
-                             OptionalInt shadowAlpha,
-                             Optional<Boolean> topHighlight,
                              OptionalLong enterMs,
                              OptionalLong bumpMs,
                              Optional<Boolean> enterEnabled,
@@ -61,11 +57,6 @@ public record StyleOverrides(OptionalInt cornerRadius,
                 theme.fillTop(),
                 theme.fillBottom(),
                 theme.border(),
-                // 顶部高光：主题里 alpha=0 就是不画，所以"关掉"等价于把 alpha 抹成 0
-                topHighlight.orElse(true) ? theme.highlight() : (theme.highlight() & 0x00FFFFFF),
-                shadowAlpha.orElse(theme.shadowAlpha()),
-                shadowOffsetY.orElse(theme.shadowOffsetY()),
-                shadowBlur.orElse(theme.shadowBlur()),
                 theme.glowAlpha(),
                 theme.nameColor(),
                 enterMs.orElse(theme.enterMs()),
@@ -84,10 +75,6 @@ public record StyleOverrides(OptionalInt cornerRadius,
         private OptionalInt iconSize = OptionalInt.empty();
         private OptionalInt barWidth = OptionalInt.empty();
         private OptionalInt barInsetY = OptionalInt.empty();
-        private OptionalInt shadowOffsetY = OptionalInt.empty();
-        private OptionalInt shadowBlur = OptionalInt.empty();
-        private OptionalInt shadowAlpha = OptionalInt.empty();
-        private Optional<Boolean> topHighlight = Optional.empty();
         private OptionalLong enterMs = OptionalLong.empty();
         private OptionalLong bumpMs = OptionalLong.empty();
         private Optional<Boolean> enterEnabled = Optional.empty();
@@ -128,26 +115,6 @@ public record StyleOverrides(OptionalInt cornerRadius,
             return this;
         }
 
-        public Builder shadowOffsetY(int value) {
-            shadowOffsetY = OptionalInt.of(value);
-            return this;
-        }
-
-        public Builder shadowBlur(int value) {
-            shadowBlur = OptionalInt.of(value);
-            return this;
-        }
-
-        public Builder shadowAlpha(int value) {
-            shadowAlpha = OptionalInt.of(value);
-            return this;
-        }
-
-        public Builder topHighlight(boolean value) {
-            topHighlight = Optional.of(value);
-            return this;
-        }
-
         public Builder enterMs(long value) {
             enterMs = OptionalLong.of(value);
             return this;
@@ -170,8 +137,7 @@ public record StyleOverrides(OptionalInt cornerRadius,
 
         public StyleOverrides build() {
             return new StyleOverrides(cornerRadius, paddingH, paddingV, gap, iconSize, barWidth,
-                    barInsetY, shadowOffsetY, shadowBlur, shadowAlpha, topHighlight,
-                    enterMs, bumpMs, enterEnabled, bumpEnabled);
+                    barInsetY, enterMs, bumpMs, enterEnabled, bumpEnabled);
         }
     }
 }
