@@ -118,17 +118,19 @@ public final class PickupCardConfig {
 
             stickTo = builder
                     .comment("卡片靠屏幕哪一边停。同时出现多张时，它们自上而下排列。",
-                            "  RIGHT = 卡片右边固定不动，左边随内容长短伸缩。推荐。",
-                            "          内容再长也只是往左伸，永远不会超出屏幕右边。",
-                            "  LEFT  = 卡片左边尽量停在下面 leftEdge 的位置，内容往右伸展。")
-                    .defineEnum("stickTo", LayoutSettings.Side.RIGHT);
+                            "  LEFT  = 卡片左边尽量停在下面 leftEdge 的位置，内容往右伸展。推荐。",
+                            "          一摞卡排下来，左边的稀有度竖条成一条竖线。",
+                            "  RIGHT = 卡片右边固定不动，左边随内容长短伸缩。",
+                            "          内容再长也只是往左伸，永远不会超出屏幕右边。")
+                    .defineEnum("stickTo", LayoutSettings.Side.LEFT);
 
             leftEdge = builder
                     .comment("只有上面选了 LEFT 才有用：卡片左边想停在离屏幕左边多少像素的地方。",
                             "注意这是「想停在这儿」，不是「一定停在这儿」——",
                             "内容太长、右边放不下时，卡片会自动往左让，不会把内容挤出屏幕。",
-                            "屏幕宽度会随玩家的界面缩放大小变化，所以别设得太靠右。")
-                    .defineInRange("leftEdge", 320, 0, 4000);
+                            "屏幕宽度会随玩家的界面缩放大小变化，所以别设得太靠右；",
+                            "设得比屏幕还宽，这一项就等于没设。")
+                    .defineInRange("leftEdge", 16, 0, 4000);
 
             appearMode = builder
                     .comment("卡片出现时怎么展开。",

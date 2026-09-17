@@ -16,6 +16,8 @@ import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 
@@ -58,6 +60,19 @@ public final class TrioCardPainter implements CardPainter {
     private static final float EXIT_DROP = 12f;
     /** 影子比卡片往四周放大的量。 */
     private static final float SHADOW_SPREAD = 2f;
+    /** 顶部高光的厚度，对应 CSS 里的 1px。 */
+    private static final float HIGHLIGHT_H = 1f;
+    /**
+     * 经验卡的图标：下界之星。
+     * <p>
+     * 【为什么是它】经验没有 ItemStack，原先画一块强调色方块占位。但"是什么"这件事
+     * 不能靠形状猜 —— 卡片上得有个一眼认得出的记号。设计稿一直用的是下界之星贴图，
+     * 参考图里经验卡那一格的主导色也正好是 nether_star.png 的三个主色
+     * （#556B6B / #88A4A4 / #B9C9C9），所以照它来。
+     * <p>
+     * 只用来画，不动它，所以是共享的一份 —— 渲染路径不会改栈。
+     */
+    private static final ItemStack XP_ICON = new ItemStack(Items.NETHER_STAR);
 
     /** pose 变换用的复用向量，避免逐顶点分配。 */
     private static final Vector3f POS = new Vector3f();
@@ -133,13 +148,17 @@ public final class TrioCardPainter implements CardPainter {
                     withAlpha(0x000000, style.shadowAlpha()));
         }
 
-        // 2) 两个框
+        // 2) 两个框：渐变底 → 顶部高光 → 描边。
+        //    顺序跟 CSS 的叠法对齐（box-shadow: inset 在底色之上、outline 之下），
+        //    不这么排的话高光会被描边压掉一半，看起来"画了但没效果"。
         batch.roundRectGradient(boxX, 0, h, h, radius, style.fillTop(), style.fillBottom());
+        topHighlight(batch, boxX, h, style);
+        batch.roundRectStroked(boxX, 0, h, h, radius, 1f, style.border());
         if (nameW > 0f) {
             batch.roundRectGradient(nameX, 0, nameW, h, radius, style.fillTop(), style.fillBottom());
+            topHighlight(batch, nameX, nameW, style);
             batch.roundRectStroked(nameX, 0, nameW, h, radius, 1f, style.border());
         }
-        batch.roundRectStroked(boxX, 0, h, h, radius, 1f, style.border());
 
         // 3) 竖条最后画、盖在上面 —— 它是挡板，内容从它后面出来
         float bar = canvas.barOf(slot.view());
@@ -157,6 +176,20 @@ public final class TrioCardPainter implements CardPainter {
             batch.shadow(boxX - 2f, -2f, bodyW + 4f, h + 4f, radius + 2f, 3f,
                     withAlpha(accent, style.glowAlpha()));
         }
+    }
+
+    /**
+     * 框顶那条 1px 高光，对应 CSS 里的 {@code box-shadow: inset 0 1px 0 var(--pc-highlight)}。
+     * <p>
+     * 【为什么必须要它】玻璃质感全靠这一条：没有它，框顶和框底一样暗，整块就是一片色块。
+     * 它是主题里的一个键（{@code --pc-highlight}），alpha 为 0 就是不画 —— 这个语义
+     * 跟主题注释里写的一致，不要在这里另加开关。
+     */
+    private static void topHighlight(ShapeBatch batch, float x, float w, StyleModel style) {
+        if ((style.highlight() >>> 24) == 0 || w <= 0f) {
+            return;
+        }
+        batch.roundRect(x, 0f, w, HIGHLIGHT_H, HIGHLIGHT_H / 2f, style.highlight());
     }
 
     // ------------------------------------------------------------------
@@ -178,7 +211,8 @@ public final class TrioCardPainter implements CardPainter {
         if (card.content() instanceof CardContent.Item item) {
             gui.renderItem(item.stack(), -8, -8);
         } else {
-            gui.fill(-4, -4, 4, 4, accent);   // 经验卡没有物品图标
+            // 经验卡没有 ItemStack，图标是固定的下界之星（见 XP_ICON）
+            gui.renderItem(XP_ICON, -8, -8);
         }
         gui.pose().popPose();
 
