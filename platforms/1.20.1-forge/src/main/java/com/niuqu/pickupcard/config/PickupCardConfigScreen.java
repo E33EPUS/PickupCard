@@ -2,15 +2,18 @@ package com.niuqu.pickupcard.config;
 
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
+import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.style.StyleModel;
+import com.niuqu.pickupcard.style.StyleOverrides;
 import com.niuqu.pickupcard.text.CountFormat;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.components.AbstractSliderButton;
 import net.minecraft.client.gui.components.AbstractWidget;
 import net.minecraft.client.gui.components.Button;
+import net.minecraft.client.gui.components.EditBox;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.ItemStack;
@@ -24,63 +27,65 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * 游戏内配置界面：<b>左侧一列分类标签，右侧是实时预览 + 这个分类的配置项</b>。
+ * 游戏内配置界面：<b>左侧一列分类，右侧是实时预览 + 选项行</b>（同一行里左边标签、右边控件）。
  *
- * <p>【为什么是"标签页 + 预览"这个形状】2026-09-17 用户的原话："以前那张界面是有明确分类的
- * （动画、外观等），左边一列标签，右边放实时预览和配置项 —— 那个效果很好；现在这个我
- * 不知道都是些什么东西。" 上一版把 25 个控件平铺成两列、全是长得一样的滑条、标签还是
- * 实现词（"纵向内边距""跟随主题"）—— 那不是"信息密度高"，是<b>没有分类、没有解释</b>。
+ * <p>【这个形状从哪来的】2026-09-17 用户的原话："以前那张界面是有明确分类的，左边一列标签，
+ * 右边放实时预览和配置项 —— 那个效果很好；现在这个我不知道都是些什么东西。抄 pickupnotice
+ * 的配置界面。" 那份旧界面（= 从发行 jar 恢复出来的 v0.1.0）的分段是
+ * <b>通用 / 动画 / 位置与堆叠 / 外观</b>，选项行是"左边一句人话、右边一个控件"，
+ * 每个选项悬停给一句解释 —— 这里照抄的就是这三件事。
  *
- * <p>【两条硬规矩】
- * <ol>
- *   <li><b>每个控件悬停时出一句人话</b>（{@link #hints}）。标签只能写短词，短词一定有歧义；
- *       把"改了会怎样"挂在旁边，是这个界面唯一能自我解释的办法。</li>
- *   <li><b>预览必须和当前分类相关</b>：调外观/动画看一张卡，调布局/行为看一摞卡 ——
- *       贴边、锚点、同时几张这些键，单张卡根本看不出来。</li>
- * </ol>
+ * <p>【"跟随主题"为什么从界面上消失了】旧界面里每个键就是一个<b>具体值</b>，没有"跟不跟
+ * 主题"这一说；而上一版把设计参数（竖条宽 / 内缩 / 内边距 / 框间距）全摊到界面上，还让每项
+ * 都有第三种状态"跟随主题"—— 用户的原话是"我是真不理解…'跟随主题'配置项"。现在的规矩：
+ * <ul>
+ *   <li>界面显示的是<b>生效值</b>（主题 + 你改过的），不显示"没改过"这个状态；</li>
+ *   <li>你拨了哪一项，那一项就写进 TOML 变成固定值（想回到主题：TOML 里改回 -1 或空串）；</li>
+ *   <li>几何参数（竖条宽 / 竖条内缩 / 左右内边距 / 框间距）<b>不进界面</b> —— 它们是设计参数，
+ *       归主题 JSON（资源包可改），摆在玩家面前只会把卡调歪。</li>
+ * </ul>
  *
  * <p>【它改的是配置，不是渲染】拨动 → 写配置 → 通知渲染立刻重读。界面自己不存一份，
  * 否则"界面显示 5、实际画 9"迟早出现。
  *
- * <p>【主题那项去哪了】从界面上撤了。用户原话"现在这个主题配置我不知道有什么意义" ——
- * 深浅色主题是给资源包作者和整套换肤用的，不是日常会拨的开关，占一格反而稀释了别的项。
- * 配置键还在（{@code [style] theme}），手改 TOML 一样有效。
+ * <p>【控件都在 (0,0) 出生】位置统一由 {@link #layoutRows()} 按"第几行第几列"摆 ——
+ * 一个控件自己知道该在哪，就会和另一处的坐标打架（上一版就是这样漂的）。
  */
 public final class PickupCardConfigScreen extends Screen {
 
-    // ---- 左侧标签列 ----
-    private static final int TAB_X = 8;
-    private static final int TAB_TOP = 30;
-    private static final int TAB_W = 74;
-    private static final int TAB_H = 18;
-    private static final int TAB_STEP = 20;
+    // ---- 左侧分类 ----
+    private static final int PAD = 6;
+    private static final int SIDE_W = 86;
+    private static final int SIDE_TOP = 30;
+    private static final int SIDE_H = 20;
+    private static final int SIDE_STEP = 22;
 
-    // ---- 右侧：预览 + 配置项 ----
-    private static final int ITEM_W = 150;
-    private static final int ITEM_STEP = 16;
-    private static final int ITEM_TOP = 62;
-
-    /** 分类。名字用大白话，不用 Left/Right 这种实现词。 */
-    private enum Tab {
-        LOOK("外观"),
+    /** 分类名抄旧版：通用 / 动画 / 位置与堆叠 / 外观。 */
+    private enum Section {
+        GENERAL("通用"),
         ANIM("动画"),
-        LAYOUT("布局"),
-        BEHAVIOR("行为");
+        LAYOUT("位置与堆叠"),
+        LOOK("外观");
 
         final String label;
 
-        Tab(String label) {
+        Section(String label) {
             this.label = label;
         }
     }
 
     private final Screen parent;
-    private Tab tab = Tab.LOOK;
-    /** 悬停提示：控件 → 一句人话。标签只能写短词，短词一定会有歧义。 */
+    private Section section = Section.GENERAL;
+    /** 悬停提示：控件 → 一句人话。标签只能写短词，短词一定有歧义。 */
     private final Map<AbstractWidget, String> hints = new LinkedHashMap<>();
+    /** 一行 = 一个标签 + 一个控件（控件摆在右半格）。 */
+    private final List<Row> rows = new ArrayList<>();
+
+    private record Row(String label, AbstractWidget widget) {
+    }
 
     public PickupCardConfigScreen(Screen parent) {
-        super(Component.literal("拾取卡片 · 设置"));
+        super(Component.literal("拾起卡片 · 设置"));
         this.parent = parent;
     }
 
@@ -91,103 +96,127 @@ public final class PickupCardConfigScreen extends Screen {
     @Override
     protected void init() {
         hints.clear();
+        rows.clear();
         PickupCardConfig.Values v = PickupCardConfig.VALUES;
 
-        int y = TAB_TOP;
-        for (Tab t : Tab.values()) {
-            Tab target = t;
+        int y = SIDE_TOP;
+        for (Section s : Section.values()) {
+            Section target = s;
             addRenderableWidget(Button.builder(
-                            Component.literal((t == tab ? "▸ " : "  ") + t.label),
+                            Component.literal((s == section ? "▸ " : "  ") + s.label),
                             b -> {
-                                tab = target;
+                                section = target;
                                 rebuildWidgets();
                             })
-                    .bounds(TAB_X, y, TAB_W, TAB_H).build());
-            y += TAB_STEP;
+                    .bounds(PAD, y, SIDE_W, SIDE_H).build());
+            y += SIDE_STEP;
         }
+        addRenderableWidget(Button.builder(Component.literal("完成"), b -> onClose())
+                .bounds(PAD, this.height - 24, SIDE_W, 18).build());
 
-        switch (tab) {
-            case LOOK -> buildLook(v);
+        switch (section) {
+            case GENERAL -> buildGeneral(v);
             case ANIM -> buildAnim(v);
             case LAYOUT -> buildLayout(v);
-            case BEHAVIOR -> buildBehavior(v);
+            case LOOK -> buildLook(v);
         }
-
-        addRenderableWidget(Button.builder(Component.literal("完成"), b -> onClose())
-                .bounds(TAB_X, this.height - 24, TAB_W, 18).build());
+        layoutRows();
     }
 
-    private void buildLook(PickupCardConfig.Values v) {
-        int c1 = itemX1();
-        int c2 = itemX2();
-        int y = ITEM_TOP;
-        hint(addRenderableWidget(intSlider("卡片高低", v.stPaddingV, 0, 8, c1, y)),
-                "卡片厚多少。调大卡片变厚，图标大小不变");
-        hint(addRenderableWidget(intSlider("图标大小", v.stIconSize, 8, 64, c2, y)),
-                "原版物品图标是 16 —— 取 16 或它的整数倍最清晰");
-        y += itemStep();
-        hint(addRenderableWidget(intSlider("竖条宽度", v.stBarWidth, 1, 24, c1, y)),
-                "左边那根稀有度竖条的粗细");
-        hint(addRenderableWidget(intSlider("竖条内缩", v.stBarInsetY, 0, 16, c2, y)),
-                "竖条上下各缩进去多少；0 = 和卡片一样高");
-        y += itemStep();
-        hint(addRenderableWidget(intSlider("圆角", v.stCornerRadius, 0, 16, c1, y)),
-                "三个框的圆角半径；调到很大就变成胶囊");
-        hint(addRenderableWidget(intSlider("框间距", v.stGap, 0, 16, c2, y)),
-                "图标格、名字框之间的缝");
-        y += itemStep();
-        hint(addRenderableWidget(intSlider("左右内边距", v.stPaddingH, 0, 16, c1, y)),
-                "名字和框边之间的距离");
+    /**
+     * 「通用」：最上面那几个开关。<b>总开关与"显示物品名"是旧版最好懂的两项</b>，
+     * 上一版把这两项弄丢了，界面上只剩一堆几何滑条。
+     */
+    private void buildGeneral(PickupCardConfig.Values v) {
+        PickupCardSettings eff = PickupCardConfig.snapshot();
+        cell("总开关", boolButton(v.enabled, eff.enabled()), "关掉之后捡东西不再弹卡");
+        cell("显示物品名", boolButton(v.showItemName, eff.showItemName()),
+                "关掉只剩竖条 + 图标 + 数量，卡片会明显变窄");
+        cell("显示物品ID", boolButton(v.showItemId, eff.showItemId()),
+                "显示 minecraft:stone 这种 ID 而不是它的名字");
+        cell("名字最大宽度", intSlider(v.nameMaxWidth, eff.nameMaxWidth(), 0, 400),
+                "像素。0 = 按屏宽自动；超出就截断加省略号");
+        cell("数量写法", enumButton(v.countFormat, CountFormat.values(),
+                PickupCardConfigScreen::countName), "数量怎么显示：+64 / ×64 / 64 / +1.2K");
+        cell("卡片间距", pxSlider(v.separation, PickupCardConfig.layoutSnapshot().separation(), 0, 16),
+                "两张卡之间的空隙；跟卡内「框间距」不是一回事");
     }
 
+    /** 「动画」：入场 / 数字跳动 / 停留 / 消失 —— 全是"看得见"的时长。 */
     private void buildAnim(PickupCardConfig.Values v) {
-        int c1 = itemX1();
-        int c2 = itemX2();
-        int y = ITEM_TOP;
-        hint(addRenderableWidget(longSlider("入场时长", v.stEnterMs, 0, 2_000, c1, y)),
-                "卡片从竖条后面滑出来的总时间");
-        hint(addRenderableWidget(triToggle("入场动画", v.stEnterEnabled, c2, y)),
-                "关掉就是直接出现（晕动症友好）");
-        y += itemStep();
-        hint(addRenderableWidget(longSlider("跳动时长", v.stBumpMs, 0, 2_000, c1, y)),
-                "连续捡同一种东西时，数字弹一下的时间");
-        hint(addRenderableWidget(triToggle("数字跳动", v.stBumpEnabled, c2, y)),
-                "关掉数字就不弹");
-    }
-
-    private void buildLayout(PickupCardConfig.Values v) {
-        int c1 = itemX1();
-        int c2 = itemX2();
-        int y = ITEM_TOP;
-        hint(addRenderableWidget(sideButton(v, c1, y)),
-                "左 = 竖条成一条竖线；右 = 卡的右缘齐、竖条参差");
-        hint(addRenderableWidget(anchorSlider(v, c2, y)),
-                "竖条左缘停在哪；自动 = 跟着画布宽度算");
-        y += itemStep();
-        hint(addRenderableWidget(enumButton("展开方式", v.appearMode, LayoutSettings.Appear.values(),
-                        PickupCardConfigScreen::appearName, c1, y)),
-                "火车 = 整块滑出来；拉幕 = 可见范围一点点变宽（先露图标）");
-        hint(addRenderableWidget(maxCardsSlider(v, c2, y)),
-                "同时在屏最多几张。GUI 缩放越大、画布越小，放得下的越少");
-    }
-
-    private void buildBehavior(PickupCardConfig.Values v) {
-        int c1 = itemX1();
-        int c2 = itemX2();
-        int y = ITEM_TOP;
-        hint(addRenderableWidget(steppedLongSlider("停留多久", v.holdMs, 500, 10_000, 250, c1, y)),
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        PickupCardSettings eff = PickupCardConfig.snapshot();
+        cell("入场时长", longSlider(v.stEnterMs, style.enterMs(), 0, 2_000, 40),
+                "卡片从竖条后面滑出来的总时间（默认 480ms）");
+        cell("入场动画", styleToggle(v.stEnterEnabled, style.enterEnabled()),
+                "关掉就是直接出现（动画敏感的人可以关）");
+        cell("停留时长", longSlider(v.holdMs, eff.holdMs(), 500, 10_000, 250),
                 "一张卡在屏幕上待多久");
-        hint(addRenderableWidget(steppedLongSlider("淡出多久", v.exitMs, 0, 2_000, 20, c2, y)),
-                "消失时淡出多长时间；0 = 直接消失");
-        y += itemStep();
-        hint(addRenderableWidget(boolButton("合并同种", v.mergeEnabled, c1, y)),
-                "短时间内连捡同一种东西，并成一张卡（数字在滚）");
-        hint(addRenderableWidget(steppedLongSlider("合并窗口", v.mergeWindowMs, 0, 5_000, 100, c2, y)),
-                "两次拾取间隔小于它就算同一次");
-        y += itemStep();
-        hint(addRenderableWidget(enumButton("数量写法", v.countFormat, CountFormat.values(),
-                        PickupCardConfigScreen::countName, c1, y)),
-                "数量怎么显示：+64 / ×64 / 64 / +1.2K");
+        cell("消失时长", longSlider(v.exitMs, eff.exitMs(), 0, 2_000, 20),
+                "消失时淡出多久；0 = 直接消失");
+        cell("数字跳动", styleToggle(v.stBumpEnabled, style.bumpEnabled()),
+                "连续捡同一种东西时，数字弹一下");
+        cell("跳动时长", longSlider(v.stBumpMs, style.bumpMs(), 0, 1_000, 20),
+                "数字弹一下持续多久");
+    }
+
+    /** 「位置与堆叠」：停在哪、怎么展开、卡与卡的距离、同屏几张。 */
+    private void buildLayout(PickupCardConfig.Values v) {
+        LayoutSettings eff = PickupCardConfig.layoutSnapshot();
+        PickupCardSettings settings = PickupCardConfig.snapshot();
+        cell("贴边", enumButton(v.stickTo, LayoutSettings.Side.values(),
+                PickupCardConfigScreen::sideName),
+                "左 = 竖条成一条竖线；右 = 卡的右缘齐、竖条参差");
+        cell("竖条位置", anchorSlider(v.leftEdge, eff.leftEdge()),
+                "竖条左缘停在哪；「自动」= 跟着画布宽度算");
+        cell("展开方式", enumButton(v.appearMode, LayoutSettings.Appear.values(),
+                PickupCardConfigScreen::appearName),
+                "火车 = 整块滑出来；拉幕 = 可见范围一点点变宽（先露图标）");
+        cell("同屏上限", intSlider(v.maxOnScreen, settings.maxOnScreen(), 1, 16),
+                "同时在屏最多几张。GUI 缩放越大、画布越小，放得下的越少");
+        cell("排队上限", readOnly("暂未实现"), "现在超出同屏上限的那张会被挤掉，不做排队");
+    }
+
+    /**
+     * 「外观」：只放"看得懂、调了看得出"的。
+     * <p>
+     * 竖条宽度 / 竖条内缩 / 左右内边距 / 框间距这些是设计参数，归主题 JSON ——
+     * 摆在玩家面前只会把卡调歪（用户的原话："不知道都是些什么东西"）。
+     */
+    private void buildLook(PickupCardConfig.Values v) {
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        cell("卡片厚薄", intSlider(v.stPaddingV, style.paddingV(), 0, 8),
+                "上下各留多少；调大卡片变厚，图标大小不变");
+        cell("图标大小", intSlider(v.stIconSize, style.iconSize(), 8, 64),
+                "原版物品图标是 16 —— 取 16 或它的整数倍最清晰");
+        cell("圆角", intSlider(v.stCornerRadius, style.cornerRadius(), 0, 16),
+                "三个框的圆角半径；调到很大就变成胶囊");
+        cell("框粗细", intSlider(v.stBorderWidth, style.borderWidth(), 0, 4),
+                "框描边的粗细；0 = 不描边");
+        cell("底色（上）", colorBox(v.stFillTop, style.fillTop()),
+                "卡面底色上端，格式 #AARRGGBB；留空 = 用主题里的");
+        cell("底色（下）", colorBox(v.stFillBottom, style.fillBottom()),
+                "下端。和上面写成一样就是纯色");
+        cell("框色", colorBox(v.stBorder, style.border()), "框描边的颜色");
+        cell("物品名颜色", colorBox(v.stNameColor, style.nameColor()), "名字的颜色");
+    }
+
+    /** 把一个控件登记成一行：标签由 {@link #drawLabels} 画在它左边，提示挂在悬停上。 */
+    private void cell(String label, AbstractWidget widget, String hint) {
+        rows.add(new Row(label, widget));
+        hints.put(widget, hint);
+        addRenderableWidget(widget);
+    }
+
+    /** 逐行摆：一行两个格子，行高按画布自适应（guiScale 5 时画布只有 144 高）。 */
+    private void layoutRows() {
+        int maxRows = Math.max(1, (rows.size() + 1) / 2);
+        int step = rowStep(maxRows);
+        for (int i = 0; i < rows.size(); i++) {
+            AbstractWidget w = rows.get(i).widget();
+            w.setX(controlX(i % 2));
+            w.setY(rowsTop() + (i / 2) * step);
+        }
     }
 
     // ------------------------------------------------------------------
@@ -197,18 +226,39 @@ public final class PickupCardConfigScreen extends Screen {
     @Override
     public void render(GuiGraphics gui, int mouseX, int mouseY, float partialTick) {
         renderBackground(gui);
-        gui.drawCenteredString(this.font, this.title, this.width / 2, 12, 0xFFFFFFFF);
-
-        if (showPreview()) {
-            if (tab == Tab.LAYOUT || tab == Tab.BEHAVIOR) {
-                renderStackPreview(gui);
-            } else {
-                renderCardPreview(gui);
-            }
-        }
+        drawChrome(gui);
+        drawLabels(gui);
         super.render(gui, mouseX, mouseY, partialTick);
+        gui.drawString(this.font, hintText(mouseX, mouseY), PAD, this.height - 12, 0xFF9AA4AD);
+    }
 
-        gui.drawString(this.font, hintText(mouseX, mouseY), itemX1(), this.height - 20, 0xFF9AA4AD);
+    /** 底、标题、预览面板。标题与提示都放在内容区左上（旧版就是这个位置）。 */
+    private void drawChrome(GuiGraphics gui) {
+        gui.fill(0, 0, this.width, this.height, 0xE0101218);
+        gui.drawString(this.font, this.title, contentLeft(), 8, 0xFFFFFFFF);
+        gui.drawString(this.font, "改动即时生效，拨过的项会记进 config/pickupcard-client.toml",
+                contentLeft(), 18, 0xFF7D8695);
+
+        int py = 30;
+        int ph = previewHeight();
+        gui.fill(contentLeft() - 2, py - 2, contentRight() + 2, py + ph + 2, 0x40202A38);
+        gui.drawString(this.font, "预览", contentLeft() + 2, py, 0xFF9AA4AD);
+        if (section == Section.LAYOUT) {
+            renderStackPreview(gui, contentLeft() + 2, py + 10,
+                    contentRight() - contentLeft() - 6, ph - 12);
+        } else {
+            renderCardPreview(gui, contentLeft() + 2, py + 10);
+        }
+    }
+
+    private void drawLabels(GuiGraphics gui) {
+        for (Row row : rows) {
+            AbstractWidget w = row.widget();
+            int labelLeft = w.getX() - labelW() - 4;
+            String text = this.font.plainSubstrByWidth(row.label(), labelW());
+            gui.drawString(this.font, text, labelLeft, w.getY() + (w.getHeight() - 8) / 2 + 1,
+                    0xFFBFC6D4, true);
+        }
     }
 
     /** 悬停谁就说谁 —— 这是这个界面唯一能自我解释的地方。 */
@@ -218,32 +268,36 @@ public final class PickupCardConfigScreen extends Screen {
                 return Component.literal(e.getValue());
             }
         }
-        return Component.literal(switch (tab) {
-            case LOOK -> "这些改的是卡片长什么样（右上是预览）";
+        return Component.literal(switch (section) {
+            case GENERAL -> "这些改的是「弹不弹、显示什么」";
             case ANIM -> "这些改的是卡片怎么出现、数字怎么跳";
-            case LAYOUT -> "这些改的是卡片停在哪、同时显示几张（右边一摞就是预览）";
-            case BEHAVIOR -> "这些改的是待多久、怎么合并、数量怎么写";
+            case LAYOUT -> "这些改的是卡片停在哪、同时显示几张（预览就是一摞卡）";
+            case LOOK -> "这些改的是卡片长什么样（预览就是当前设置画出来的）";
         });
     }
 
-    private void renderCardPreview(GuiGraphics gui) {
+    /** 单张样例卡：经验卡（那一档会亮微光），拨外观/动画时看它。 */
+    private void renderCardPreview(GuiGraphics gui, int x, int y) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
-        NvgCardPainter.paintPreview(gui, style, itemX1(), 30f, 150f,
-                new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true);
+        boolean showName = PickupCardConfig.snapshot().showItemName();
+        float w = showName ? Math.max(60f, Math.min(150f, this.width - x - PAD - 4)) : 58f;
+        NvgCardPainter.paintPreview(gui, style, x, y, w,
+                new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true, showName);
     }
 
     /**
-     * 布局/行为页的预览：<b>真的排布函数 + 真的屏宽</b>画一摞不同宽度的卡。
+     * 一摞卡：<b>真的排布函数 + 真的间距</b>画三张不同宽度的卡。
      * <p>
-     * 【为什么三张、而且宽度不同】"贴边/锚点"的效果只在多张不同宽度的卡之间才看得出来：
-     * 左对齐时三条竖条成一条竖线，右对齐时右缘齐、竖条参差。单张卡两种设置长得一模一样。
+     * 【为什么这里必须调真函数】"贴边 / 间距 / 同屏"这些键的效果只在多张卡之间看得出来：
+     * 左对齐时三条竖条成一条竖线、右对齐时右缘齐而竖条参差。自己画一遍就等于第二份排版实现。
      */
-    private void renderStackPreview(GuiGraphics gui) {
+    private void renderStackPreview(GuiGraphics gui, int x, int y, int w, int h) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
         LayoutSettings layout = PickupCardConfig.layoutSnapshot();
+        boolean showName = PickupCardConfig.snapshot().showItemName();
         String[][] samples = {{"经验", "+137"}, {"信标", "+1"}, {"石头", "+64"}};
         int[] accents = {0xFF7DFF8A, 0xFF55EBFF, 0xFF9AA4AD};
-        float[] widths = {132f, 106f, 84f};
+        float[] widths = showName ? new float[] {132f, 106f, 84f} : new float[] {58f, 52f, 50f};
         ItemStack[] icons = {
                 new ItemStack(Items.NETHER_STAR), new ItemStack(Items.BEACON), new ItemStack(Items.STONE)};
 
@@ -251,39 +305,12 @@ public final class PickupCardConfigScreen extends Screen {
         for (int i = widths.length - 1; i >= 0; i--) {      // 最新的排第一（StackLayout 的约定）
             sizes.add(new StackLayout.Size(widths[i], style.boxHeight()));
         }
-        // 虚拟下边距：卡是贴底锚定的，用真实高度会压在左下那颗"完成"上
-        float virtualBottom = this.height - 26f;
-        for (StackLayout.Slot slot : StackLayout.stack(sizes, this.width, virtualBottom, layout,
-                CardStage.MARGIN_X, CardStage.MARGIN_Y, layout.separation())) {
+        for (StackLayout.Slot slot : StackLayout.stack(sizes, Math.max(1, w), h, layout,
+                6, 4, layout.separation())) {
             int i = widths.length - 1 - slot.index();
-            NvgCardPainter.paintPreview(gui, style, slot.x(), slot.y(), slot.width(),
-                    icons[i], samples[i][0], samples[i][1], accents[i], i == 0);
+            NvgCardPainter.paintPreview(gui, style, x + slot.x(), y + slot.y(), slot.width(),
+                    icons[i], samples[i][0], samples[i][1], accents[i], i == 0, showName);
         }
-    }
-
-    // ------------------------------------------------------------------
-    // 尺寸与位置（按画布算，不写死）
-    // ------------------------------------------------------------------
-
-    private int itemX1() {
-        return TAB_X + TAB_W + 14;
-    }
-
-    private int itemX2() {
-        return itemX1() + ITEM_W + 8;
-    }
-
-    private int itemStep() {
-        return Math.max(13, Math.min(ITEM_STEP, (this.height - ITEM_TOP - 40) / 6));
-    }
-
-    private int rowH() {
-        return itemStep() - 2;
-    }
-
-    /** 画布太矮就不画预览 —— 预览是锦上添花，控件点不到是功能没了（guiScale 5 只有 144 高）。 */
-    private boolean showPreview() {
-        return this.height >= 190;
     }
 
     @Override
@@ -292,194 +319,264 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     // ------------------------------------------------------------------
-    // 控件
+    // 给 dev harness 的只读入口（不是给渲染层用的）
     // ------------------------------------------------------------------
 
-    private void hint(AbstractWidget w, String text) {
-        hints.put(w, text);
+    /**
+     * 按选项名找控件。
+     * <p>
+     * 【为什么需要它】标签现在画在控件<b>左边</b>（旧版的形状），不在控件的消息里 ——
+     * 所以"按标签点一下"这件事只能问界面自己。harness 靠它发真实鼠标事件，
+     * 把"按钮 → 写配置 → 渲染重读"整条链一起验掉；找不到就报，不会静默点空。
+     */
+    public AbstractWidget widgetFor(String label) {
+        for (Row row : rows) {
+            if (row.label().equals(label)) {
+                return row.widget();
+            }
+        }
+        return null;
     }
 
-    /** 贴边：按钮上把<b>后果</b>写出来，而不是只写 LEFT/RIGHT。 */
-    private Button sideButton(PickupCardConfig.Values v, int x, int y) {
-        return Button.builder(Component.literal(sideName(v.stickTo.get())), b -> {
-            LayoutSettings.Side next = v.stickTo.get() == LayoutSettings.Side.LEFT
-                    ? LayoutSettings.Side.RIGHT : LayoutSettings.Side.LEFT;
-            v.stickTo.set(next);
-            changed();
-            b.setMessage(Component.literal(sideName(next)));
-        }).bounds(x, y, ITEM_W, rowH()).build();
+    /** 当前这一页有哪些选项（按玩家看到的顺序）。日志里留一份，截图看不出"第 2 页有没有那几项"。 */
+    public List<String> optionLabels() {
+        return rows.stream().map(Row::label).toList();
     }
 
-    /** 锚点 x：最左边是"自动"（跟着画布算），其余是绝对像素。 */
-    private AbstractSliderButton anchorSlider(PickupCardConfig.Values v, int x, int y) {
-        final int max = 600;
-        AbstractSliderButton w = new AbstractSliderButton(x, y, ITEM_W, rowH(), Component.empty(),
-                (v.leftEdge.get() + 1) / (double) (max + 1)) {
+    // ------------------------------------------------------------------
+    // 几何：按画布算，不写死
+    // ------------------------------------------------------------------
+
+    private int contentLeft() {
+        return PAD + SIDE_W + 8;
+    }
+
+    private int contentRight() {
+        return Math.max(contentLeft() + 120, this.width - PAD);
+    }
+
+    private int colW() {
+        return Math.max(70, (contentRight() - contentLeft() - 8) / 2);
+    }
+
+    private int controlW() {
+        return Math.max(52, Math.min(96, colW() * 3 / 5));
+    }
+
+    private int labelW() {
+        return Math.max(24, colW() - controlW() - 6);
+    }
+
+    private int controlX(int column) {
+        return contentLeft() + column * (colW() + 8) + labelW() + 4;
+    }
+
+    /** 预览面板高度：布局页要摞三张卡，别的地方一张卡就够；画布矮时再压一压。 */
+    private int previewHeight() {
+        int want = section == Section.LAYOUT ? 96 : 34;
+        return Math.max(26, Math.min(want, this.height - rowsTopFor(want) - 40));
+    }
+
+    private int rowsTopFor(int previewH) {
+        return 30 + previewH + 10;
+    }
+
+    private int rowsTop() {
+        return 30 + previewHeight() + 10;
+    }
+
+    private int rowH() {
+        return 18;
+    }
+
+    private int rowStep(int maxRows) {
+        int room = this.height - rowsTop() - 26;
+        return Math.max(14, Math.min(22, room / Math.max(1, maxRows)));
+    }
+
+    // ------------------------------------------------------------------
+    // 控件：**消息里只有值，标签由 drawLabels 画在左边**
+    // ------------------------------------------------------------------
+
+    /**
+     * 整数滑条。{@code shown} 是"该显示成多少"：外观项传<b>生效值</b>（主题 + 玩家改动），
+     * 别的项传配置值 —— 界面因此永远不显示"跟随主题"这个第三态。
+     */
+    private AbstractSliderButton intSlider(ForgeConfigSpec.IntValue config, int shown, int min, int max) {
+        int lo = Math.max(0, min);
+        int span = max - lo + 1;
+        AbstractSliderButton w = new AbstractSliderButton(0, 0, controlW(), rowH(), Component.empty(),
+                Math.max(0.0, Math.min(1.0, (shown - lo + 1) / (double) span))) {
             @Override
             protected void updateMessage() {
-                int value = (int) Math.round(this.value * (max + 1)) - 1;
-                setMessage(Component.literal("锚点: " + anchorName(value)));
+                setMessage(Component.literal(Integer.toString(toInt(this.value, min, max))));
             }
 
             @Override
             protected void applyValue() {
-                v.leftEdge.set((int) Math.round(this.value * (max + 1)) - 1);
+                config.set(toInt(this.value, min, max));
+                changed();
+            }
+        };
+        w.setMessage(Component.literal(Integer.toString(shown)));
+        return w;
+    }
+
+    /** 时长滑条（毫秒，带步进吸附）。 */
+    private AbstractSliderButton longSlider(ForgeConfigSpec.LongValue config, long shown,
+                                            long min, long max, long step) {
+        AbstractSliderButton w = new AbstractSliderButton(0, 0, controlW(), rowH(), Component.empty(),
+                Math.max(0.0, Math.min(1.0, (shown - min) / (double) (max - min)))) {
+            @Override
+            protected void updateMessage() {
+                setMessage(Component.literal(snap(this.value, min, max, step) + "ms"));
+            }
+
+            @Override
+            protected void applyValue() {
+                config.set(snap(this.value, min, max, step));
+                changed();
+            }
+        };
+        w.setMessage(Component.literal(shown + "ms"));
+        return w;
+    }
+
+    /** 像素滑条（写进 Double 的配置键，比如卡片间距）。 */
+    private AbstractSliderButton pxSlider(ForgeConfigSpec.DoubleValue config, float shown,
+                                          double min, double max) {
+        AbstractSliderButton w = new AbstractSliderButton(0, 0, controlW(), rowH(), Component.empty(),
+                Math.max(0.0, Math.min(1.0, (shown - min) / (max - min)))) {
+            @Override
+            protected void updateMessage() {
+                setMessage(Component.literal(Math.round(min + this.value * (max - min)) + "px"));
+            }
+
+            @Override
+            protected void applyValue() {
+                config.set((double) Math.round(min + this.value * (max - min)));
+                changed();
+            }
+        };
+        w.setMessage(Component.literal(Math.round(shown) + "px"));
+        return w;
+    }
+
+    /** 开关（两态）：显示生效状态，点一下写具体值。 */
+    private Button boolButton(ForgeConfigSpec.BooleanValue config, boolean shown) {
+        return Button.builder(Component.literal(shown ? "开" : "关"), b -> {
+                    boolean next = !config.get();
+                    config.set(next);
+                    changed();
+                    b.setMessage(Component.literal(next ? "开" : "关"));
+                })
+                .bounds(0, 0, controlW(), rowH()).build();
+    }
+
+    /** 外观开关：配置里是 -1/0/1，界面只显示"开/关"，点了就写死 1/0。 */
+    private Button styleToggle(ForgeConfigSpec.IntValue config, boolean shown) {
+        return Button.builder(Component.literal(shown ? "开" : "关"), b -> {
+                    config.set(config.get() == 1 ? 0 : 1);
+                    changed();
+                    b.setMessage(Component.literal(config.get() == 1 ? "开" : "关"));
+                })
+                .bounds(0, 0, controlW(), rowH()).build();
+    }
+
+    private <E extends Enum<E>> Button enumButton(ForgeConfigSpec.EnumValue<E> config, E[] values,
+                                                 Function<E, String> name) {
+        return Button.builder(Component.literal(name.apply(config.get())), b -> {
+                    E current = config.get();
+                    int i = 0;
+                    for (int k = 0; k < values.length; k++) {
+                        if (values[k] == current) {
+                            i = k;
+                        }
+                    }
+                    E next = values[(i + 1) % values.length];
+                    config.set(next);
+                    changed();
+                    b.setMessage(Component.literal(name.apply(next)));
+                })
+                .bounds(0, 0, controlW(), rowH()).build();
+    }
+
+    /** 竖条位置：最左边是「自动」（-1，跟着画布算），其余是绝对像素。 */
+    private AbstractSliderButton anchorSlider(ForgeConfigSpec.IntValue config, int shown) {
+        final int max = 600;
+        AbstractSliderButton w = new AbstractSliderButton(0, 0, controlW(), rowH(), Component.empty(),
+                Math.max(0.0, Math.min(1.0, (shown + 1) / (double) (max + 1)))) {
+            @Override
+            protected void updateMessage() {
+                setMessage(Component.literal(anchorName((int) Math.round(this.value * (max + 1)) - 1)));
+            }
+
+            @Override
+            protected void applyValue() {
+                config.set((int) Math.round(this.value * (max + 1)) - 1);
                 changed();
             }
         };
         // 【构造完必须自己补一次标签】AbstractSliderButton 构造期间不跑 updateMessage，
-        // 而且 1.20.1 里它没有公开的 getValue() —— 所以初值只能从配置取。
-        w.setMessage(Component.literal("锚点: " + anchorName(v.leftEdge.get())));
-        return w;
-    }
-
-    private AbstractSliderButton maxCardsSlider(PickupCardConfig.Values v, int x, int y) {
-        AbstractSliderButton w = new AbstractSliderButton(x, y, ITEM_W, rowH(), Component.empty(),
-                (v.maxOnScreen.get() - 1) / 15.0) {
-            @Override
-            protected void updateMessage() {
-                setMessage(Component.literal("最多几张: " + (1 + (int) Math.round(this.value * 15))));
-            }
-
-            @Override
-            protected void applyValue() {
-                v.maxOnScreen.set(1 + (int) Math.round(this.value * 15));
-                changed();
-            }
-        };
-        w.setMessage(Component.literal("最多几张: " + v.maxOnScreen.get()));
-        return w;
-    }
-
-    private Button triToggle(String label, ForgeConfigSpec.IntValue config, int x, int y) {
-        return Button.builder(Component.literal(label + ": " + triName(config.get())), b -> {
-            int next = config.get() < 0 ? 1 : (config.get() == 1 ? 0 : -1);
-            config.set(next);
-            changed();
-            b.setMessage(Component.literal(label + ": " + triName(next)));
-        }).bounds(x, y, ITEM_W, rowH()).build();
-    }
-
-    private Button boolButton(String label, ForgeConfigSpec.BooleanValue config, int x, int y) {
-        return Button.builder(Component.literal(label + ": " + (config.get() ? "开" : "关")), b -> {
-            boolean next = !config.get();
-            config.set(next);
-            changed();
-            b.setMessage(Component.literal(label + ": " + (next ? "开" : "关")));
-        }).bounds(x, y, ITEM_W, rowH()).build();
-    }
-
-    private <E extends Enum<E>> Button enumButton(String label, ForgeConfigSpec.EnumValue<E> config,
-                                                  E[] values, Function<E, String> name, int x, int y) {
-        return Button.builder(Component.literal(label + ": " + name.apply(config.get())), b -> {
-            E current = config.get();
-            int i = 0;
-            for (int k = 0; k < values.length; k++) {
-                if (values[k] == current) i = k;
-            }
-            E next = values[(i + 1) % values.length];
-            config.set(next);
-            changed();
-            b.setMessage(Component.literal(label + ": " + name.apply(next)));
-        }).bounds(x, y, ITEM_W, rowH()).build();
-    }
-
-    /**
-     * 数值滑条。
-     * <p>
-     * 【参数为什么不叫 value】{@link AbstractSliderButton} 自带 {@code protected double value}，
-     * 匿名内部类里那个名字会被遮住 —— 写 {@code value.set(...)} 编译报"double 不能被解引用"。
-     */
-    private AbstractSliderButton intSlider(String label, ForgeConfigSpec.IntValue config, int min, int max,
-                                           int x, int y) {
-        AbstractSliderButton w = new AbstractSliderButton(x, y, ITEM_W, rowH(), Component.empty(),
-                sliderPos(config.get(), min, max)) {
-            @Override
-            protected void updateMessage() {
-                setMessage(Component.literal(label + ": " + valueName(toValue(this.value, min, max))));
-            }
-
-            @Override
-            protected void applyValue() {
-                config.set(toValue(this.value, min, max));
-                changed();
-            }
-        };
-        w.setMessage(Component.literal(label + ": " + valueName(config.get())));
-        return w;
-    }
-
-    private AbstractSliderButton longSlider(String label, ForgeConfigSpec.LongValue config, long min, long max,
-                                            int x, int y) {
-        AbstractSliderButton w = new AbstractSliderButton(x, y, ITEM_W, rowH(), Component.empty(),
-                (config.get() - min) / (double) (max - min)) {
-            @Override
-            protected void updateMessage() {
-                long ms = min + Math.round(this.value * (max - min));
-                setMessage(Component.literal(label + ": " + (ms < 0 ? "跟随主题" : ms + "ms")));
-            }
-
-            @Override
-            protected void applyValue() {
-                config.set(min + Math.round(this.value * (max - min)));
-                changed();
-            }
-        };
-        w.setMessage(Component.literal(label + ": "
-                + (config.get() < 0 ? "跟随主题" : config.get() + "ms")));
+        // 而 1.20.1 里它没有公开的 getValue() —— 所以初值只能从调用方传进来。
+        w.setMessage(Component.literal(anchorName(shown)));
         return w;
     }
 
     /**
-     * 带步进的时长滑条。
+     * 颜色输入框：显示生效色的 {@code #AARRGGBB}，打进合法值立刻生效。
      * <p>
-     * 【为什么必须量化】停留范围 500~10000ms 铺在 150px 宽的滑条上，一像素 ≈ 63ms ——
-     * 想调 4000 拖出 3987，玩家会觉得这界面调不准。按 250ms 吸附，每一格都是整得好看的数。
+     * 【写坏了怎么办】不写 —— 值留在上一次合法的状态。半应用一个打错的颜色，
+     * 比"这次输入没生效"更让人困惑。
      */
-    private AbstractSliderButton steppedLongSlider(String label, ForgeConfigSpec.LongValue config,
-                                                   long min, long max, long step, int x, int y) {
-        AbstractSliderButton w = new AbstractSliderButton(x, y, ITEM_W, rowH(), Component.empty(),
-                (config.get() - min) / (double) (max - min)) {
-            @Override
-            protected void updateMessage() {
-                setMessage(Component.literal(label + ": " + plain(this.value, min, max, step) + "ms"));
-            }
-
-            @Override
-            protected void applyValue() {
-                config.set(plain(this.value, min, max, step));
+    private EditBox colorBox(ForgeConfigSpec.ConfigValue<String> config, int effectiveArgb) {
+        EditBox box = new EditBox(this.font, 0, 0, controlW(), rowH(), Component.empty());
+        box.setMaxLength(9);
+        box.setValue(argbText(effectiveArgb));
+        box.setResponder(text -> {
+            String trimmed = text.trim();
+            if (trimmed.isEmpty()) {
+                config.set("");
+                changed();
+            } else if (StyleOverrides.parseArgb(trimmed).isPresent()) {
+                config.set(trimmed.startsWith("#") ? trimmed : "#" + trimmed);
                 changed();
             }
-        };
-        w.setMessage(Component.literal(label + ": " + config.get() + "ms"));
-        return w;
+        });
+        return box;
+    }
+
+    /** 只读控件：用来把"这件事我们还没做"明说，而不是假装它不存在。 */
+    private Button readOnly(String text) {
+        return Button.builder(Component.literal(text), b -> {
+                })
+                .bounds(0, 0, controlW(), rowH()).build();
+    }
+
+    // ------------------------------------------------------------------
+    // 小工具
+    // ------------------------------------------------------------------
+
+    /** 位置 → 整数：min..max 线性铺开（没有"哨兵"格，界面上不存在第三态）。 */
+    private static int toInt(double pos, int min, int max) {
+        int lo = Math.max(0, min);
+        int value = (int) Math.round(lo + pos * (max - lo));
+        return Math.max(lo, Math.min(max, value));
     }
 
     /** 位置 → 值：线性铺开并按 step 吸附。 */
-    private static long plain(double pos, long min, long max, long step) {
+    private static long snap(double pos, long min, long max, long step) {
         long raw = min + Math.round(pos * (max - min));
         long snapped = Math.round(raw / (double) step) * step;
         return Math.max(min, Math.min(max, snapped));
     }
 
-    /** 滑条位置：-1（跟随主题）留给最左边，其余值线性铺开。 */
-    private static double sliderPos(int value, int min, int max) {
-        int lo = Math.max(0, min);
-        if (value < 0) {
-            return 0.0;
-        }
-        return (value - lo + 1) / (double) (max - lo + 1);
-    }
-
-    private static int toValue(double pos, int min, int max) {
-        int lo = Math.max(0, min);
-        int span = max - lo + 1;
-        int index = (int) Math.round(pos * span) - 1;
-        return index < 0 ? -1 : Math.min(max, lo + index);
+    private static String argbText(int argb) {
+        return String.format("#%08X", argb);
     }
 
     private static String sideName(LayoutSettings.Side side) {
-        return side == LayoutSettings.Side.RIGHT ? "贴边: 右（右缘齐）" : "贴边: 左（竖条成线）";
+        return side == LayoutSettings.Side.RIGHT ? "贴右（右缘齐）" : "贴左（竖条成线）";
     }
 
     private static String appearName(LayoutSettings.Appear appear) {
@@ -497,14 +594,6 @@ public final class PickupCardConfigScreen extends Screen {
 
     private static String anchorName(int value) {
         return value < 0 ? "自动" : Integer.toString(value);
-    }
-
-    private static String triName(int value) {
-        return value < 0 ? "跟随主题" : (value == 1 ? "开" : "关");
-    }
-
-    private static String valueName(int value) {
-        return value < 0 ? "跟随主题" : Integer.toString(value);
     }
 
     /** 每次改动都让渲染立刻重读，不等那一秒的重读间隔。 */

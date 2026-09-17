@@ -370,12 +370,14 @@ public final class NvgCardPainter {
      * 这里调的正是真卡在用的 {@link #paintShell}（影子 + 竖条 + 两个框 + 微光）
      * 与下面那两行原版内容。
      *
-     * @param cardW 卡片总宽；高度按样式算（图标 + 上下内边距）
-     * @param glow  预览是不是"会被强调的那种卡"（经验卡 / 白名单卡）。样例画的是经验，
-     *              所以预览里看得到那层微光 —— 否则玩家永远调不出它
+     * @param cardW    卡片总宽；高度按样式算（图标 + 上下内边距）
+     * @param glow     预览是不是"会被强调的那种卡"（经验卡 / 白名单卡）。样例画的是经验，
+     *                 所以预览里看得到那层微光 —— 否则玩家永远调不出它
+     * @param showName 关掉"显示物品名"之后预览也必须不画名字，否则预览就成了说谎的那一份
      */
     public static void paintPreview(GuiGraphics gui, StyleModel style, float x, float y, float cardW,
-                                    ItemStack icon, String name, String count, int accent, boolean glow) {
+                                    ItemStack icon, String name, String count, int accent,
+                                    boolean glow, boolean showName) {
         float h = style.boxHeight();
         float bodyX = style.barWidth() + style.gap();
         float gap = style.gap();
@@ -403,9 +405,11 @@ public final class NvgCardPainter {
         gui.pose().popPose();
 
         float textY = y + (h - font.lineHeight) / 2f;
-        gui.drawString(font, name,
-                Math.round(x + bodyX + h + gap + style.paddingH()), Math.round(textY),
-                style.nameColor(), true);
+        if (showName) {
+            gui.drawString(font, name,
+                    Math.round(x + bodyX + h + gap + style.paddingH()), Math.round(textY),
+                    style.nameColor(), true);
+        }
         gui.drawString(font, count, Math.round(x + cardW - style.paddingH() - font.width(count)),
                 Math.round(textY), accent, true);
     }
