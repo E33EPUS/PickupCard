@@ -57,19 +57,19 @@ public final class NoticeQueue<T> {
     /**
      * 收下一次拾取。
      *
-     * @param mergeEnabled 关掉合并时，每次拾取都是新卡
+     * @param mergeMode    合并粒度（哪些拾取算同一件东西）；{@link MergeMode#NONE} = 从不合并
      * @param maxOnScreen  同时在屏上限；超出的按"最久没被碰过"淘汰
      * @return 发生的改动；被淘汰的那张卡会作为结果返回（调用方据此让 DOM 播退场）
      */
     public Outcome<T> absorb(String key, String lookKey, T payload, int amount,
                              boolean firstTime, long now,
-                             boolean mergeEnabled, int maxOnScreen) {
+                             MergeMode mergeMode, int maxOnScreen) {
         List<Notice<T>> evicted = new ArrayList<>();
         Notice<T> existing = alive.get(key);
         if (existing == null) {
             Notice<T> returning = leaving.get(key);
             if (returning != null
-                    && MergeWindow.shouldMerge(true, returning.lookKey().equals(lookKey), mergeEnabled)) {
+                    && MergeWindow.shouldMerge(true, returning.lookKey().equals(lookKey), mergeMode)) {
                 // 救回：搬回活表、数量累加，**不查上限** —— 它本来就在屏幕上，没多占位置
                 leaving.remove(key);
                 Notice<T> merged = returning.mergeInto(amount, now);
@@ -82,7 +82,7 @@ public final class NoticeQueue<T> {
             // 【判据是「那张卡还在不在」，不是「隔了多久」】从前还有一条合并窗口（默认 1200ms）：
             // 超窗口就顶掉旧卡、单开一张 —— 可那时旧卡往往正在淡出，屏幕于是要表示同一物品
             // 两张卡（渲染层按物品为键，只能整张换掉 = 用户报的那个 bug）。
-            if (MergeWindow.shouldMerge(true, sameLook, mergeEnabled)) {
+            if (MergeWindow.shouldMerge(true, sameLook, mergeMode)) {
                 Notice<T> merged = existing.mergeInto(amount, now);
                 alive.put(key, merged);
                 return new Outcome<>(Change.MERGED, merged, evicted);

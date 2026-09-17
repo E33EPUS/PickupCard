@@ -11,7 +11,7 @@ import com.niuqu.pickupcard.text.CountFormat;
  *
  * @param holdMs        一张卡在屏上停留多久（从最近一次被刷新算起）
  * @param exitMs        退场动画时长；DOM 要等它播完才移除节点
- * @param mergeEnabled  是否把连续拾取并成一张卡
+ * @param mergeMode     哪些拾取算同一件东西（同名同 NBT / 同名 / 同名但改名的不并 / 从不合并）
  * @param maxOnScreen   同时在屏上限，超出的淘汰最久没被碰过的
  * @param countFormat   数量怎么写
  * @param enabled       总开关。关掉之后捡东西不再弹卡（屏上已有的也立刻清掉）
@@ -21,7 +21,7 @@ import com.niuqu.pickupcard.text.CountFormat;
  */
 public record PickupCardSettings(long holdMs,
                                  long exitMs,
-                                 boolean mergeEnabled,
+                                 MergeMode mergeMode,
                                  int maxOnScreen,
                                  CountFormat countFormat,
                                  boolean enabled,
@@ -30,7 +30,7 @@ public record PickupCardSettings(long holdMs,
                                  int nameMaxWidth) {
 
     public static PickupCardSettings defaults() {
-        return new PickupCardSettings(2_600L, 320L, true, 5, CountFormat.PLUS,
+        return new PickupCardSettings(2_600L, 320L, MergeMode.defaults(), 5, CountFormat.PLUS,
                 true, true, false, 0);
     }
 
@@ -39,7 +39,7 @@ public record PickupCardSettings(long holdMs,
         return new PickupCardSettings(
                 Math.max(200L, holdMs),
                 Math.max(0L, exitMs),
-                mergeEnabled,
+                mergeMode == null ? MergeMode.defaults() : mergeMode,
                 Math.max(1, maxOnScreen),
                 countFormat == null ? CountFormat.PLUS : countFormat,
                 enabled,

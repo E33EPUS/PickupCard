@@ -56,6 +56,13 @@
   逐帧探针证实退场曲线本身是单调的（56 帧 1→0），所以那个闪只能来自状态被改写。
   实测救回：`[救回]` 之后 alpha `0.10 → 1.00` 单调爬回（约 140ms），无 `[重挂]`、
   无别的卡被挤掉（harness 的 `pickupcard-hud-revive`）。
+- **合并粒度 = `merge.mode` 四档**（`shared/.../notice/MergeMode.java`，取代 `merge.enabled`
+  与 `merge.windowMs`）：`STRICT`（默认，同名同 NBT）/ `TYPE`（同名就并、忽略 NBT）/
+  `TYPE_NAMED`（改过名字的不并）/ `NONE`（从不合并，每次单开一张）。NONE 与 TYPE_NAMED 靠
+  `ItemIdentity` 给每次拾取发**唯一身份键**（`id#@序号`）——渲染层按账本的键建档，键不同才能
+  同屏存在两张同名卡。**TOML 里的老键 `[merge] enabled` 会被丢弃并按新默认重建**；
+  「第一次见这个物品」的判据固定用最细的键，否则 NONE 档会天天报 NEW。
+  形状来自同赛道最成熟那版（见 `docs/reference-loot-journal.md`），判据是纯函数（`MergeModeTest`）。
 
 ✅ **已部署 2026-09-17 20:2x（缩放适配 + 滑条不再读快照 + 退场探针）**：
 `sha256 128a76aeddce31ea…`（已被上面那次取代，产物备份见 `build/deployed-backup/`）。

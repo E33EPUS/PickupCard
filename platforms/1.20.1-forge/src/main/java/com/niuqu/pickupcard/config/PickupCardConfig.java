@@ -52,7 +52,7 @@ public final class PickupCardConfig {
         return new PickupCardSettings(
                 VALUES.holdMs.get(),
                 VALUES.exitMs.get(),
-                VALUES.mergeEnabled.get(),
+                VALUES.mergeMode.get(),
                 VALUES.maxOnScreen.get(),
                 VALUES.countFormat.get(),
                 VALUES.enabled.get(),
@@ -176,7 +176,7 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.IntValue nameMaxWidth;
         final ForgeConfigSpec.LongValue holdMs;
         final ForgeConfigSpec.LongValue exitMs;
-        final ForgeConfigSpec.BooleanValue mergeEnabled;
+        final ForgeConfigSpec.EnumValue<com.niuqu.pickupcard.notice.MergeMode> mergeMode;
         final ForgeConfigSpec.IntValue maxOnScreen;
         final ForgeConfigSpec.EnumValue<CountFormat> countFormat;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
@@ -239,11 +239,13 @@ public final class PickupCardConfig {
 
             builder.pop();
 
-            builder.comment("合并：同一种东西连着捡，并成一张卡而不是弹一堆").push("merge");
-            mergeEnabled = builder
-                    .comment("开：连捡 64 个钻石是一张卡的数字在滚。",
-                            "关：捡几次弹几张（同物品在屏上只能有一张，旧的那张让位）。")
-                    .define("enabled", true);
+            builder.comment("合并：哪些拾取算同一件东西（一张卡的数字在滚，还是弹好几张）").push("merge");
+            mergeMode = builder
+                    .comment("STRICT（默认）：同名同 NBT —— 改名、附魔、自定义数据各占一张卡。",
+                            "TYPE：同名就并，忽略 NBT（附魔书、药水会并成一张）。",
+                            "TYPE_NAMED：同名就并，但改过名字的不并。",
+                            "NONE：从不合并，每次拾取单开一张（一次捡 20 样东西会看到 20 张）。")
+                    .defineEnum("mode", com.niuqu.pickupcard.notice.MergeMode.STRICT);
             builder.pop();
 
             builder.comment("布局").push("layout");

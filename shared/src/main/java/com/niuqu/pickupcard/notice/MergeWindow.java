@@ -25,10 +25,11 @@ public final class MergeWindow {
      *
      * @param sameKey      是不是同一个物品（含 NBT 的规范化键）
      * @param sameLook     是不是同一套外观（稀有度档位、是否附魔等）
-     * @param mergeEnabled 合并总开关；关掉时每次拾取都是新卡
+     * @param mergeMode 合并粒度档位；{@link MergeMode#NONE} 表示从不合并
      * @return true = 并进旧卡并累加数量；false = 单开一张新卡
      */
-    public static boolean shouldMerge(boolean sameKey, boolean sameLook, boolean mergeEnabled) {
-        return mergeEnabled && sameKey && sameLook;
+    public static boolean shouldMerge(boolean sameKey, boolean sameLook, MergeMode mergeMode) {
+        // NONE 档下身份键本来就每张不同（见 ItemIdentity），这里再挡一道只是把语义写明白
+        return mergeMode != MergeMode.NONE && sameKey && sameLook;
     }
 }

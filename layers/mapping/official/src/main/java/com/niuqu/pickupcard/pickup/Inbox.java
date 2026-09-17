@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.pickup;
 
 import com.niuqu.pickupcard.filter.FilterRules;
+import com.niuqu.pickupcard.notice.MergeMode;
 import com.niuqu.pickupcard.filter.FilterSettings;
 import com.niuqu.pickupcard.filter.FilterSubject;
 import com.niuqu.pickupcard.notice.Notice;
@@ -116,8 +117,9 @@ public final class Inbox {
                 dropReporter.accept(item);
                 return decision.muted();
             }
-            key = ItemIdentity.keyOf(item.stack());
-            look = ItemIdentity.lookOf(item.stack());
+            MergeMode mode = settings().mergeMode();
+            key = ItemIdentity.keyOf(item.stack(), mode);
+            look = ItemIdentity.lookOf(item.stack(), mode);
             emphasized = decision.emphasized();
         } else if (content instanceof CardContent.Experience) {
             // 经验不过滤：它是正反馈本身，也没有"捡错一堆"的刷屏问题
@@ -128,10 +130,14 @@ public final class Inbox {
             return false;
         }
 
-        boolean firstTime = seen.markAndCheckFirst(key);
+        // 【第一次见的判据固定用最细的键】NONE / 改名件每一张的身份键都不同，
+        // 拿它去问「第一次见」会天天报 NEW —— 那个角标问的是物品，不是这一次拾取。
+        String seenKey = content instanceof CardContent.Item item
+                ? ItemIdentity.strictKeyOf(item.stack()) : key;
+        boolean firstTime = seen.markAndCheckFirst(seenKey);
         Card card = new Card(content, emphasized);
         NoticeQueue.Outcome<Card> outcome = queue.absorb(key, look, card, count, firstTime, now,
-                settings().mergeEnabled(), settings().maxOnScreen());
+                settings().mergeMode(), settings().maxOnScreen());
 
         for (Notice<Card> evicted : outcome.evicted()) {
             pending.add(new Event.Evicted(evicted));
