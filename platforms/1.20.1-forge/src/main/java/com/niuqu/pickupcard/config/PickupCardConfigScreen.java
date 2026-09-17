@@ -602,8 +602,33 @@ public final class PickupCardConfigScreen extends Screen {
         } else {
             // 【为什么右对齐】底部那行左边是悬停说明（drawHint），左对齐会跟它叠在一起
             // —— 第一版就是这么写的，截图里两段字糊成一团。
-            ui.textRight("预览已收起（窗口太窄）", lo.items().right(), this.height - 12f, p.textDim);
+            ui.textRight(PREVIEW_COLLAPSED, lo.items().right(), this.height - 12f, p.textDim);
         }
+    }
+
+    /**
+     * 底部那行「预览被收掉了」的提示语。
+     * <p>【为什么提成常量】{@link #hintRightLimit()} 要按它的宽度给悬停说明让路 ——
+     * 两处各写一份字面量的话，改了这边忘了那边，叠字就会悄悄回来。
+     */
+    private static final String PREVIEW_COLLAPSED = "预览已收起（窗口太窄）";
+
+    /**
+     * 底部那行<b>左边</b>（悬停说明）最多能画到哪个 x。
+     * <p>【为什么不是整幅画布宽】预览收掉时，同一行的右端还有 {@link #PREVIEW_COLLAPSED}
+     * 那段字，而它不知道右边有东西，于是窄画布上两段字直接撞上。右对齐只解决了
+     * "有地方的时候不叠"，没解决"没地方的时候" —— 2026-09-17 实测：画布宽 320
+     * （<b>真玩家到得了</b>：1280×960 的 auto 档就是 320×240）下两段字之间已经不留缝，
+     * 画布宽 256 时重叠 67 逻辑px，整段糊成一团。
+     */
+    private float hintRightLimit() {
+        float limit = this.width - PAD - 4f;
+        ConfigLayout lo = layout();
+        if (!lo.previewVisible()) {
+            limit = Math.min(limit,
+                    lo.items().right() - this.font.width(PREVIEW_COLLAPSED) - PAD);
+        }
+        return limit;
     }
 
     /**
@@ -681,7 +706,8 @@ public final class PickupCardConfigScreen extends Screen {
         if (hint == null) {
             hint = section.hint;        // 哪儿都没停：说当前这一页是干嘛的
         }
-        String shown = this.font.plainSubstrByWidth(hint, Math.max(24, this.width - PAD * 2 - 4));
+        String shown = this.font.plainSubstrByWidth(hint,
+                Math.max(24, (int) (hintRightLimit() - PAD)));
         gui.drawString(this.font, shown, PAD, this.height - 12, palette.textDim);
     }
 
