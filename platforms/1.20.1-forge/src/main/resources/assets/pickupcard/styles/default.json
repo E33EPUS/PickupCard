@@ -17,6 +17,7 @@
     "highlight": "#FFFFFF3C",
     "shadowAlpha": 90,
     "shadowOffsetY": 3,
+    "shadowBlur": 6,
     "glowAlpha": 46
   },
 
@@ -25,7 +26,7 @@
   },
 
   "animation": {
-    "enterMs": 320,
+    "enterMs": 620,
     "bumpMs": 300,
     "enterEnabled": true,
     "bumpEnabled": true,

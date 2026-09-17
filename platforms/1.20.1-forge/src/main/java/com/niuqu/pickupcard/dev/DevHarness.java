@@ -85,6 +85,8 @@ public final class DevHarness {
         private static final String MODE = System.getProperty("pickupcard.harness.auto", "off");
         /** 等客户端把加载屏走完再动手；早于这个时刻开屏会拍到半张加载界面。 */
         private static final int WARMUP_TICKS = 80;
+        /** 展开到一半时先拍一张 —— 只看"已经就位"的稳态，等于没验动画。 */
+        private static final int MID_SHOT = 8;
         /** 开屏后等入场动画播完再拍。 */
         private static final int SHOT_AFTER_OPEN = 40;
         /** 截图是异步落盘的，给它足够时间再退出。 */
@@ -126,8 +128,10 @@ public final class DevHarness {
             }
 
             sinceInject++;
-            if (sinceInject == SHOT_AFTER_OPEN) {
-                capture(mc);
+            if (sinceInject == MID_SHOT) {
+                capture(mc, "mid");
+            } else if (sinceInject == SHOT_AFTER_OPEN) {
+                capture(mc, null);
             } else if (sinceInject >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
                 advance(mc);
             }
@@ -157,19 +161,25 @@ public final class DevHarness {
             sinceInject = 0;
         }
 
-        private static void capture(Minecraft mc) {
+        private static void capture(Minecraft mc, String suffix) {
             CardStage.Stats stats = CardStage.INSTANCE.stats();
             // 这张读数就是"客观门"里的第一道：卡有没有真的进到绘制阶段、排布花了多久。
             // 它进日志而不是只进截图，是因为数字比像素可靠。
             String keys = CardStage.INSTANCE.lastSlots().stream()
                     .map(slot -> slot.view().key())
                     .collect(java.util.stream.Collectors.joining(", "));
+            long now = System.currentTimeMillis();
+            String ages = CardStage.INSTANCE.lastSlots().stream()
+                    .map(slot -> (now - slot.view().notice().bornAt()) + "ms")
+                    .collect(java.util.stream.Collectors.joining(", "));
             PickupCard.LOGGER.info("[harness-auto] 读数 cards={} painted={} layout={}us fps={} guiScale={}",
                     stats.live(), stats.painted(), stats.layoutMicros(), mc.getFps(),
                     mc.getWindow().getGuiScale());
+            PickupCard.LOGGER.info("[harness-auto] 主题 enterMs={} 最新卡展开进度={} 各卡卡龄=[{}]",
+                    stats.enterMs(), String.format(java.util.Locale.ROOT, "%.2f", stats.firstRise()), ages);
             // 活下来的是哪几张：淘汰顺序不能靠推断，得看数据
             PickupCard.LOGGER.info("[harness-auto] 在屏: {}", keys);
-            String name = "pickupcard-harness-p" + (page + 1);
+            String name = "pickupcard-harness-p" + (page + 1) + (suffix == null ? "" : "-" + suffix);
             Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(),
                     message -> PickupCard.LOGGER.info("[harness-auto] 截图: {} -> {}", name, message.getString()));
         }

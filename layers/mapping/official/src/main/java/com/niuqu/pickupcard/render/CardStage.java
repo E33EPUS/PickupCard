@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.render;
 
+import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.pickup.Inbox;
@@ -16,6 +17,7 @@ import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.function.Supplier;
 
 /**
  * 渲染层的调度台：把账本事件变成屏幕上的卡，每帧把它们交给 {@link CardPainter}。
@@ -52,11 +54,22 @@ public final class CardStage {
     /** 画法。换 UI 方案就是换这一个字段。 */
     private CardPainter painter = new TrioCardPainter();
 
+    /** 布局设置来自 TOML；默认值让渲染层在没有 Forge 的情况下也能跑。 */
+    private Supplier<LayoutSettings> layoutSource = LayoutSettings::defaults;
+
     /** 上一帧的排布结果与耗时，只给 harness 读。 */
     private List<CardSlot> lastSlots = List.of();
     private long layoutMicros;
+    /** 上一帧主题里的入场时长与最新那张卡的展开进度，给 harness 读 —— 动画出问题时靠它定位。 */
+    private long lastEnterMs;
+    private float lastFirstRise = 1f;
 
     private CardStage() {
+    }
+
+    /** 平台侧把布局配置接进来。 */
+    public void setLayoutSource(Supplier<LayoutSettings> source) {
+        this.layoutSource = source == null ? LayoutSettings::defaults : source;
     }
 
     /** 换画法。UI 定案后由入口调用；不改的话就是骨架期的基线画法。 */
@@ -112,7 +125,8 @@ public final class CardStage {
         PickupCardSettings settings = Inbox.INSTANCE.settingsSnapshot();
         CardCanvas canvas = new CardCanvas(now,
                 new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(), style.bumpEnabled()),
-                style, settings, gui.guiWidth(), gui.guiHeight());
+                style, settings, layoutSource.get().sanitized(),
+                gui.guiWidth(), gui.guiHeight());
 
         // 退场播完的摘掉，剩下的才参与排布
         live.values().removeIf(view -> view.exiting()
@@ -121,6 +135,9 @@ public final class CardStage {
             lastSlots = List.of();
             return;
         }
+
+        lastEnterMs = style.enterMs();
+        lastFirstRise = live.isEmpty() ? 1f : canvas.contentOf(live.values().iterator().next());
 
         long t0 = System.nanoTime();
         List<CardSlot> slots = layout(canvas, mc);
@@ -142,11 +159,11 @@ public final class CardStage {
      * 上一帧画了哪些卡、量了多久。**只读遥测，没有写入口**——它存在是为了让 harness 能把
      * "看不见的状态"（每张卡的实际位置与尺寸）变成可读的，而不是为了让别处改渲染。
      */
-    public record Stats(int live, int painted, long layoutMicros) {
+    public record Stats(int live, int painted, long layoutMicros, long enterMs, float firstRise) {
     }
 
     public Stats stats() {
-        return new Stats(live.size(), lastSlots.size(), layoutMicros);
+        return new Stats(live.size(), lastSlots.size(), layoutMicros, lastEnterMs, lastFirstRise);
     }
 
     /** 上一帧参与绘制的卡。辅助线要按这个画，才保证画的是"真的画了的那批"。 */
@@ -195,8 +212,9 @@ public final class CardStage {
         }
 
         List<CardSlot> slots = new ArrayList<>(alive.size());
-        for (StackLayout.Slot slot : StackLayout.bottomRight(
-                sizes, canvas.guiWidth(), canvas.guiHeight(), MARGIN_X, MARGIN_Y, STACK_GAP)) {
+        for (StackLayout.Slot slot : StackLayout.stack(
+                sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
+                MARGIN_X, MARGIN_Y, STACK_GAP)) {
             slots.add(new CardSlot(alive.get(slot.index()), slot.x(), slot.y(), slot.width(), slot.height()));
         }
         return slots;

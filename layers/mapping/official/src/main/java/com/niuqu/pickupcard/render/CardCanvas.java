@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.render;
 
+import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
@@ -19,6 +20,7 @@ import com.niuqu.pickupcard.style.StyleModel;
  * @param timeline 入场/跳动时间轴（来自主题）
  * @param style    当前主题（已 sanitize）
  * @param settings 当前会话参数
+ * @param layout   水平对齐与展开方式（行为参数，来自 TOML）
  * @param guiWidth  GUI 逻辑宽度
  * @param guiHeight GUI 逻辑高度
  */
@@ -26,12 +28,23 @@ public record CardCanvas(long now,
                          CardTimeline timeline,
                          StyleModel style,
                          PickupCardSettings settings,
+                         LayoutSettings layout,
                          int guiWidth,
                          int guiHeight) {
 
     /** 入场进度 ∈ [0,1]，1 = 已就位。 */
     public float enterOf(CardView view) {
         return timeline.enter(now, view.notice().bornAt());
+    }
+
+    /** 竖条自身的展开进度 ∈ [0,1]。 */
+    public float barOf(CardView view) {
+        return timeline.bar(now, view.notice().bornAt());
+    }
+
+    /** 内容滑出的进度 ∈ [0,1]；入场位移与缩放都用它。 */
+    public float contentOf(CardView view) {
+        return timeline.content(now, view.notice().bornAt());
     }
 
     /** 数字跳动进度 ∈ [0,1]，1 = 无缩放。 */

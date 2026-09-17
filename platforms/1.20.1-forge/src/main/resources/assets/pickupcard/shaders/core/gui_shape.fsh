@@ -20,6 +20,12 @@ uniform float u_stroke;
 uniform vec2 u_center;
 uniform float u_radius2;
 uniform int u_mode;
+// 边缘软化宽度（像素）。0 = 只做解析抗锯齿（锐利）；
+// 大于 0 时把抗锯齿的过渡带整体加宽，于是同一个形状变成一团柔和的影子。
+// 这是"模糊阴影"在 SDF 里的免费近似：blur(形状) ≈ smoothstep(SDF 距离)。
+// 有效区间约 0~4（对应 8px 的实际模糊半径）；再大衰减形状会失真
+// ——真高斯在拐角处糊得更圆，而这里是沿边均匀外扩。
+uniform float u_soft;
 uniform vec4 ColorModulator;
 
 out vec4 fragColor;
@@ -34,10 +40,11 @@ float sdCircle(vec2 p, vec2 c, float r) {
     return length(p - c) - r;
 }
 
-// 解析抗锯齿：一个像素的 fwidth 定 smoothstep 宽度（ModernUI 用 0.7071 系数，同 SK_DistanceFieldAAFactor）
+// 解析抗锯齿 + 可调软化：过渡带宽度取"一个像素的 fwidth"与 u_soft 的较大者。
+// ModernUI 用 0.7071 系数，同 Skia 的 SK_DistanceFieldAAFactor。
 float aastep(float dis) {
-    float afwidth = 0.7071 * length(vec2(dFdx(dis), dFdy(dis)));
-    return 1.0 - smoothstep(-afwidth, afwidth, dis);
+    float w = max(u_soft, 0.7071 * length(vec2(dFdx(dis), dFdy(dis))));
+    return 1.0 - smoothstep(-w, w, dis);
 }
 
 void main() {

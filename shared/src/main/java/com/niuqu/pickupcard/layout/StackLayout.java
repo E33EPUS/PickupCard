@@ -31,21 +31,38 @@ public final class StackLayout {
     }
 
     /**
-     * 右下角锚点、底部对齐、向上生长。
+     * 底部对齐、向上生长（最新的一张贴着底边）。
+     * <p>
+     * 【水平位置只有一条公式，两种对齐共用】<br>
+     * {@code x = min(想要的左边, 放得下的最右位置)}，其中
+     * <ul>
+     *   <li>右边固定：想要的左边 = 屏宽（"尽量往右推"），结果就是 {@code 屏宽 - 边距 - 卡宽}
+     *       —— 右缘天然对齐，内容再长也只是往左伸，永不溢出；</li>
+     *   <li>左边尽量固定：想要的左边 = 玩家设的 {@code leftEdge}，放得下就钉住，
+     *       放不下就自动往左让 —— <b>配置表达的是意图，不是绝对坐标</b>。</li>
+     * </ul>
+     * 之所以坚持共用一条公式：默认的右对齐其实就是左对齐的一个特例，
+     * 少一条分支就少一处能出 bug 的地方。
+     * <p>
+     * 副作用要认：左边固定时，同一批卡里窄卡的左边停在 {@code leftEdge}，
+     * 宽卡自动左移，于是<b>竖条只在放得下时才成一条直线</b>。
      *
      * @param sizes     每张卡的尺寸，<b>按从老到新排列</b>（第 0 张最老，最后一张最新）
      * @param guiWidth  当前 GUI 逻辑宽度
      * @param guiHeight 当前 GUI 逻辑高度
-     * @param marginX   距屏幕右边的留白
+     * @param layout    水平对齐设置
+     * @param marginX   距屏幕左边的安全留白（同时也是右边固定时的右边距）
      * @param marginY   距屏幕下边的留白
      * @param gap       卡与卡之间的间隙
      * @return 与 {@code sizes} 同序的位置列表
      */
-    public static List<Slot> bottomRight(List<Size> sizes, float guiWidth, float guiHeight,
-                                        int marginX, int marginY, float gap) {
+    public static List<Slot> stack(List<Size> sizes, float guiWidth, float guiHeight,
+                                   LayoutSettings layout, int marginX, int marginY, float gap) {
         int n = sizes.size();
         List<Slot> slots = new ArrayList<>(n);
         if (n == 0) return slots;
+
+        float limit = layout.leftLimit(guiWidth);
 
         float total = gap * (n - 1);
         for (Size size : sizes) total += size.height();
@@ -53,7 +70,10 @@ public final class StackLayout {
         float y = guiHeight - marginY - total;
         for (int i = 0; i < n; i++) {
             Size size = sizes.get(i);
-            slots.add(new Slot(i, guiWidth - marginX - size.width(), y, size.width(), size.height()));
+            // 放得下的最右位置；再夹到屏幕内，避免超宽卡算出负坐标
+            float maxLeft = guiWidth - marginX - size.width();
+            float x = Math.max(0f, Math.min(limit, maxLeft));
+            slots.add(new Slot(i, x, y, size.width(), size.height()));
             y += size.height() + gap;
         }
         return slots;

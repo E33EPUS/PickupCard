@@ -41,6 +41,7 @@ public final class PickupCard {
 
         // 配置是懒采样的：每次真的要用时才读，玩家改完配置不用重启
         Inbox.INSTANCE.setSources(PickupCardConfig::snapshot, PickupCardConfig::filterSnapshot);
+        CardStage.INSTANCE.setLayoutSource(PickupCardConfig::layoutSnapshot);
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
         MinecraftForge.EVENT_BUS.register(CardStage.INSTANCE);

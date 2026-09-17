@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.config;
 
 import com.niuqu.pickupcard.filter.FilterSettings;
+import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.text.CountFormat;
 import net.minecraftforge.common.ForgeConfigSpec;
@@ -47,6 +48,17 @@ public final class PickupCardConfig {
                 VALUES.countFormat.get()).sanitized();
     }
 
+    /**
+     * 采样布局设置。下面那一组键的注释一律按"人话"写：配置项是玩家唯一会直接读到的文字，
+     * 比喻、内部代号、黑话在那里就是 bug。
+     */
+    public static LayoutSettings layoutSnapshot() {
+        return new LayoutSettings(
+                VALUES.stickTo.get(),
+                VALUES.leftEdge.get(),
+                VALUES.appearMode.get()).sanitized();
+    }
+
     /** 采样过滤三表。列表元素不做校验——坏规则由 FilterRule.parse 静默跳过。 */
     public static FilterSettings filterSnapshot() {
         return new FilterSettings(
@@ -69,6 +81,9 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> muteList;
+        final ForgeConfigSpec.EnumValue<LayoutSettings.Side> stickTo;
+        final ForgeConfigSpec.IntValue leftEdge;
+        final ForgeConfigSpec.EnumValue<LayoutSettings.Appear> appearMode;
 
         Values(ForgeConfigSpec.Builder builder) {
             builder.comment("Pickup Card —— 拾取卡片提示（纯客户端）").push("notice");
@@ -96,9 +111,31 @@ public final class PickupCardConfig {
             builder.pop();
 
             builder.comment("布局").push("layout");
+
             maxOnScreen = builder
                     .comment("同时在屏最多几张。超出的会挤掉最久没被碰过的那张。")
                     .defineInRange("maxOnScreen", 5, 1, 16);
+
+            stickTo = builder
+                    .comment("卡片靠屏幕哪一边停。同时出现多张时，它们自上而下排列。",
+                            "  RIGHT = 卡片右边固定不动，左边随内容长短伸缩。推荐。",
+                            "          内容再长也只是往左伸，永远不会超出屏幕右边。",
+                            "  LEFT  = 卡片左边尽量停在下面 leftEdge 的位置，内容往右伸展。")
+                    .defineEnum("stickTo", LayoutSettings.Side.RIGHT);
+
+            leftEdge = builder
+                    .comment("只有上面选了 LEFT 才有用：卡片左边想停在离屏幕左边多少像素的地方。",
+                            "注意这是「想停在这儿」，不是「一定停在这儿」——",
+                            "内容太长、右边放不下时，卡片会自动往左让，不会把内容挤出屏幕。",
+                            "屏幕宽度会随玩家的界面缩放大小变化，所以别设得太靠右。")
+                    .defineInRange("leftEdge", 320, 0, 4000);
+
+            appearMode = builder
+                    .comment("卡片出现时怎么展开。",
+                            "  SLIDE = 内容保持原样，从左往右平移到最终位置；先看到最右端，再逐渐看到全部。",
+                            "  CLIP  = 内容位置不动，可见范围从左往右慢慢扩大；先看到最左端。")
+                    .defineEnum("appearMode", LayoutSettings.Appear.SLIDE);
+
             builder.pop();
 
             builder.comment("数字").push("count");
