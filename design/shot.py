@@ -65,7 +65,7 @@ def launch(pw):
 
 
 def shoot(html: Path, out: Path, width: int, height: int, dsf: int,
-          geometry: Path | None) -> int:
+          geometry: Path | None, full_page: bool = False) -> int:
     from playwright.sync_api import sync_playwright
 
     if not html.is_file():
@@ -87,7 +87,7 @@ def shoot(html: Path, out: Path, width: int, height: int, dsf: int,
                                 encoding="utf-8", newline="\n")
             print(f"  DOM 矩形 {len(data['cards'])} 张卡（dpr={data['dpr']}） -> {geometry}")
         out.parent.mkdir(parents=True, exist_ok=True)
-        page.screenshot(path=str(out))
+        page.screenshot(path=str(out), full_page=full_page)
         browser.close()
 
     print(f"  截图 {out}  （视口 {width}x{height} CSS px，设备像素比 {dsf} "
@@ -104,11 +104,12 @@ def main() -> int:
     ap.add_argument("--height", type=int, default=240, help="视口高（CSS px）")
     ap.add_argument("--dsf", type=int, default=4, help="设备像素比。越大边缘量得越准")
     ap.add_argument("--geometry", action="store_true", help="同时导出 DOM 矩形 JSON")
+    ap.add_argument("--full-page", action="store_true", help="整页截图（草稿页比视口高时用）")
     args = ap.parse_args()
 
     out = args.out or args.html.with_suffix(".png")
     geom = out.with_suffix(".geometry.json") if args.geometry else None
-    return shoot(args.html, out, args.width, args.height, args.dsf, geom)
+    return shoot(args.html, out, args.width, args.height, args.dsf, geom, args.full_page)
 
 
 if __name__ == "__main__":

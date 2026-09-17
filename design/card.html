@@ -27,9 +27,10 @@ button { background:#262B38; color:#BFC6D4; border:1px solid #FFFFFF1F;
 button:hover { border-color:#55EBFF66; color:#EBEFF6; }
 input[type=range] { width:110px; vertical-align:middle; }
 .board { display:inline-block; padding:16px 20px; border-radius:8px; }
-.rows { display:flex; flex-direction:column; gap:6px; align-items:flex-end; }
-/* 右缘对齐 = M2 定的默认版式（卡右缘固定，左缘随名字长短伸缩）。
-   这一份之前写的是 align-items:flex-start，是没跟上定案 —— 已对齐。 */
+.rows { display:flex; flex-direction:column; gap:6px; align-items:flex-start; }
+/* 左缘对齐 = 定案的默认版式（卡左缘固定，右缘随名字长短伸缩）。
+   一摞卡排下来竖条成一条竖线。这一格跟着 LayoutSettings 的默认值走，
+   改那边就要改这里 —— 两边不一致的话，对照表的"固定的是哪条边"会立刻红。 */
 .zoom2 { zoom:2; }
 </style>
 </head>
