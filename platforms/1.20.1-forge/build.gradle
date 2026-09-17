@@ -65,19 +65,27 @@ minecraft {
             //  根本走不到：自动缩放、三列退让、列表滚动都卡在这儿）
             args '--width', (project.findProperty('width') ?: '1280'),
                     '--height', (project.findProperty('height') ?: '720')
+
+            // 【harness 必须自己进世界】harness 的注入条件是 mc.level != null，它不会替玩家点开
+            // 单人存档 —— 从前每次跑都得有人手动进世界，没人进它就一路干等、什么都不会发生。
+            // 1.20 起有 --quickPlaySingleplayer：启动直接进存档。只在本轮带 harnessAuto 时加，
+            // 免得平时开 dev 客户端被强行拽进世界。
+            //
+            // 【为什么必须写在这个块里】它一度被写在下面的 `server` 块里 —— 而 runClient 用的是
+            // `client` 块，于是这个参数压根没进命令行，客户端照旧停在主菜单干等（2026-09-17 实测：
+            // 日志停在 "Sound engine started" 两分钟没声，`Get-CimInstance` 打出来的命令行结尾
+            // 是 `--width 1280 --height 720 --mixin.config …`，没有 --quickPlaySingleplayer）。
+            // 也别挪进上面的 `configureEach`：那个块 server 也会继承，而 quickPlay 是客户端参数。
+            if ((project.findProperty('harnessAuto') ?: 'off') != 'off') {
+                args '--quickPlaySingleplayer', (project.findProperty('world') ?: 'New World')
+            }
         }
 
         server {
             property 'forge.enabledGameTestNamespaces', mod_id
             property 'mixin.configs', 'pickupcard.mixins.json'
             args '--nogui'
-            // 【harness 必须自己进世界】harness 的注入条件是 mc.level != null，它不会替玩家点开
-            // 单人存档 —— 从前每次跑都得有人手动进世界，没人进它就一路干等、什么都不会发生。
-            // 1.20 起有 --quickPlaySingleplayer：启动直接进存档。只在本轮带 harnessAuto 时加，
-            // 免得平时开 dev 客户端被强行拽进世界。
-            if ((project.findProperty('harnessAuto') ?: 'off') != 'off') {
-                args '--quickPlaySingleplayer', (project.findProperty('world') ?: 'New World')
-            }
+            // 注意：--quickPlaySingleplayer 是客户端参数，只能待在 `client` 块里（见那里的注释）。
         }
     }
 }

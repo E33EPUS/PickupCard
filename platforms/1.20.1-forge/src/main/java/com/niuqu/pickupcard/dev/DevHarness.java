@@ -526,6 +526,18 @@ public final class DevHarness {
                 return;
             }
             int age = hudTicks - WARMUP_TICKS;
+
+            // 【收工必须是独立卫语句，不能是链尾的 else if】它原来是链尾，而前面
+            // `else if (exitSeen)` 一旦成立就把后面所有分支全吞掉 —— 于是"到点退出"永远走不到，
+            // 客户端拍完三张图就挂在那儿，用户看到的就是"跑完了窗口还开着、像在等人操作"。
+            // 同一条件当时还写了两遍（第一遍是空块），第二遍本就不可达 —— 这类死分支编译器不报，
+            // 只在"进程不退出"这种症状上显形。
+            if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
+                PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");
+                mc.stop();
+                return;
+            }
+
             if (age == SHOT_AFTER_OPEN) {
                 CardStage.Stats s = CardStage.INSTANCE.stats();
                 PickupCard.LOGGER.info("[harness-auto] HUD 读数 cards={} painted={} layout={}us",
@@ -579,10 +591,6 @@ public final class DevHarness {
                             m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-revive -> {}",
                                     m.getString()));
                 }
-            } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
-            } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
-                PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");
-                mc.stop();
             }
         }
 
