@@ -1,7 +1,6 @@
 package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.render.CardSlot;
-import com.niuqu.pickupcard.render.shape.ShapeBatch;
 import com.niuqu.pickupcard.render.nvg.NvgCanvas;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.rarity.RarityAccent;
@@ -13,9 +12,24 @@ import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
 import org.lwjgl.glfw.GLFW;
+import org.lwjgl.nanovg.NVGColor;
+import org.lwjgl.nanovg.NVGPaint;
+import org.lwjgl.system.MemoryStack;
 
 import java.util.List;
 import java.util.Locale;
+
+import static org.lwjgl.nanovg.NanoVG.nvgBeginPath;
+import static org.lwjgl.nanovg.NanoVG.nvgCircle;
+import static org.lwjgl.nanovg.NanoVG.nvgFill;
+import static org.lwjgl.nanovg.NanoVG.nvgFillColor;
+import static org.lwjgl.nanovg.NanoVG.nvgFillPaint;
+import static org.lwjgl.nanovg.NanoVG.nvgLinearGradient;
+import static org.lwjgl.nanovg.NanoVG.nvgRGBA;
+import static org.lwjgl.nanovg.NanoVG.nvgRoundedRect;
+import static org.lwjgl.nanovg.NanoVG.nvgStroke;
+import static org.lwjgl.nanovg.NanoVG.nvgStrokeColor;
+import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
 
 /**
  * 开发用调试屏：让"改一行 → 看一眼"的循环从分钟级压到秒级。
@@ -28,7 +42,7 @@ import java.util.Locale;
  * 这里只多做三件事：铺可控的背景、画几何辅助线、显示只读读数。
  * <p>
  * 【它为什么不算"第二个 UI 框架"】没有控件系统、没有布局、没有事件分发——按键是硬编码的
- * switch。等形状层做完，滑条会用我们自己的形状层画，那既是工具也是"吃狗粮"。
+ * switch。滑条/开关这些控件迟早要用 NanoVG 自己画，那既是工具也是"吃狗粮"。
  */
 public final class DevCardScreen extends Screen {
 
@@ -46,10 +60,8 @@ public final class DevCardScreen extends Screen {
     /** 辅助线默认开：上一版两个坐标 bug 都靠它一眼看穿。 */
     private boolean guides = true;
     private boolean stats = true;
-    /** 形状层 spike：只画矢量图元，不画卡。用来回答"形状到底画得出来吗"。 */
+    /** 矢量 spike：只画图元与外壳探针，不画真卡。用来回答"引擎到底画得出来吗"。 */
     private boolean spike;
-    private NvgCanvas nvg;
-    private boolean ownsNvg;
 
     public DevCardScreen() {
         super(Component.literal("PickupCard Harness"));
@@ -76,7 +88,7 @@ public final class DevCardScreen extends Screen {
     public void render(GuiGraphics gui, int mouseX, int mouseY, float partialTick) {
         paintBackground(gui);
         if (spike) {
-            paintShapeSpike(gui);
+            paintVectorSpike(gui);
         } else {
             CardStage.INSTANCE.renderInto(gui, Minecraft.getInstance());
             if (guides) paintGuides(gui);
@@ -127,87 +139,88 @@ public final class DevCardScreen extends Screen {
     }
 
     /**
-     * 形状层 spike：五个图元各画一个，坐标写死，颜色刻意避开辅助线的红/绿。
+     * 矢量引擎 spike：五个图元 + 四个 alpha 探针 + 两张卡的外壳，坐标写死。
      * <p>
-     * 上一版"外壳整层不可见、无日志可查"就死在形状绘制这条路上。所以这里第一件事不是
-     * 把卡画好看，而是<b>先证明一个形状能出来</b>——一个出不来，五十个也不用试。
+     * 【它证明的是哪一件事】上一版"外壳整层不可见、无日志可查"就死在图形绘制这条路上，
+     * 所以这一页第一件事不是把卡画好看，而是<b>先证明一个形状能出来</b> ——
+     * 一个出不来，五十个也不用试。
+     * <p>
+     * 【为什么直接用 NanoVG 而不走画卡那条路】spike 的职责是验引擎本身（路径、渐变、
+     * 描边宽度、alpha 混合）。要是它自己也经过 {@link NvgCardPainter}，引擎坏了就会
+     * 表现得和"卡画错了"一模一样，这一页就白开了。所以五个图元是裸的 NanoVG 调用。
+     * <p>
+     * 【alpha 探针为什么叠在棋盘底上】棋盘格是天然判据：真混合会透出两种格子色，
+     * alpha 丢了就是一块纯色。
      */
-    private void paintShapeSpike(GuiGraphics gui) {
-        ShapeBatch batch = new ShapeBatch(gui);
-        float y = 40f;
-        batch.roundRect(20, y, 120, 24, 12, 0xFFE040FB);              // 胶囊填充（洋红）
-        batch.roundRectStroked(160, y, 120, 24, 12, 2f, 0xFF00E5FF);  // 胶囊描边（青）
-        batch.circle(300, y + 12, 14, 0xFFFF6E40);                    // 圆填充（橙）
-        batch.ring(345, y + 12, 14, 2f, 0xFF76FF03);                  // 圆环（黄绿）
-        batch.crescent(390, y + 12, 14, 6f, 0f, 12f, 0xFFFFD600);     // 月牙（琥珀）
-        batch.roundRectGradient(20, y + 40, 120, 24, 6, 0xFFFFFFFF, 0xFF3050FF); // 渐变
-        batch.flush();
-
-        // ---- 探针：同一个半透明黑，四个位置交替半径 ----
-        // 棋盘底是天然判据：真混合会透出两种格子色，alpha 丢了就是一块纯色。
-        gui.fill(20, 100, 110, 124, 0x5A000000);                      // 原版路径（对照）
-        ShapeBatch probe = new ShapeBatch(gui);
-        probe.roundRect(120, 100, 90, 24, 0f,  0x5A000000);           // #1 直角
-        probe.roundRect(220, 100, 90, 24, 12f, 0x5A000000);           // #2 圆角
-        probe.roundRect(320, 100, 90, 24, 0f,  0x5A000000);           // #3 直角
-        probe.roundRect(20, 140, 90, 24, 12f, 0x5A000000);            // #4 圆角
-        probe.flush();
-
-        paintNvgProbe(gui);
-
-        ShapeBatch.Stats st = batch.stats();
-        gui.drawString(font, "shape spike: shapes=" + st.shapes()
-                + " flushes=" + st.flushes() + " merges=" + st.merges(), 8, 8, 0xFFFFFFFF, true);
-    }
-
-    /**
-     * NanoVG 探针：用矢量引擎画两张卡的外壳（竖条 + 图标格 + 名字框），坐标写死，不画图标与文字。
-     * <p>
-     * 【为什么放在 spike 页】这一页已经有自动化截图（harness 的 pickupcard-harness-spike），
-     * 所以"引擎画出来对不对"不需要新开一条验证链。第二张的竖条只画 45%，是验入场动画那一段。
-     * <p>
-     * 【为什么先 gui.flush()】前面的形状走的是原版缓冲批次，而 NanoVG 是直接 GL：
-     * 不先把批次交出去，直接 GL 那些调用会先改掉状态，批次再冲出来就错位了。
-     */
-    private void paintNvgProbe(GuiGraphics gui) {
+    private void paintVectorSpike(GuiGraphics gui) {
         gui.flush();
-        if (nvg == null) {
-            // 用共享上下文：探针和真卡面是同一套 GL 状态纪律。
-            // 各建一个的话，第一帧会看见两条"上下文已建立"，而且两个上下文的
-            // 状态恢复互相不知道 —— 那种 bug 只在特定顺序下出现。
-            nvg = NvgCanvas.shared();
-            ownsNvg = false;
-        }
+        NvgCanvas nvg = NvgCanvas.shared();
         if (nvg == null || !nvg.valid()) {
             gui.drawString(font, "nvg: no context (see log)", 8, 176, 0xFFFF4D6D, true);
             return;
         }
-        StyleModel style = StyleModel.defaults();
-        float h = style.boxHeight();
-        Minecraft mc = Minecraft.getInstance();
-        nvg.begin(width, height, (float) mc.getWindow().getGuiScale());
+
+        float y = 40f;
+        nvg.begin(width, height, (float) Minecraft.getInstance().getWindow().getGuiScale());
         try {
-            // 两根静态探针：一个全长竖条、一个 45% 长，只看"画出来了没有"。
-            // 窗口给满开的 —— 这里探的是 NanoVG 这条链路，不是入场那个隧道口。
-            RevealWindow open = RevealWindow.of(style.barWidth(), style.gap(), 150f, false, 1f);
-            NvgCardPainter.paintCard(nvg.handle(), style, 20f, 190f, 150f, h, RarityAccent.XP, 1f, 0f, open);
-            NvgCardPainter.paintCard(nvg.handle(), style, 190f, 190f, 150f, h, 0xFF55EBFF, 0.45f, 0f, open);
+            long vg = nvg.handle();
+            try (MemoryStack stack = MemoryStack.stackPush()) {
+                // 胶囊填充（洋红）
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, 20f, y, 120f, 24f, 12f);
+                nvgFillColor(vg, rgba(stack, 0xFFE040FB));
+                nvgFill(vg);
+                // 胶囊描边（青）—— 路径内缩半个线宽，跟卡面同一条纪律
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, 161f, y + 1f, 118f, 22f, 11f);
+                nvgStrokeWidth(vg, 2f);
+                nvgStrokeColor(vg, rgba(stack, 0xFF00E5FF));
+                nvgStroke(vg);
+                // 圆填充（橙）/ 圆环（黄绿）
+                nvgBeginPath(vg);
+                nvgCircle(vg, 300f, y + 12f, 14f);
+                nvgFillColor(vg, rgba(stack, 0xFFFF6E40));
+                nvgFill(vg);
+                nvgBeginPath(vg);
+                nvgCircle(vg, 345f, y + 12f, 13f);
+                nvgStrokeWidth(vg, 2f);
+                nvgStrokeColor(vg, rgba(stack, 0xFF76FF03));
+                nvgStroke(vg);
+                // 渐变矩形（白 -> 蓝）
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, 20f, y + 40f, 120f, 24f, 6f);
+                nvgFillPaint(vg, nvgLinearGradient(vg, 20f, y + 40f, 20f, y + 64f,
+                        rgba(stack, 0xFFFFFFFF), rgba(stack, 0xFF3050FF), NVGPaint.mallocStack(stack)));
+                nvgFill(vg);
+                // alpha 探针：直角与圆角各一，都铺同一个半透明黑
+                nvgBeginPath(vg);
+                nvgRoundedRect(vg, 160f, y + 40f, 90f, 24f, 0f);
+                nvgRoundedRect(vg, 260f, y + 40f, 90f, 24f, 12f);
+                nvgFillColor(vg, rgba(stack, 0x5A000000));
+                nvgFill(vg);
+
+                // 两张探针卡：一张竖条全开、一张 45%，验的是外壳那条真路径
+                StyleModel style = StyleModel.defaults();
+                float h = style.boxHeight();
+                RevealWindow open = RevealWindow.of(style.barWidth(), style.gap(), 150f, false, 1f);
+                NvgCardPainter.paintShell(vg, style, 20f, 190f, 150f, h,
+                        RarityAccent.XP, 1f, 0f, 1f, false, open);
+                NvgCardPainter.paintShell(vg, style, 190f, 190f, 150f, h,
+                        0xFF55EBFF, 0.45f, 0f, 1f, false, open);
+            }
         } finally {
             nvg.end();
         }
-        // 这行字是"GL 状态还回来了吗"的活证据：它走原版批次，而批次要等直接 GL 画完之后
-        // 才冲出去 —— 状态没还干净，它就不出来（或者花掉）。
+        // 这两行字是"GL 状态还回来了吗"的活证据：它们走原版批次，而批次要等直接 GL
+        // 画完之后才冲出去 —— 状态没还干净，它们就不出来（或者花掉）。
+        gui.drawString(font, "nvg spike: 5 primitives + 2 alpha probes", 8, 128, 0xFF7DFF8A, true);
         gui.drawString(font, "nvg: ctx ok  bar=100% / 45%", 8, 176, 0xFF7DFF8A, true);
     }
 
-    @Override
-    public void removed() {
-        // 共享上下文不归这个屏幕管：它活得比屏幕久
-        if (nvg != null && ownsNvg) {
-            nvg.close();
-            nvg = null;
-        }
-        super.removed();
+    /** ARGB -> NanoVG 要的 RGBA 分量（spike 自己用，不去借卡面的私有助手）。 */
+    private static NVGColor rgba(MemoryStack stack, int argb) {
+        return nvgRGBA((byte) (argb >> 16), (byte) (argb >> 8), (byte) argb, (byte) (argb >>> 24),
+                NVGColor.mallocStack(stack));
     }
 
     /** 由自动驱动切换 spike 页。 */
@@ -275,7 +288,7 @@ public final class DevCardScreen extends Screen {
     }
 
     // ------------------------------------------------------------------
-    // 按键（硬编码；等形状层到位再换成自绘的滑条/开关）
+    // 按键（硬编码；滑条/开关迟早换成用 NanoVG 自绘的控件）
     // ------------------------------------------------------------------
 
     @Override

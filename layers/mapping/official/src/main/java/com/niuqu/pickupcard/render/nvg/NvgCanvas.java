@@ -10,9 +10,11 @@ import org.lwjgl.nanovg.NanoVGGL3;
  * <p>【它只干四件事】建上下文、开帧、关帧、销毁。画什么、怎么画是
  * {@link NvgCardPainter} 的事 —— 混在一起会长成上帝类，之前已经栽过一次。
  *
- * <p>【失败不抛异常，只回退】卡片是 HUD 的一部分，而 HUD 画不出来 = 玩家什么也看不见。
- * 所以 nvgCreate 失败（GL3 后端初始化不了、native 没打进来）时这里返回 null，
- * 调用方退回原来的 SDF 图层。宁可难看，不能没有。
+ * <p>【拿不到上下文时没有第二条路】2026-09-17 之前这里是"返回 null，调用方退回 SDF 图层"。
+ * 那条回退已经被删掉了：同一张卡面有两份实现，就等于每次改卡面都要改两处，而漏掉的那一处
+ * 只会在 native 起不来的机器上现形（用户报的"影子还在穿透"就是同一形状的第二个实例）。
+ * 现在只有一条：{@link NvgCanvas#shared()} 拿不到就<b>不画</b>，并且把原因响亮地写进日志 ——
+ * 静默地少画半张卡比不画更糟。
  *
  * <p>【每帧进出都要过 {@link GlStateGuard}】NanoVG 是直接调 GL 的，它不知道 MC
  * 的状态缓存；开帧前存、关帧后放回，原因见那个类。这里保证 begin/end 成对，
@@ -38,13 +40,13 @@ public final class NvgCanvas implements AutoCloseable {
     /**
      * 必须在渲染线程、且 GL 上下文已就绪时调用。
      *
-     * @return 不可用时返回 null（调用方回退），不抛异常
+     * @return 不可用时返回 null，不抛异常
      */
     public static NvgCanvas create() {
         try {
             long ctx = NanoVGGL3.nvgCreate(FLAGS);
             if (ctx == 0L) {
-                PickupCard.LOGGER.error("[nvg] nvgCreate 返回 0：GL3 后端初始化失败，卡片回退到 SDF 层");
+                PickupCard.LOGGER.error("[nvg] nvgCreate 返回 0：GL3 后端初始化失败，本帧不画卡");
                 return null;
             }
             PickupCard.LOGGER.info("[nvg] NanoVG 上下文已建立 flags={}", FLAGS);
@@ -52,8 +54,7 @@ public final class NvgCanvas implements AutoCloseable {
         } catch (Throwable t) {
             // native 不在 classpath 上时这里就是 UnsatisfiedLinkError。
             // 抓 Throwable 而不是 Exception：链接错误不是 Exception，漏掉它会直接崩游戏。
-            PickupCard.LOGGER.error("[nvg] 加载 NanoVG 失败，卡片回退到 SDF 层", t);
-            NvgDiagnostics.report("org.lwjgl.nanovg.NanoVGGL3");
+            PickupCard.LOGGER.error("[nvg] 加载 NanoVG 失败，本帧不画卡", t);
             return null;
         }
     }
@@ -62,7 +63,7 @@ public final class NvgCanvas implements AutoCloseable {
     private static boolean sharedTried;
 
     /**
-     * 全局共享的上下文：每帧都要用，不能每帧建一个。不可用时返回 null（调用方回退 SDF），
+     * 全局共享的上下文：每帧都要用，不能每帧建一个。拿不到时返回 null，
      * 而且<b>只尝试一次</b> —— 每帧重试的代价是每帧一条错误日志，日志会没法看。
      */
     public static NvgCanvas shared() {

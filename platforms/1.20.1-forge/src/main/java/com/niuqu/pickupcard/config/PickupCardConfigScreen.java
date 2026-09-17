@@ -3,7 +3,7 @@ package com.niuqu.pickupcard.config;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.render.CardStage;
-import com.niuqu.pickupcard.render.painter.TrioCardPainter;
+import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.style.StyleModel;
 import com.niuqu.pickupcard.text.CountFormat;
 import net.minecraft.client.Minecraft;
@@ -238,8 +238,8 @@ public final class PickupCardConfigScreen extends Screen {
 
     private void renderCardPreview(GuiGraphics gui) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
-        TrioCardPainter.paintPreview(gui, style, itemX1(), 30f, 150f,
-                new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A);
+        NvgCardPainter.paintPreview(gui, style, itemX1(), 30f, 150f,
+                new ItemStack(Items.NETHER_STAR), "经验", "+137", 0xFF7DFF8A, true);
     }
 
     /**
@@ -266,8 +266,8 @@ public final class PickupCardConfigScreen extends Screen {
         for (StackLayout.Slot slot : StackLayout.stack(sizes, this.width, virtualBottom, layout,
                 CardStage.MARGIN_X, CardStage.MARGIN_Y, CardStage.STACK_GAP)) {
             int i = widths.length - 1 - slot.index();
-            TrioCardPainter.paintPreview(gui, style, slot.x(), slot.y(), slot.width(),
-                    icons[i], samples[i][0], samples[i][1], accents[i]);
+            NvgCardPainter.paintPreview(gui, style, slot.x(), slot.y(), slot.width(),
+                    icons[i], samples[i][0], samples[i][1], accents[i], i == 0);
         }
     }
 

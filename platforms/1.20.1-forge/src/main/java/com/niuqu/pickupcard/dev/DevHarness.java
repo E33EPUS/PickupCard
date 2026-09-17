@@ -107,7 +107,7 @@ public final class DevHarness {
         private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
 
         private static final List<List<CardFixtures.Fixture>> PAGES = CardFixtures.pages();
-        /** 卡样例页之后的形状层 spike 页（不画卡，只画矢量图元）。 */
+        /** 卡样例页之后的矢量 spike 页（不画卡，只画图元与外壳探针）。 */
         private static final int SPIKE_PAGE = PAGES.size();
         /**
          * 最后一页：测量页。纯黑底、无辅助线、无读数 —— 给像素对照一张干净的输入。
@@ -262,7 +262,7 @@ public final class DevHarness {
             if (page == SPIKE_PAGE) {
                 screen.setMeasure(false);
                 screen.setSpike(true);
-                PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: 形状层 spike", page + 1, TOTAL_PAGES);
+                PickupCard.LOGGER.info("[harness-auto] 第 {}/{} 页: 矢量 spike", page + 1, TOTAL_PAGES);
             } else if (page == MEASURE_PAGE) {
                 screen.setSpike(false);
                 screen.setMeasure(true);

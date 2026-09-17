@@ -5,7 +5,7 @@ import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.pickup.Inbox;
-import com.niuqu.pickupcard.render.painter.TrioCardPainter;
+import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
@@ -22,11 +22,11 @@ import java.util.Map;
 import java.util.function.Supplier;
 
 /**
- * 渲染层的调度台：把账本事件变成屏幕上的卡，每帧把它们交给 {@link CardPainter}。
+ * 渲染层的调度台：把账本事件变成屏幕上的卡，每帧把它们交给 {@link NvgCardPainter}。
  * <p>
  * 【它不做什么】这里<b>没有一笔绘制</b>，也<b>没有一条几何公式</b>：
  * <ul>
- *   <li>怎么画 → {@link CardPainter}（可替换的插槽）</li>
+ *   <li>怎么画 → {@link NvgCardPainter}（全项目唯一的画法）</li>
  *   <li>卡多大 → {@link CardMetrics}</li>
  *   <li>卡在哪 → {@code shared} 里的 {@link StackLayout}</li>
  *   <li>主题从哪来 → {@link StyleSource}</li>
@@ -70,8 +70,12 @@ public final class CardStage {
     private final List<Inbox.Event> pending = new ArrayList<>();
     private final StyleSource styles = new StyleSource();
 
-    /** 画法。换 UI 方案就是换这一个字段。 */
-    private CardPainter painter = new TrioCardPainter();
+    /**
+     * 画法。**全项目只有这一个实现**（NanoVG 矢量）—— 2026-09-17 把 SDF 图层、原版整卡
+     * 渲染、DOM 草稿当贴图那三条一起删了，理由（以及"内容为什么还在原版"）见
+     * {@link NvgCardPainter} 的类注释。
+     */
+    private final NvgCardPainter painter = new NvgCardPainter();
 
     /** 布局设置来自 TOML；默认值让渲染层在没有 Forge 的情况下也能跑。 */
     private Supplier<LayoutSettings> layoutSource = LayoutSettings::defaults;
@@ -109,13 +113,6 @@ public final class CardStage {
     /** 平台侧把布局配置接进来。 */
     public void setLayoutSource(Supplier<LayoutSettings> source) {
         this.layoutSource = source == null ? LayoutSettings::defaults : source;
-    }
-
-    /** 换画法。UI 定案后由入口调用；不改的话就是骨架期的基线画法。 */
-    public void setPainter(CardPainter painter) {
-        if (painter != null) {
-            this.painter = painter;
-        }
     }
 
     /** 换世界/退出：屏上的卡、没消费的事件、缓存的主题一起清。与 {@link Inbox#reset()} 成对调用。 */

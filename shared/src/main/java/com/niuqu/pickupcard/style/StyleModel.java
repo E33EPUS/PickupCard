@@ -31,7 +31,7 @@ import org.jetbrains.annotations.Nullable;
  * @param highlight      顶部高光线颜色（alpha 为 0 则不画）
  * @param shadowAlpha    投影不透明度（0 = 不画投影）
  * @param shadowOffsetY  投影下移量
- * @param shadowBlur     投影模糊半径（px）。0 = 硬边；>0 走 SDF 软化近似，有效区间约 0~8
+ * @param shadowBlur     投影软边宽度（px）。0 = 硬边；>0 走 NanoVG 的 boxGradient 软边，有效区间约 0~8
  * @param glowAlpha      稀有度微光不透明度（0 = 不画）
  * @param nameColor      物品名颜色
  * @param enterMs        入场动画时长
