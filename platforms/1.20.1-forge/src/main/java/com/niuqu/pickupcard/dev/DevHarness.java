@@ -156,14 +156,59 @@ public final class DevHarness {
             return !"off".equalsIgnoreCase(MODE);
         }
 
+        /**
+         * {@code -PharnessGuiScale=N}：运行时把 GUI 缩放定死（1..5）。
+         * <p>
+         * 【为什么要这个开关】有些分支只在"画布很小"时才成立：自动缩放档、三列退让、列表滚动。
+         * dev 窗口默认 1280×720 在 guiScale 3 下是 427×240，这三条一辈子走不到 —— 于是它们
+         * 只有单测级证据。{@code options.txt} 里写 guiScale 试过，不生效（原因没查到）；
+         * 这里直接用 1.20.1 的 public 入口：{@code options.guiScale().set(n)} + {@code resizeDisplay()}。
+         */
+        private static final String GUI_SCALE = System.getProperty("pickupcard.harness.guiScale", "off");
+
         /** {@code -PharnessAuto=hud}：不打开调试屏，走玩家真正走的那条路。 */
         private static final boolean HUD_ONLY = "hud".equalsIgnoreCase(MODE);
         private static int hudTicks;
         private static boolean hudInjected;
+        /** 缩放只应用一次（每 tick 改会让窗口反复重建）。 */
+        private static boolean scaleApplied;
 
         /** {@code -PharnessAuto=config}：打开配置界面 → 截图 → 退出。界面能不能画出来要能被验。 */
         private static final boolean CONFIG_ONLY = "config".equalsIgnoreCase(MODE);
         private static int configTicks;
+
+        /** 把请求的 GUI 缩放应用上去（只做一次），并把画布尺寸打进日志。 */
+        private static void applyGuiScale(Minecraft mc) {
+            if (scaleApplied || GUI_SCALE.equalsIgnoreCase("off")) {
+                return;
+            }
+            // 【为什么必须等进世界、且必须是自家的界面】在加载界面上改缩放 + resize 那个界面，
+            // 会把加载流程停在半路（实测：卡在加载屏 26 秒、世界根本没加载出来）。
+            // 自家界面允许：配置模式的窗口很短（世界里 + 无界面只有 1 tick），那时才轮得到它。
+            boolean ourScreen = mc.screen == null || mc.screen instanceof PickupCardConfigScreen;
+            if (mc.level == null || mc.getOverlay() != null || !ourScreen) {
+                return;
+            }
+            scaleApplied = true;
+            try {
+                int want = Integer.parseInt(GUI_SCALE.trim());
+                // 【为什么直接写 Window，而不是 options.guiScale()】原版那个选项是
+                // ClampingLazyMaxIntRange：上限 = calculateScale(0)，也就是**自动档本身** ——
+                // 玩家侧根本调不出比自动档更小的画布（1280×720 的极限就是 427×240）。
+                // 所以 options.txt 里写 guiScale 也没用（那是这条悬案的答案）。
+                // dev 要验"画布很小"的分支，只能直接写窗口的缩放值。
+                mc.getWindow().setGuiScale(want);
+                if (mc.screen != null) {
+                    mc.screen.resize(mc, mc.getWindow().getGuiScaledWidth(),
+                            mc.getWindow().getGuiScaledHeight());
+                }
+                PickupCard.LOGGER.info("[harness-auto] GUI 缩放定死为 {}：画布 {}x{}",
+                        mc.getWindow().getGuiScale(), mc.getWindow().getGuiScaledWidth(),
+                        mc.getWindow().getGuiScaledHeight());
+            } catch (NumberFormatException e) {
+                PickupCard.LOGGER.warn("[harness-auto] harnessGuiScale 给了个不是整数的值：{}", GUI_SCALE);
+            }
+        }
 
         static void tick(Minecraft mc) {
             if (!enabled()) return;
@@ -208,6 +253,20 @@ public final class DevHarness {
         }
 
         static void tickConfig(Minecraft mc) {
+            // 【为什么整条流程都门控在"世界进来了"之后】--quickPlaySingleplayer 要几秒才把世界加载
+            // 出来，而 tick 从第一帧就开始数；不门控的话"世界里 + 没界面"那个安全窗口会被自己错过
+            // （实测：缩放函数一次都没跑，还差点在加载屏上动缩放把加载卡死）。
+            if (mc.level == null || mc.getOverlay() != null) {
+                return;
+            }
+            // 【为什么反复开、而不是开一次】quickPlay 期间 MC 自己还会换几次界面（收块屏、地形
+            // 加载屏），开一次会被它盖掉 —— 实测截图拍的是世界、日志写着"(不是配置界面)"。
+            // 所以：一直开到它真的挂上；**挂上之后再动缩放**（那时没别人会再改窗口）。
+            if (!(mc.screen instanceof PickupCardConfigScreen)) {
+                mc.setScreen(new PickupCardConfigScreen(null));
+                return;
+            }
+            applyGuiScale(mc);
             configTicks++;
             if (configTicks == WARMUP_TICKS) {
                 mc.setScreen(new PickupCardConfigScreen(null));
@@ -349,6 +408,10 @@ public final class DevHarness {
          * 正好就是这个差别，而上面那些自动截图全都走的调试屏那条路，永远测不到。
          */
         private static void tickHud(Minecraft mc) {
+            if (mc.level == null || mc.getOverlay() != null) {
+                return;         // 同上：世界进来了才开始数 tick
+            }
+            applyGuiScale(mc);
             hudTicks++;
             if (!hudInjected) {
                 if (hudTicks < WARMUP_TICKS) return;

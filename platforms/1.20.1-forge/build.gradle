@@ -43,6 +43,8 @@ minecraft {
             // 让"开屏 → 注入样例 → 截图 → 退出"跑成一条无人值守的命令，
             // 验证因此不再依赖有人在机器前按键。
             jvmArg "-Dpickupcard.harness.auto=${project.findProperty('harnessAuto') ?: 'off'}"
+            // 运行时把 GUI 缩放定死（1..5）："dev 跑不出小画布"靠它解决
+            jvmArg "-Dpickupcard.harness.guiScale=${project.findProperty('harnessGuiScale') ?: 'off'}"
 
             mods {
                 "${mod_id}" {
@@ -58,13 +60,24 @@ minecraft {
             // 固定窗口大小。窗口大小决定 GUI 缩放，GUI 缩放决定截图里卡片的像素尺寸 ——
             // 不固定的话，"这次量出来怎么和上次不一样"有一半的可能是窗口变了。
             // 1280x720 下自动 GUI 缩放是 3：一张卡 32 逻辑 px -> 96 设备 px，量得比 2 倍时准。
-            args '--width', '1280', '--height', '720'
+            // 窗口尺寸可从命令行覆盖：-Pwidth=854 -Pheight=480
+            // （dev 默认 1280x720 在 guiScale 3 下是 427x240 —— 那档下很多"画布太小"的分支
+            //  根本走不到：自动缩放、三列退让、列表滚动都卡在这儿）
+            args '--width', (project.findProperty('width') ?: '1280'),
+                    '--height', (project.findProperty('height') ?: '720')
         }
 
         server {
             property 'forge.enabledGameTestNamespaces', mod_id
             property 'mixin.configs', 'pickupcard.mixins.json'
             args '--nogui'
+            // 【harness 必须自己进世界】harness 的注入条件是 mc.level != null，它不会替玩家点开
+            // 单人存档 —— 从前每次跑都得有人手动进世界，没人进它就一路干等、什么都不会发生。
+            // 1.20 起有 --quickPlaySingleplayer：启动直接进存档。只在本轮带 harnessAuto 时加，
+            // 免得平时开 dev 客户端被强行拽进世界。
+            if ((project.findProperty('harnessAuto') ?: 'off') != 'off') {
+                args '--quickPlaySingleplayer', (project.findProperty('world') ?: 'New World')
+            }
         }
     }
 }

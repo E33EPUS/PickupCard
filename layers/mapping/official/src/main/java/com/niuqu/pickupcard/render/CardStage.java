@@ -302,6 +302,10 @@ public final class CardStage {
             for (CardView dropped : new ArrayList<>(alive.subList(fits, alive.size()))) {
                 live.remove(dropped.key());
                 Inbox.INSTANCE.forgetLeft(dropped.key());   // 它不会再画了，账本那边也别留着
+                // 【为什么留一行】"少了我的那张卡"是最难猜的一类反馈：它可能是被同屏上限挤掉的、
+                // 可能是被这里摘掉的（缩放之后仍然放不下）。日志里认领一下，别让人对着截图猜。
+                PickupCard.LOGGER.info("[放不下] key={}：这一档画布连缩小的卡都塞不下 {} 张，摘掉最老的",
+                        dropped.key(), fits);
             }
             alive = new ArrayList<>(alive.subList(0, fits));
         }

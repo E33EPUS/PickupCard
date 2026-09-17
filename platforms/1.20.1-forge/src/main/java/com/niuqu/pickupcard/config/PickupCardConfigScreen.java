@@ -61,7 +61,8 @@ public final class PickupCardConfigScreen extends Screen {
     public String columnDump() {
         ConfigLayout lo = layout();
         return String.format(java.util.Locale.ROOT,
-                "tabs=(x%.0f w%.0f h%.0f%s) items=(x%.0f w%.0f h%.0f) preview=%s 行数=%d 可见行=%d 偏移=%.0f",
+                "画布 %dx%d 缩放%.0f | tabs=(x%.0f w%.0f h%.0f%s) items=(x%.0f w%.0f h%.0f) preview=%s 行数=%d 可见行=%d 偏移=%.0f",
+                this.width, this.height, Minecraft.getInstance().getWindow().getGuiScale(),
                 lo.tabs().x(), lo.tabs().w(), lo.tabs().h(), lo.tabsOnTop() ? " 顶排" : "",
                 lo.items().x(), lo.items().w(), lo.items().h(),
                 lo.previewVisible() ? String.format(java.util.Locale.ROOT, "w%.0f", lo.preview().w())
