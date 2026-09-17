@@ -21,6 +21,7 @@ tools/verify_targets.py    ← 结构守卫（CI 第一道闸）
 | --- | --- | --- |
 | 队列规则、合并窗口、数量格式 | `shared/` | 不 import `net.minecraft` 就能编过 |
 | Mixin 进原版类、读写 ItemStack | `layers/mapping/official/` | 用到官方名（Yarn 里名字不同） |
+| 自绘控件（按钮/开关/滑条/输入框） | `layers/mapping/official/render/nvg/ui/` | 形状走 NanoVG、文字借 `GuiGraphics`，不绑加载器；只在"长得跟原版控件不一样"时才加新的 |
 | 配置定义、事件总线、mod 入口 | `platforms/<目标>/` | 绑加载器，且目前量少不够成层 |
 
 层名对应的是**类别**而不是具体版本：`official` 是所有用官方名的目标共用的，

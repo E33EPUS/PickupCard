@@ -205,7 +205,12 @@ public final class DevHarness {
             if (configTicks == WARMUP_TICKS + 26) {
                 PickupCard.LOGGER.info("[harness-auto] 第 1 页控件: {}", configLabels(mc));
                 clickByLabel(mc, "位置与堆叠");            // 切到「位置与堆叠」页
-                PickupCard.LOGGER.info("[harness-auto] 点『位置与堆叠』页控件: {}", configLabels(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 30) {
+                // 【为什么晚一帧再 dump】切分类是"下一帧重建"，同一 tick 里 dump 出来的还是旧页 ——
+                // 日志写着"点『位置与堆叠』页控件"却列着通用页的项，那种日志比没有还坏。
+                PickupCard.LOGGER.info("[harness-auto] 点『位置与堆叠』后: {}", configLabels(mc));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 40) {
@@ -217,6 +222,18 @@ public final class DevHarness {
                 clickByLabel(mc, "贴边");
                 LayoutSettings.Side after = PickupCardConfig.layoutSnapshot().stickTo();
                 PickupCard.LOGGER.info("[harness-auto] 点『贴边』：{} → {}（变了才算这条链通）",
+                        before, after);
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 48) {
+                clickByLabel(mc, "动画");        // 拖拽那项在动画页，先切回去
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 52) {
+                long before = CardStage.INSTANCE.previewStyle().enterMs();
+                dragOption(mc, "入场时长", 0.35);
+                long after = CardStage.INSTANCE.previewStyle().enterMs();
+                PickupCard.LOGGER.info("[harness-auto] 拖『入场时长』到 35%：{} → {}（变了才算拖拽这条链通）",
                         before, after);
                 return;
             }
@@ -235,45 +252,26 @@ public final class DevHarness {
          */
         private static void clickByLabel(Minecraft mc, String label) {
             if (!(mc.screen instanceof PickupCardConfigScreen screen)) return;
-            // 【为什么先问界面】选项行的标签现在画在控件左边（旧版的形状），不在控件的消息里；
-            // 界面自己知道"哪一行叫什么"，这里就按行找。侧栏按钮没有行，仍然按消息找。
-            var byRow = screen.widgetFor(label);
-            if (byRow != null) {
-                screen.mouseClicked(byRow.getX() + byRow.getWidth() / 2.0,
-                        byRow.getY() + byRow.getHeight() / 2.0, 0);
-                return;
+            // 【为什么点不到就得报】控件是自绘的，没有原版 children() 可以找 ——
+            // 界面自己知道"哪一行叫什么"，找不到时静默点空 = 看起来像功能坏了。
+            if (!screen.clickOption(label)) {
+                PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
             }
-            for (var child : screen.children()) {
-                if (child instanceof net.minecraft.client.gui.components.AbstractWidget w
-                        && w.getMessage().getString().contains(label)) {
-                    screen.mouseClicked(w.getX() + w.getWidth() / 2.0,
-                            w.getY() + w.getHeight() / 2.0, 0);
-                    return;
-                }
+        }
+
+        /** 拖一下滑条：点击能改值，拖拽能不能改值是两条不同的路径。 */
+        private static void dragOption(Minecraft mc, String label, double ratio) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return;
+            if (!screen.dragOption(label, ratio)) {
+                PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
             }
-            PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
         }
 
         /** 界面上现在有哪些控件（按标签）。日志里留一份 —— 截图看不出"第 2 页到底有没有那几项"。 */
         private static String configLabels(Minecraft mc) {
             if (!(mc.screen instanceof PickupCardConfigScreen screen)) return "(不是配置界面)";
-            // 选项名 = 玩家看到的那一行文字（控件消息里现在只有值）。
-            // 位置也一起打：布局是"算出来的"，看不清就只能靠肉眼，而肉眼看不出"框压到了边"。
-            String options = screen.optionLabels().stream()
-                    .map(label -> {
-                        var w = screen.widgetFor(label);
-                        return w == null ? label
-                                : label + "@" + w.getX() + "," + w.getY()
-                                        + " " + w.getWidth() + "x" + w.getHeight();
-                    })
-                    .collect(java.util.stream.Collectors.joining(" | "));
-            String buttons = screen.children().stream()
-                    .filter(net.minecraft.client.gui.components.AbstractWidget.class::isInstance)
-                    .map(net.minecraft.client.gui.components.AbstractWidget.class::cast)
-                    .map(w -> w.getMessage().getString())
-                    .filter(s -> !s.isBlank())
-                    .collect(java.util.stream.Collectors.joining(" | "));
-            return "选项[" + options + "] 按钮[" + buttons + "]";
+            // 名字 + 位置 + 显示值：布局是算出来的，"框压到边上"得能不靠眼睛查出来。
+            return "选项[" + String.join(" | ", screen.optionDump()) + "]";
         }
 
         /** 切到下一页：清屏 → 注入 → 从头计时。页用完了就收工。 */
