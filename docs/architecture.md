@@ -46,6 +46,7 @@ tools/verify_targets.py    ← 结构守卫（CI 第一道闸）
 | 一张卡怎么画 | `render/nvg/NvgCardPainter` | **唯一的画法**（NanoVG 矢量） |
 | 卡多大 | `render/CardMetrics` | 要字体，所以量文字宽度 |
 | 卡在哪 | `shared/layout/StackLayout` | 纯数学，有单测 |
+| 卡不能压到哪 | `shared/layout/HudSafeZone` | 原版 HUD 的矩形 + 底部留白，纯数学，有单测（含反例对照） |
 | 主题从哪来 | `render/StyleSource` | 懒加载 + 一秒热重读 |
 | 动画进度 | `shared/style/CardTimeline` + `render/CardCanvas` | 纯函数 + 每帧上下文 |
 | 事件 → 屏上的卡 | `render/CardStage` | 只调度，**不画一笔** |

@@ -307,6 +307,8 @@ public final class PickupCardConfigScreen extends Screen {
         for (int i = widths.length - 1; i >= 0; i--) {      // 最新的排第一（StackLayout 的约定）
             sizes.add(new StackLayout.Size(widths[i], style.boxHeight()));
         }
+        // 【为什么这里的底部留白是个小数字】这一块是"模拟屏"，不是真屏幕 —— 原版 HUD
+        // 不在这个 90px 高的面板里，套 HudSafeZone 会把卡顶到面板外面去。
         for (StackLayout.Slot slot : StackLayout.stack(sizes, Math.max(1, (int) w), h, layout,
                 6, 4, layout.separation())) {
             int i = widths.length - 1 - slot.index();

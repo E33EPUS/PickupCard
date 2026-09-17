@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.render;
 
 import com.niuqu.pickupcard.layout.CardMove;
+import com.niuqu.pickupcard.layout.HudSafeZone;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
@@ -9,7 +10,10 @@ import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
+import net.minecraft.world.scores.Objective;
+import net.minecraft.world.scores.Score;
 import net.minecraftforge.client.event.RenderGuiEvent;
 import net.minecraftforge.event.TickEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
@@ -45,20 +49,18 @@ public final class CardStage {
     /** 距屏幕左边的留白（右缘对齐时也就是右边距）。 */
     public static final int MARGIN_X = 16;
     /**
-     * 距屏幕<b>下边</b>的留白 —— 不是审美数字，是**躲开原版 HUD**。
+     * 距屏幕<b>下边</b>的留白 —— <b>不再是常量</b>，由 {@link HudSafeZone#bottomInset()} 算出来。
      * <p>
-     * 【为什么是 52】MC 的底部那条带是固定的逻辑像素：快捷栏 182×22 贴着底边、水平居中，
-     * 血量/饥饿在 {@code H-39} 那条线，护甲与气泡在 {@code H-49}。整条带横跨
-     * {@code W/2±91} —— 而卡堆在右半边，正好压上去。用户报的"弹窗和物品栏位置重叠"
-     * 就是这么来的，算出来是 95×27 逻辑像素一整片盖住血量。
+     * 【这里踩过三次】前两次都在改一个魔数（16 → 52），每次都说"这次好了"，结果还是重叠：
+     * 第一次漏了血量/护甲那一带，第二次漏了<b>手持物品名</b>那一行（{@code Gui#renderSelectedItemName}
+     * 里 {@code y = screenHeight - 59}、<b>居中</b>、宽度随物品名变化）—— 它会横伸进右列，
+     * 而 52 让最下面那张卡正好落在 H-52..H-72，整行相交。
      * <p>
-     * 取 52 = 护甲那一行（H−49）再留 3px 缝。**代价要认**：240 高的画布上，5 张卡只用到
-     * 240−52 = 188 里的一半多（够）；但 guiScale 5 的画布只有 144 高，144−52 = 92 只放得下
-     * 4 张 —— 所以那一档要把"最多几张"调小（配置界面里有这个键）。改小是玩家的选择，
-     * 少画一张卡却不告诉他才是 bug。
+     * 现在这个数从原版 HUD 的矩形推出来（数字与出处都在 {@link HudSafeZone}）：
+     * <b>让到"手持物品名"那一行之上</b>，就等于让开了它下面所有行。
+     * 代价：比原来多让 10px。240 高的画布上 5 张卡仍然放得下（178 里放 116）；
+     * guiScale 5 的 144 高画布上放得下 3 张 —— 那一档"最多几张"是玩家可调的（配置界面里有）。
      */
-    public static final int MARGIN_Y = 52;
-
     /** 插入序 = 从老到新，正好是排布要的顺序。 */
     private final Map<String, CardView> live = new LinkedHashMap<>();
 
@@ -260,17 +262,87 @@ public final class CardStage {
                     CardMetrics.height(canvas, mc.font)));
         }
 
+        // HUD 安全区：底部留白算出来；右侧再按"侧栏 / 状态效果图标"临时让开多少决定。
+        float stackHeight = 0f;
+        for (StackLayout.Size size : sizes) {
+            stackHeight += size.height();
+        }
+        stackHeight += canvas.layout().separation() * Math.max(0, sizes.size() - 1);
+        float reserve = rightReserve(mc, canvas, stackHeight);
+
         List<CardSlot> slots = new ArrayList<>(alive.size());
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
                 sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
-                MARGIN_X, MARGIN_Y, canvas.layout().separation())) {
+                MARGIN_X, HudSafeZone.bottomInset(), canvas.layout().separation())) {
             CardView view = alive.get(slot.index());
-            slots.add(new CardSlot(view, slot.x(), move.y(view.notice().key(), slot.y(), now),
+            // 右侧有东西就把这一张整体左移 —— 位移只发生在需要它的那些帧
+            float x = slot.x() - HudSafeZone.shiftLeft(slot.x(), slot.width(),
+                    canvas.guiWidth(), reserve);
+            slots.add(new CardSlot(view, x, move.y(view.notice().key(), slot.y(), now),
                     slot.width(), slot.height()));
         }
         move.retain(live.keySet());
         return slots;
+    }
+
+    /**
+     * 右侧要让开多少：<b>计分板侧栏</b>（右侧一竖条，一直在）与<b>状态效果图标</b>
+     * （右上角，只有卡堆的顶伸进它那一带时才挡道）。
+     * <p>
+     * 【为什么每一帧现问】它们是"有时才在"的东西：让多少由它们自己决定，就不是又一个魔数。
+     * 数字与出处见 {@link HudSafeZone}（图标一行 26 高、一列 25 宽；侧栏宽度现量）。
+     */
+    private static float rightReserve(Minecraft mc, CardCanvas canvas, float stackHeight) {
+        if (mc.level == null) {
+            return 0f;
+        }
+        float reserve = 0f;
+
+        // 1 = 侧栏槽位（原版 Gui#render 里就是这么取的：getDisplayObjective(1)）
+        Objective sidebar = mc.level.getScoreboard().getDisplayObjective(1);
+        if (sidebar != null) {
+            reserve += scoreboardWidth(mc.font, sidebar) + 5f;
+        }
+
+        int beneficial = 0;
+        int harmful = 0;
+        if (mc.player != null) {
+            for (var effect : mc.player.getActiveEffects()) {
+                if (effect.getEffect().isBeneficial()) {
+                    beneficial++;
+                } else {
+                    harmful++;
+                }
+            }
+        }
+        int columns = Math.max(beneficial, harmful);
+        if (columns > 0) {
+            // 有害效果会再占一排（图标从 y=27 起）—— 卡堆的顶只有在伸到那一带时才需要让
+            float effectsBottom = harmful > 0 ? 51f : 25f;
+            float stackTop = canvas.guiHeight() - HudSafeZone.bottomInset() - stackHeight;
+            if (stackTop < effectsBottom) {
+                reserve += HudSafeZone.EFFECT_COL_W * columns;
+            }
+        }
+        return reserve;
+    }
+
+    /** 侧栏一行的实测宽度（原版是按"标题 / 条目+分数"的最宽那行算的，这里取个上界就够）。 */
+    private static float scoreboardWidth(Font font, Objective objective) {
+        int widest = font.width(objective.getDisplayName());
+        int seen = 0;
+        for (Score score : objective.getScoreboard().getPlayerScores(objective)) {
+            if (++seen > 15) {
+                break;      // 原版也只显示前 15 行
+            }
+            String owner = score.getOwner();
+            if (owner == null || owner.startsWith("#")) {
+                continue;
+            }
+            widest = Math.max(widest, font.width(owner) + 8 + font.width(Integer.toString(score.getScore())));
+        }
+        return widest;
     }
 
 }

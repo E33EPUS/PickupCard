@@ -336,6 +336,7 @@ public final class DevHarness {
                 CardStage.Stats s = CardStage.INSTANCE.stats();
                 PickupCard.LOGGER.info("[harness-auto] HUD 读数 cards={} painted={} layout={}us",
                         s.live(), s.painted(), s.layoutMicros());
+                logHudSafeZone(mc);
                 // 在屏的是哪几张：「少了我的那张卡」是最常见的问题，不能靠推断
                 PickupCard.LOGGER.info("[harness-auto] HUD 在屏: {}", CardStage.INSTANCE.lastSlots()
                         .stream().map(slot -> slot.view().key())
@@ -383,6 +384,25 @@ public final class DevHarness {
             return base + (suffix == null ? "" : "-" + suffix);
         }
 
+        /**
+         * 把"卡堆最低边 vs 原版 HUD 带的顶"写进日志。
+         * <p>【为什么要这一行】截图上看不出"差 3px"，而用户报过三次"卡片和物品栏 HUD 重叠" ——
+         * 每次都是差那几个像素。数字进日志，才不用靠眼睛判。
+         */
+        private static void logHudSafeZone(Minecraft mc) {
+            float lowestCard = 0f;
+            for (var slot : CardStage.INSTANCE.lastSlots()) {
+                lowestCard = Math.max(lowestCard, slot.y() + slot.height());
+            }
+            float hudTop = mc.getWindow().getGuiScaledHeight()
+                    - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset();
+            PickupCard.LOGGER.info(
+                    "[harness-auto] HUD 安全区：卡堆最低边 y={}，HUD 带顶 y={}（缝 {}，底部留白 {}，画布 {}x{}）",
+                    Math.round(lowestCard), Math.round(hudTop), Math.round(hudTop - lowestCard),
+                    com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
+                    mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight());
+        }
+
         private static void capture(Minecraft mc, String suffix) {
             CardStage.Stats stats = CardStage.INSTANCE.stats();
             // 这张读数就是"客观门"里的第一道：卡有没有真的进到绘制阶段、排布花了多久。
@@ -401,6 +421,7 @@ public final class DevHarness {
                     stats.enterMs(), String.format(java.util.Locale.ROOT, "%.2f", stats.firstRise()), ages);
             // 活下来的是哪几张：淘汰顺序不能靠推断，得看数据
             PickupCard.LOGGER.info("[harness-auto] 在屏: {}", keys);
+            logHudSafeZone(mc);
             String name = shotName(suffix);
             Screenshot.grab(mc.gameDirectory, name, mc.getMainRenderTarget(),
                     message -> PickupCard.LOGGER.info("[harness-auto] 截图: {} -> {}", name, message.getString()));
