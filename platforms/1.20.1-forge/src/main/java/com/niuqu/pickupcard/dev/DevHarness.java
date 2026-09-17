@@ -117,8 +117,17 @@ public final class DevHarness {
             return !"off".equalsIgnoreCase(MODE);
         }
 
+        /** {@code -PharnessAuto=hud}：不打开调试屏，走玩家真正走的那条路。 */
+        private static final boolean HUD_ONLY = "hud".equalsIgnoreCase(MODE);
+        private static int hudTicks;
+        private static boolean hudInjected;
+
         static void tick(Minecraft mc) {
             if (!enabled()) return;
+            if (HUD_ONLY) {
+                tickHud(mc);
+                return;
+            }
             ticks++;
 
             if (page < 0) {
@@ -177,6 +186,43 @@ public final class DevHarness {
                                 .collect(java.util.stream.Collectors.joining(", ")));
             }
             sinceInject = 0;
+        }
+
+        /**
+         * HUD 模式：注入样例，然后**什么都不做**，等 HUD 自己画。
+         * <p>
+         * 【为什么非要有这么一条】调试屏与 HUD 共用 {@link CardStage#renderInto}，
+         * 但**触发路径不同**：一个是 {@code Screen.render}，一个是 Forge 的 GUI 渲染事件。
+         * 共用同一个方法不等于共用同一条路径 —— "调试屏里好好的、玩家那边一张卡都没有"
+         * 正好就是这个差别，而上面那些自动截图全都走的调试屏那条路，永远测不到。
+         */
+        private static void tickHud(Minecraft mc) {
+            hudTicks++;
+            if (!hudInjected) {
+                if (hudTicks < WARMUP_TICKS) return;
+                if (mc.getOverlay() != null || mc.screen != null || mc.level == null) return;
+                CardFixtures.clear();
+                for (CardFixtures.Fixture fixture : PAGES.get(0)) {
+                    CardFixtures.inject(fixture);
+                }
+                PickupCard.LOGGER.info("[harness-auto] HUD 模式：注入 {} 张样例，不开调试屏",
+                        PAGES.get(0).size());
+                hudInjected = true;
+                hudTicks = WARMUP_TICKS;
+                return;
+            }
+            int age = hudTicks - WARMUP_TICKS;
+            if (age == SHOT_AFTER_OPEN) {
+                CardStage.Stats s = CardStage.INSTANCE.stats();
+                PickupCard.LOGGER.info("[harness-auto] HUD 读数 cards={} painted={} layout={}us",
+                        s.live(), s.painted(), s.layoutMicros());
+                Screenshot.grab(mc.gameDirectory, "pickupcard-hud", mc.getMainRenderTarget(),
+                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
+                                m.getString()));
+            } else if (age >= SHOT_AFTER_OPEN + QUIT_AFTER_SHOT) {
+                PickupCard.LOGGER.info("[harness-auto] HUD 模式收工，退出客户端");
+                mc.stop();
+            }
         }
 
         /** 产物名跟着页面走：测量页的名字必须一眼看得出是测量页，不是"某张截图"。 */

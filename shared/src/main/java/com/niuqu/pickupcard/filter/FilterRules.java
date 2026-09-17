@@ -24,6 +24,16 @@ public final class FilterRules {
      * 内置忽略表：怎么刷屏都不该弹卡的泥土级物品。刻意保持短——宁可让玩家偶尔看到
      * 一张圆石卡，也不要替他静音掉本想看见的东西；嫌多他自己加黑名单就是。
      */
+    /**
+     * 内置忽略表的只读视图。
+     * <p>
+     * 【为什么要暴露它】"这条拾取为什么没弹卡"必须能在日志里回答清楚，而回答里要列出
+     * 具体是哪些物品 —— 在日志字符串里再抄一份清单就成了第二真源，早晚和这里不一致。
+     */
+    public static List<String> builtinIgnore() {
+        return BUILTIN_IGNORE;
+    }
+
     private static final List<String> BUILTIN_IGNORE = List.of(
             "minecraft:dirt",
             "minecraft:cobblestone",

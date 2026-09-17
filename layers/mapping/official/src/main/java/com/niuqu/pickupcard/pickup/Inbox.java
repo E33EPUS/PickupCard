@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 
 /**
@@ -64,6 +65,22 @@ public final class Inbox {
     private Inbox() {
     }
 
+    /**
+     * 被过滤器丢弃时的回调。默认什么都不做。
+     * <p>
+     * 【为什么必须有一个】被过滤掉的拾取在玩家那边表现为"什么都没发生"，
+     * 和"mod 坏了"完全分不出来 —— 实测就有人捡了一路圆石来问"怎么一张卡都不弹"。
+     * 丢弃是<b>故意</b>的行为，但不能是<b>无声</b>的。平台层接上日志。
+     */
+    private volatile Consumer<CardContent.Item> dropReporter = item -> {
+    };
+
+    /** 平台侧接日志。传 null 就恢复成什么都不做。 */
+    public void setDropReporter(Consumer<CardContent.Item> reporter) {
+        this.dropReporter = reporter == null ? item -> {
+        } : reporter;
+    }
+
     /** 平台侧把配置接进来。账本只认函数，不认 Forge——测试可以给固定值。 */
     public void setSources(Supplier<PickupCardSettings> settings, Supplier<FilterSettings> filter) {
         this.settingsSource = settings == null ? PickupCardSettings::defaults : settings;
@@ -94,7 +111,11 @@ public final class Inbox {
         if (content instanceof CardContent.Item item) {
             FilterRules.Decision decision = FilterRules.check(
                     subjectOf(item.stack()), filterSource.get());
-            if (!decision.show()) return decision.muted();
+            if (!decision.show()) {
+                // 丢弃前留个声：玩家的观感是"没反应"，而日志里必须能看出是它干的
+                dropReporter.accept(item);
+                return decision.muted();
+            }
             key = ItemIdentity.keyOf(item.stack());
             look = ItemIdentity.lookOf(item.stack());
             emphasized = decision.emphasized();

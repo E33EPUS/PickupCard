@@ -1,9 +1,12 @@
 package com.niuqu.pickupcard;
 
 import com.niuqu.pickupcard.config.PickupCardConfig;
+import com.niuqu.pickupcard.filter.FilterRules;
+import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.dev.DevHarness;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.pickup.Inbox;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraftforge.api.distmarker.Dist;
 import net.minecraftforge.client.event.ClientPlayerNetworkEvent;
 import net.minecraftforge.common.MinecraftForge;
@@ -13,6 +16,9 @@ import net.minecraftforge.fml.javafmlmod.FMLJavaModLoadingContext;
 import net.minecraftforge.fml.loading.FMLEnvironment;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import java.util.Set;
+import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * Pickup Card 的 Forge 入口。
@@ -28,6 +34,28 @@ import org.slf4j.LoggerFactory;
 public final class PickupCard {
 
     public static final String MOD_ID = "pickupcard";
+
+    /** 已经报过"被丢弃"的物品 id，避免连捡一路圆石把日志刷爆。 */
+    private static final Set<String> REPORTED_DROPS = ConcurrentHashMap.newKeySet();
+
+    /**
+     * 一条拾取被过滤器丢掉了 —— 日志里说清楚是谁干的、怎么放行。
+     * <p>
+     * 【为什么这条日志必须有】丢弃是<b>故意</b>的（内置忽略表就是用来挡刷屏物品的），
+     * 但"故意"不等于"可以无声"。玩家看到的是"我捡了东西但什么都没弹"，
+     * 而这句话和"mod 坏了"长得一模一样 —— 实测真有人捡了一路圆石来问这个。
+     */
+    private static void reportDroppedPickup(CardContent.Item item) {
+        String id = BuiltInRegistries.ITEM.getKey(item.stack().getItem()).toString();
+        if (!REPORTED_DROPS.add(id)) {
+            return;
+        }
+        LOGGER.info("拾取 {} 没有弹卡：被过滤器丢弃了。", id);
+        LOGGER.info("  内置忽略表当前包含 {}（可在 config/pickupcard-client.toml 的 [filter] 里"
+                + "把 useDefaultIgnoreList 设为 false 关掉）。", FilterRules.builtinIgnore());
+        LOGGER.info("  黑名单命中就删掉对应规则；想让某件物品无论如何都弹卡，加进 whitelist（白名单优先级最高）。");
+        LOGGER.info("  这条每个物品只报一次。");
+    }
     public static final Logger LOGGER = LoggerFactory.getLogger("PickupCard");
 
     public PickupCard(FMLJavaModLoadingContext context) {
@@ -41,6 +69,8 @@ public final class PickupCard {
 
         // 配置是懒采样的：每次真的要用时才读，玩家改完配置不用重启
         Inbox.INSTANCE.setSources(PickupCardConfig::snapshot, PickupCardConfig::filterSnapshot);
+        // 被过滤器丢掉的拾取在玩家那边就是"什么都没发生"。接上日志，每个物品只报一次。
+        Inbox.INSTANCE.setDropReporter(PickupCard::reportDroppedPickup);
         CardStage.INSTANCE.setLayoutSource(PickupCardConfig::layoutSnapshot);
 
         MinecraftForge.EVENT_BUS.register(ClientLifecycle.class);
