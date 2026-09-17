@@ -43,4 +43,40 @@ class StyleOverridesTest {
         assertEquals(1_000L, out.enterMs());
         assertEquals(THEME.paddingH(), out.paddingH());
     }
+
+    /** 颜色覆盖：只动设过的那一项，其余照旧来自主题。 */
+    @Test
+    void colorsOverrideOneKeyAtATime() {
+        StyleModel out = StyleOverrides.builder().fillTop(0x80123456).border(0xFF00FF00).build().apply(THEME);
+        assertEquals(0x80123456, out.fillTop());
+        assertEquals(0xFF00FF00, out.border());
+        assertEquals(THEME.fillBottom(), out.fillBottom(), "没设的那一项必须还是主题的");
+        assertEquals(THEME.nameColor(), out.nameColor());
+    }
+
+    /** 框粗细也能覆盖（默认 1）；夹逼在 0..4。 */
+    @Test
+    void borderWidthIsOverridableAndClamped() {
+        assertEquals(2, StyleOverrides.builder().borderWidth(2).build().apply(THEME).borderWidth());
+        assertEquals(4, StyleOverrides.builder().borderWidth(99).build().apply(THEME).borderWidth());
+        assertEquals(0, StyleOverrides.builder().borderWidth(-3).build().apply(THEME).borderWidth());
+    }
+
+    /**
+     * 玩家手打颜色：三种写法都要认，写坏了必须"当作没设过" ——
+     * 一个手滑不该把卡面变成透明，也不该让整个主题回退成默认。
+     */
+    @Test
+    void parsesPlayerTypedColorsAndRejectsGarbage() {
+        assertEquals(0x80123456, StyleOverrides.parseArgb("#80123456").orElseThrow());
+        assertEquals(0xFF123456, StyleOverrides.parseArgb("#123456").orElseThrow(), "没写 alpha 就是不透明");
+        assertEquals(0xFF123456, StyleOverrides.parseArgb("123456").orElseThrow(), "不带 # 也认");
+        assertEquals(0x80123456, StyleOverrides.parseArgb("  80123456  ").orElseThrow(), "两边空格不算错");
+
+        assertTrue(StyleOverrides.parseArgb("").isEmpty(), "空 = 没设过");
+        assertTrue(StyleOverrides.parseArgb("   ").isEmpty());
+        assertTrue(StyleOverrides.parseArgb("#zzz").isEmpty(), "乱写 = 没设过");
+        assertTrue(StyleOverrides.parseArgb("#12345").isEmpty(), "位数不对 = 没设过");
+        assertTrue(StyleOverrides.parseArgb(null).isEmpty());
+    }
 }

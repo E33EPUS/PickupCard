@@ -27,11 +27,11 @@ class StackLayoutTest {
     private static final float BOTTOM = GUI_H - MARGIN;
 
     private static LayoutSettings right() {
-        return new LayoutSettings(Side.RIGHT, 320, Appear.SLIDE);
+        return new LayoutSettings(Side.RIGHT, 320, Appear.SLIDE, LayoutSettings.DEFAULT_SEPARATION);
     }
 
     private static LayoutSettings left(int edge) {
-        return new LayoutSettings(Side.LEFT, edge, Appear.SLIDE);
+        return new LayoutSettings(Side.LEFT, edge, Appear.SLIDE, LayoutSettings.DEFAULT_SEPARATION);
     }
 
     private static List<StackLayout.Slot> stack(LayoutSettings layout, StackLayout.Size... sizes) {

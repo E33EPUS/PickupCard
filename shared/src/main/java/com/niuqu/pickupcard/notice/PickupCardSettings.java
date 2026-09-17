@@ -15,16 +15,25 @@ import com.niuqu.pickupcard.text.CountFormat;
  * @param mergeWindowMs 合并窗口
  * @param maxOnScreen   同时在屏上限，超出的淘汰最久没被碰过的
  * @param countFormat   数量怎么写
+ * @param enabled       总开关。关掉之后捡东西不再弹卡（屏上已有的也立刻清掉）
+ * @param showItemName  显示物品名。关掉只剩"竖条 + 图标 + 数量" —— 卡会明显变窄
+ * @param showItemId    显示物品 ID（{@code minecraft:stone}）而不是它的名字
+ * @param nameMaxWidth  物品名最大宽度（像素）；0 = 按屏宽比例自动（{@code CardMetrics}）
  */
 public record PickupCardSettings(long holdMs,
                                  long exitMs,
                                  boolean mergeEnabled,
                                  long mergeWindowMs,
                                  int maxOnScreen,
-                                 CountFormat countFormat) {
+                                 CountFormat countFormat,
+                                 boolean enabled,
+                                 boolean showItemName,
+                                 boolean showItemId,
+                                 int nameMaxWidth) {
 
     public static PickupCardSettings defaults() {
-        return new PickupCardSettings(2_600L, 320L, true, 1_200L, 5, CountFormat.PLUS);
+        return new PickupCardSettings(2_600L, 320L, true, 1_200L, 5, CountFormat.PLUS,
+                true, true, false, 0);
     }
 
     /** 把外部来的值夹到合法区间：config 是玩家可改的，非法值不该变成崩溃或永不离场。 */
@@ -35,6 +44,11 @@ public record PickupCardSettings(long holdMs,
                 mergeEnabled,
                 Math.max(0L, mergeWindowMs),
                 Math.max(1, maxOnScreen),
-                countFormat == null ? CountFormat.PLUS : countFormat);
+                countFormat == null ? CountFormat.PLUS : countFormat,
+                enabled,
+                showItemName,
+                showItemId,
+                // 0 = 自动；给了正数就别小于 24px —— 比一个字符还窄的"最大宽度"不是设置，是 bug
+                nameMaxWidth <= 0 ? 0 : Math.max(24, Math.min(600, nameMaxWidth)));
     }
 }

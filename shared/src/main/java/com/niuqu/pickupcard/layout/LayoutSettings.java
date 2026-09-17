@@ -12,8 +12,13 @@ package com.niuqu.pickupcard.layout;
  *                   默认值跟右边距取同一个数，两种对齐因此对称。
  * @param appearMode 卡片出现时怎么展开。{@link Appear#SLIDE} = 内容保持原样从左边平移出来；
  *                   {@link Appear#CLIP} = 内容不动、可见范围从左往右扩大。
+ * @param separation 两张卡之间的空隙（像素）。它跟卡内间隙（{@code style.gap}）不是一回事，
+ *                   刻意分成两个键：一个是"卡与卡"，一个是"框与框"。
  */
-public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode) {
+public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, float separation) {
+
+    /** 卡片间距的默认值（像素）。 */
+    public static final float DEFAULT_SEPARATION = 4f;
 
     /** 卡片靠哪一边停。 */
     public enum Side {
@@ -78,7 +83,7 @@ public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode) {
      * 名字会被软目标往左顶（{@link #autoLeftEdge} 的注释里写了这件事）。
      */
     public static LayoutSettings defaults() {
-        return new LayoutSettings(Side.LEFT, AUTO_LEFT_EDGE, Appear.SLIDE);
+        return new LayoutSettings(Side.LEFT, AUTO_LEFT_EDGE, Appear.SLIDE, DEFAULT_SEPARATION);
     }
 
     /** 外部来的值一律过一遍：配置文件是玩家可改的，非法值不该变成崩溃或卡片消失。 */
@@ -87,7 +92,8 @@ public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode) {
                 stickTo == null ? Side.LEFT : stickTo,
                 // -1 = 自动（跟着画布算），其余是绝对 x。负数只许是 -1，别的负数按 0 处理
                 leftEdge == AUTO_LEFT_EDGE ? AUTO_LEFT_EDGE : Math.max(0, leftEdge),
-                appearMode == null ? Appear.SLIDE : appearMode);
+                appearMode == null ? Appear.SLIDE : appearMode,
+                Math.max(0f, Math.min(32f, separation)));
     }
 
     /**

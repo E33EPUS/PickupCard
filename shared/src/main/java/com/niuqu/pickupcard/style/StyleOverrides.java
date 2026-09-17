@@ -25,10 +25,45 @@ public record StyleOverrides(OptionalInt cornerRadius,
                              OptionalInt iconSize,
                              OptionalInt barWidth,
                              OptionalInt barInsetY,
+                             OptionalInt borderWidth,
+                             Optional<Integer> fillTop,
+                             Optional<Integer> fillBottom,
+                             Optional<Integer> border,
+                             Optional<Integer> nameColor,
                              OptionalLong enterMs,
                              OptionalLong bumpMs,
                              Optional<Boolean> enterEnabled,
                              Optional<Boolean> bumpEnabled) {
+
+    /**
+     * 解析玩家手打的颜色：{@code #AARRGGBB} / {@code #RRGGBB}（补 FF）/ {@code AARRGGBB}。
+     * <p>
+     * 【为什么放在这儿、而不是配置层】颜色是主题的一部分，读法就该和主题同一个地方；
+     * 而且它是纯函数，可以离线单测 —— 配置层的解析坏掉只会在玩家打字那一刻才现形。
+     *
+     * @return 解析不了就是空（调用方当作"这项没设过"，不覆盖主题）
+     */
+    public static Optional<Integer> parseArgb(String text) {
+        if (text == null) {
+            return Optional.empty();
+        }
+        String hex = text.trim();
+        if (hex.startsWith("#")) {
+            hex = hex.substring(1);
+        }
+        if (!hex.matches("[0-9a-fA-F]{6}|[0-9a-fA-F]{8}")) {
+            return Optional.empty();
+        }
+        try {
+            long value = Long.parseLong(hex, 16);
+            if (hex.length() == 6) {
+                value |= 0xFF000000L;      // 没写 alpha 就是不透明
+            }
+            return Optional.of((int) value);
+        } catch (NumberFormatException e) {
+            return Optional.empty();
+        }
+    }
 
     /** 一项都没覆盖 = 完全用主题。 */
     public static StyleOverrides none() {
@@ -54,11 +89,12 @@ public record StyleOverrides(OptionalInt cornerRadius,
                 iconSize.orElse(theme.iconSize()),
                 barWidth.orElse(theme.barWidth()),
                 barInsetY.orElse(theme.barInsetY()),
-                theme.fillTop(),
-                theme.fillBottom(),
-                theme.border(),
+                borderWidth.orElse(theme.borderWidth()),
+                fillTop.orElse(theme.fillTop()),
+                fillBottom.orElse(theme.fillBottom()),
+                border.orElse(theme.border()),
                 theme.glowAlpha(),
-                theme.nameColor(),
+                nameColor.orElse(theme.nameColor()),
                 enterMs.orElse(theme.enterMs()),
                 bumpMs.orElse(theme.bumpMs()),
                 enterEnabled.orElse(theme.enterEnabled()),
@@ -75,6 +111,11 @@ public record StyleOverrides(OptionalInt cornerRadius,
         private OptionalInt iconSize = OptionalInt.empty();
         private OptionalInt barWidth = OptionalInt.empty();
         private OptionalInt barInsetY = OptionalInt.empty();
+        private OptionalInt borderWidth = OptionalInt.empty();
+        private Optional<Integer> fillTop = Optional.empty();
+        private Optional<Integer> fillBottom = Optional.empty();
+        private Optional<Integer> border = Optional.empty();
+        private Optional<Integer> nameColor = Optional.empty();
         private OptionalLong enterMs = OptionalLong.empty();
         private OptionalLong bumpMs = OptionalLong.empty();
         private Optional<Boolean> enterEnabled = Optional.empty();
@@ -115,6 +156,31 @@ public record StyleOverrides(OptionalInt cornerRadius,
             return this;
         }
 
+        public Builder borderWidth(int value) {
+            borderWidth = OptionalInt.of(value);
+            return this;
+        }
+
+        public Builder fillTop(int argb) {
+            fillTop = Optional.of(argb);
+            return this;
+        }
+
+        public Builder fillBottom(int argb) {
+            fillBottom = Optional.of(argb);
+            return this;
+        }
+
+        public Builder border(int argb) {
+            border = Optional.of(argb);
+            return this;
+        }
+
+        public Builder nameColor(int argb) {
+            nameColor = Optional.of(argb);
+            return this;
+        }
+
         public Builder enterMs(long value) {
             enterMs = OptionalLong.of(value);
             return this;
@@ -137,7 +203,8 @@ public record StyleOverrides(OptionalInt cornerRadius,
 
         public StyleOverrides build() {
             return new StyleOverrides(cornerRadius, paddingH, paddingV, gap, iconSize, barWidth,
-                    barInsetY, enterMs, bumpMs, enterEnabled, bumpEnabled);
+                    barInsetY, borderWidth, fillTop, fillBottom, border, nameColor,
+                    enterMs, bumpMs, enterEnabled, bumpEnabled);
         }
     }
 }

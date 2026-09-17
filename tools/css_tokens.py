@@ -40,6 +40,7 @@ SCHEMA = {
     "--pc-icon":            ("geometry", "iconSize", "int"),
     "--pc-bar-w":           ("geometry", "barWidth", "int"),
     "--pc-bar-inset-y":     ("geometry", "barInsetY", "int"),
+    "--pc-border-w":        ("geometry", "borderWidth", "int"),
     # 材质
     "--pc-fill-top":        ("material", "fillTop", "color"),
     "--pc-fill-bottom":     ("material", "fillBottom", "color"),

@@ -55,7 +55,11 @@ public final class PickupCardConfig {
                 VALUES.mergeEnabled.get(),
                 VALUES.mergeWindowMs.get(),
                 VALUES.maxOnScreen.get(),
-                VALUES.countFormat.get()).sanitized();
+                VALUES.countFormat.get(),
+                VALUES.enabled.get(),
+                VALUES.showItemName.get(),
+                VALUES.showItemId.get(),
+                VALUES.nameMaxWidth.get()).sanitized();
     }
 
     /**
@@ -66,7 +70,8 @@ public final class PickupCardConfig {
         return new LayoutSettings(
                 VALUES.stickTo.get(),
                 VALUES.leftEdge.get(),
-                VALUES.appearMode.get()).sanitized();
+                VALUES.appearMode.get(),
+                VALUES.separation.get().floatValue()).sanitized();
     }
 
     /** 采样过滤三表。列表元素不做校验——坏规则由 FilterRule.parse 静默跳过。 */
@@ -116,6 +121,16 @@ public final class PickupCardConfig {
         if (barInset >= 0) {
             b.barInsetY(barInset);
         }
+        int borderW = VALUES.stBorderWidth.get();
+        if (borderW >= 0) {
+            b.borderWidth(borderW);
+        }
+        // 颜色：空串或写坏了都当作"没改过"，回到主题 —— 一个手滑不该把卡面变成透明。
+        // 解析放 shared（StyleOverrides.parseArgb），因为它是纯函数、能离线单测。
+        StyleOverrides.parseArgb(VALUES.stFillTop.get()).ifPresent(b::fillTop);
+        StyleOverrides.parseArgb(VALUES.stFillBottom.get()).ifPresent(b::fillBottom);
+        StyleOverrides.parseArgb(VALUES.stBorder.get()).ifPresent(b::border);
+        StyleOverrides.parseArgb(VALUES.stNameColor.get()).ifPresent(b::nameColor);
         long enterMs = VALUES.stEnterMs.get();
         if (enterMs >= 0) {
             b.enterMs(enterMs);
@@ -135,16 +150,31 @@ public final class PickupCardConfig {
         return b.build();
     }
 
-    /** 外观项一律"−1 = 跟随主题"，所以范围从 -1 起。 */
+    /** 外观项一律"−1 = 没改过"，所以范围从 -1 起。 */
     private static ForgeConfigSpec.IntValue styleInt(ForgeConfigSpec.Builder builder, String name,
                                                     String comment, int max) {
-        return builder.comment(comment, "-1 = 跟随主题（默认）。")
+        return builder.comment(comment, "-1 = 没改过（用主题里的值，也就是「跟随主题」）。")
                 .defineInRange(name, -1, -1, max);
+    }
+
+    /**
+     * 颜色键：默认值是<b>空串</b>（= 没改过），不是一个颜色。
+     * <p>【为什么不用 -1 那套】颜色是 32 位数，没有"负数"这种哨兵可用；空串既不会和任何
+     * 合法颜色撞车，手改 TOML 时也一眼看得出"这项没设过"。
+     */
+    private static ForgeConfigSpec.ConfigValue<String> styleColor(ForgeConfigSpec.Builder builder,
+                                                                  String name, String comment) {
+        return builder.comment(comment, "格式 #AARRGGBB（#RRGGBB 当作不透明）；留空 = 没改过，用主题里的颜色。")
+                .define(name, "");
     }
 
     /** 配置项的定义。行为偏好与 {@link PickupCardSettings}/{@link FilterSettings} 对应。 */
     static final class Values {
 
+        final ForgeConfigSpec.BooleanValue enabled;
+        final ForgeConfigSpec.BooleanValue showItemName;
+        final ForgeConfigSpec.BooleanValue showItemId;
+        final ForgeConfigSpec.IntValue nameMaxWidth;
         final ForgeConfigSpec.LongValue holdMs;
         final ForgeConfigSpec.LongValue exitMs;
         final ForgeConfigSpec.BooleanValue mergeEnabled;
@@ -157,6 +187,7 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.EnumValue<LayoutSettings.Side> stickTo;
         final ForgeConfigSpec.IntValue leftEdge;
         final ForgeConfigSpec.EnumValue<LayoutSettings.Appear> appearMode;
+        final ForgeConfigSpec.DoubleValue separation;
 
         // ---- [style] 外观：全部用 -1 表示"跟随主题" ----
         final ForgeConfigSpec.EnumValue<Theme> theme;
@@ -167,6 +198,11 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.IntValue stIconSize;
         final ForgeConfigSpec.IntValue stBarWidth;
         final ForgeConfigSpec.IntValue stBarInsetY;
+        final ForgeConfigSpec.IntValue stBorderWidth;
+        final ForgeConfigSpec.ConfigValue<String> stFillTop;
+        final ForgeConfigSpec.ConfigValue<String> stFillBottom;
+        final ForgeConfigSpec.ConfigValue<String> stBorder;
+        final ForgeConfigSpec.ConfigValue<String> stNameColor;
         final ForgeConfigSpec.LongValue stEnterMs;
         final ForgeConfigSpec.LongValue stBumpMs;
         final ForgeConfigSpec.IntValue stEnterEnabled;
@@ -174,6 +210,23 @@ public final class PickupCardConfig {
 
         Values(ForgeConfigSpec.Builder builder) {
             builder.comment("Pickup Card —— 拾取卡片提示（纯客户端）").push("notice");
+
+            enabled = builder
+                    .comment("总开关。关掉之后捡东西不再弹卡。",
+                            "已经显示出来的卡会立刻清掉 —— 关掉再打开不会涌出一堆积压的旧卡。")
+                    .define("enabled", true);
+
+            showItemName = builder
+                    .comment("显示物品名。关掉只剩「竖条 + 图标 + 数量」，卡片会明显变窄。")
+                    .define("showItemName", true);
+
+            showItemId = builder
+                    .comment("显示物品 ID（minecraft:stone）而不是它的名字。终端味最重。")
+                    .define("showItemId", false);
+
+            nameMaxWidth = builder
+                    .comment("物品名最大宽度（像素）。超出就截断加省略号，0 = 按屏宽比例自动。")
+                    .defineInRange("nameMaxWidth", 0, 0, 600);
 
             holdMs = builder
                     .comment("一张卡在屏上停留多久（毫秒），从最近一次被刷新算起。",
@@ -231,6 +284,11 @@ public final class PickupCardConfig {
                             "  CLIP  = 内容位置不动，可见范围从左往右慢慢扩大；先看到最左端。")
                     .defineEnum("appearMode", LayoutSettings.Appear.SLIDE);
 
+            separation = builder
+                    .comment("两张卡之间的空隙（像素）。它跟卡内间隙（[style] gap）不是一回事：",
+                            "一个是「卡与卡」，一个是「框与框」。")
+                    .defineInRange("separation", (double) LayoutSettings.DEFAULT_SEPARATION, 0.0, 32.0);
+
             builder.pop();
 
             builder.comment("数字").push("count");
@@ -240,8 +298,10 @@ public final class PickupCardConfig {
                     .defineEnum("format", CountFormat.PLUS);
             builder.pop();
 
-            builder.comment("外观：这里只放玩家改过的项。-1 = 跟随主题（默认），此时该项用主题里的值。",
-                            "游戏内配置界面写的就是这一段；手改 TOML 也行。")
+            builder.comment("外观：这里只放玩家改过的项。-1 / 空串 = 没改过，用主题里的值。",
+                            "【配置界面看到的是什么】界面显示的是**生效值**（主题 + 你的改动），",
+                            "不显示「没改过」这个状态；你拨了哪一项，那一项就写进这里变成固定值。",
+                            "想让它重新跟着主题走：那一项改回 -1（颜色改成空串），或者删掉整行。")
                     .push("style");
             theme = builder
                     .comment("主题：DARK = 深色（默认），LIGHT = 浅色。",
@@ -254,8 +314,14 @@ public final class PickupCardConfig {
             stIconSize = styleInt(builder, "iconSize", "物品图标边长（像素）。原版贴图是 16，取 16 = 不缩放最清晰", 64);
             stBarWidth = styleInt(builder, "barWidth", "稀有度竖条宽度（像素）", 24);
             stBarInsetY = styleInt(builder, "barInsetY", "竖条上下各内缩多少（像素）。0 = 与卡片齐平", 16);
+            stBorderWidth = styleInt(builder, "borderWidth", "框描边粗细（像素）。0 = 不描边", 4);
+            stFillTop = styleColor(builder, "fillTop", "卡面底色（上端）");
+            stFillBottom = styleColor(builder, "fillBottom", "卡面底色（下端）。两个色写成一样就是纯色");
+            stBorder = styleColor(builder, "border", "框描边颜色");
+            stNameColor = styleColor(builder, "nameColor", "物品名颜色");
             stEnterMs = builder
-                    .comment("入场动画总时长（毫秒）。竖条占前 30%，内容从 18% 起跑。", "-1 = 跟随主题（默认）。")
+                    .comment("入场动画总时长（毫秒）。竖条占前 50%，内容 20% 起跑、84% 到位，尾巴静止。",
+                            "-1 = 没改过（用主题里的值）。")
                     .defineInRange("enterMs", -1L, -1L, 5_000L);
             stBumpMs = builder
                     .comment("合并时数字跳动时长（毫秒）。", "-1 = 跟随主题（默认）。")

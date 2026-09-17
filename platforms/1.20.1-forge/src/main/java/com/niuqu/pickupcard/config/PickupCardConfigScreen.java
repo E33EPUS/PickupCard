@@ -254,7 +254,7 @@ public final class PickupCardConfigScreen extends Screen {
         // 虚拟下边距：卡是贴底锚定的，用真实高度会压在左下那颗"完成"上
         float virtualBottom = this.height - 26f;
         for (StackLayout.Slot slot : StackLayout.stack(sizes, this.width, virtualBottom, layout,
-                CardStage.MARGIN_X, CardStage.MARGIN_Y, CardStage.STACK_GAP)) {
+                CardStage.MARGIN_X, CardStage.MARGIN_Y, layout.separation())) {
             int i = widths.length - 1 - slot.index();
             NvgCardPainter.paintPreview(gui, style, slot.x(), slot.y(), slot.width(),
                     icons[i], samples[i][0], samples[i][1], accents[i], i == 0);

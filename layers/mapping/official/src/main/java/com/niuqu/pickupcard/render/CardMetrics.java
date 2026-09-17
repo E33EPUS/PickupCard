@@ -2,8 +2,10 @@ package com.niuqu.pickupcard.render;
 
 import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.layout.LayoutSettings;
+import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.pickup.Inbox;
 import net.minecraft.client.gui.Font;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 
 /**
@@ -49,15 +51,20 @@ public final class CardMetrics {
         return canvas.guiWidth() * MAX_WIDTH_RATIO;
     }
 
-    /** 总宽 = 竖条 + 间隙 + 图标格 + 间隙 + 名字框（名字框里含数量）。 */
+    /**
+     * 总宽 = 竖条 + 间隙 + 图标格 + 间隙 + 信息框。
+     * <p>
+     * 【信息框里有什么，由"显示物品名"决定】开着是「名字 + 间隙 + 数量」，关掉就只剩数量
+     * —— 卡会明显变窄，而"竖条 + 图标 + 数量"这个最小组合仍然一眼能读。
+     */
     public static float width(CardCanvas canvas, Font font, Inbox.Card card, int count) {
         var style = canvas.style();
         float gap = style.gap();
-        float nameBox = style.paddingH() * 2f
-                + font.width(fittedName(canvas, font, card, count))
-                + gap
-                + font.width(canvas.countText(count));
-        return style.barWidth() + gap + style.boxHeight() + gap + nameBox;
+        float infoBox = style.paddingH() * 2f + font.width(canvas.countText(count));
+        if (canvas.settings().showItemName()) {
+            infoBox += gap + font.width(fittedName(canvas, font, card, count));
+        }
+        return style.barWidth() + gap + style.boxHeight() + gap + infoBox;
     }
 
     /**
@@ -67,13 +74,18 @@ public final class CardMetrics {
      * 用 {@code Font.plainSubstrByWidth} 按像素而不是按字符截，中英混排才不会截歪。
      */
     public static String fittedName(CardCanvas canvas, Font font, Inbox.Card card, int count) {
-        String name = displayName(card);
+        String name = displayName(card, canvas.settings());
         var style = canvas.style();
         float gap = style.gap();
         // 先算"除了名字之外固定要占的宽度"，剩下的才是名字能用的
         float fixed = style.barWidth() + gap + style.boxHeight() + gap
                 + style.paddingH() * 2f + gap + font.width(canvas.countText(count));
         float room = Math.max(0f, maxWidth(canvas) - fixed);
+        // 玩家自己设了上限就用更严的那个（0 = 没设，按屏宽比例）
+        int limit = canvas.settings().nameMaxWidth();
+        if (limit > 0) {
+            room = Math.min(room, limit);
+        }
         if (font.width(name) <= room) {
             return name;
         }
@@ -81,9 +93,17 @@ public final class CardMetrics {
         return font.plainSubstrByWidth(name, budget) + ELLIPSIS;
     }
 
-    /** 卡上显示的名字原文（未截断）。经验卡没有 ItemStack，走翻译键。 */
-    public static String displayName(Inbox.Card card) {
+    /**
+     * 卡上显示的名字原文（未截断）。经验卡没有 ItemStack，走翻译键。
+     * <p>
+     * 【"显示物品 ID"为什么要在这儿兑现】它是"看名字"的另一种写法，不是另一张卡 ——
+     * 所以只换这一处文本，宽度、截断、颜色全都不用动（连截断逻辑都是同一份）。
+     */
+    public static String displayName(Inbox.Card card, PickupCardSettings settings) {
         if (card.content() instanceof CardContent.Item item) {
+            if (settings.showItemId()) {
+                return BuiltInRegistries.ITEM.getKey(item.stack().getItem()).toString();
+            }
             return item.stack().getHoverName().getString();
         }
         return Component.translatable("pickupcard.xp").getString();

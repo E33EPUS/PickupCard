@@ -25,6 +25,7 @@ import org.jetbrains.annotations.Nullable;
  * @param iconSize       物品图标边长（px）。原版物品贴图是 16px，卡上再放大。
  * @param barWidth       稀有度竖条的宽度（px）
  * @param barInsetY      竖条上下各内缩多少（px）。0 = 与卡片齐平；大于 0 时竖条比卡片矮一截。
+ * @param borderWidth    框描边的粗细（px）。0 = 不描边
  * @param fillTop        框底色（玻璃拟态的深色半透明）
  * @param fillBottom     框底色下端（两色相同 = 纯色）
  * @param border         框描边色
@@ -48,6 +49,7 @@ public record StyleModel(int cornerRadius,
                          int iconSize,
                          int barWidth,
                          int barInsetY,
+                         int borderWidth,
                          int fillTop,
                          int fillBottom,
                          int border,
@@ -61,7 +63,7 @@ public record StyleModel(int cornerRadius,
 
     public static StyleModel defaults() {
         return new StyleModel(
-                4, 4, 3, 3, 16, 4, 1,
+                4, 4, 3, 3, 16, 4, 1, 1,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 46,
                 0xF0EBEFF6,
@@ -78,6 +80,7 @@ public record StyleModel(int cornerRadius,
                 Math.max(8, Math.min(64, iconSize)),
                 Math.max(1, Math.min(24, barWidth)),
                 Math.max(0, Math.min(16, barInsetY)),
+                Math.max(0, Math.min(4, borderWidth)),
                 fillTop, fillBottom, border,
                 Math.max(0, Math.min(255, glowAlpha)),
                 nameColor,
@@ -109,6 +112,7 @@ public record StyleModel(int cornerRadius,
                     i(geo, "iconSize", 16),
                     i(geo, "barWidth", 4),
                     i(geo, "barInsetY", 1),
+                    i(geo, "borderWidth", 1),
                     color(mat, "fillTop", 0xD1262B38),
                     color(mat, "fillBottom", 0xDB161A22),
                     color(mat, "border", 0x2EFFFFFF),

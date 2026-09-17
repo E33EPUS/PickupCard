@@ -7,7 +7,8 @@
     "gap": 3,
     "iconSize": 16,
     "barWidth": 4,
-    "barInsetY": 1
+    "barInsetY": 1,
+    "borderWidth": 1
   },
   "material": {
     "fillTop": "#262B38D1",

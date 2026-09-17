@@ -58,9 +58,6 @@ public final class CardStage {
      * 少画一张卡却不告诉他才是 bug。
      */
     public static final int MARGIN_Y = 52;
-    /** 卡与卡之间的间隙。跟卡内间隙（style.gap）不是一回事，刻意分开。 */
-    public static final float STACK_GAP = 4f;
-
 
     /** 插入序 = 从老到新，正好是排布要的顺序。 */
     private final Map<String, CardView> live = new LinkedHashMap<>();
@@ -152,13 +149,26 @@ public final class CardStage {
     public void renderInto(GuiGraphics gui, Minecraft mc) {
         long now = System.currentTimeMillis();
         pump(now);
+        PickupCardSettings settings = Inbox.INSTANCE.settingsSnapshot();
+
+        // 【总开关】关掉就整条路都不走：屏上的卡立刻清、账本里的也一起忘掉。
+        // 只"不再新弹"是不够的 —— 重新打开时那一堆旧卡会一起涌出来，像卡了半分钟。
+        if (!settings.enabled()) {
+            if (!live.isEmpty() || !pending.isEmpty()) {
+                live.clear();
+                pending.clear();
+                Inbox.INSTANCE.reset();
+                lastSlots = List.of();
+            }
+            return;
+        }
+
         if (live.isEmpty()) {
             lastSlots = List.of();
             return;
         }
 
         StyleModel style = styles.current(now).sanitized();
-        PickupCardSettings settings = Inbox.INSTANCE.settingsSnapshot();
         CardCanvas canvas = new CardCanvas(now,
                 new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(), style.bumpEnabled()),
                 style, settings, layoutSource.get().sanitized(),
@@ -254,7 +264,7 @@ public final class CardStage {
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
                 sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
-                MARGIN_X, MARGIN_Y, STACK_GAP)) {
+                MARGIN_X, MARGIN_Y, canvas.layout().separation())) {
             CardView view = alive.get(slot.index());
             slots.add(new CardSlot(view, slot.x(), move.y(view.notice().key(), slot.y(), now),
                     slot.width(), slot.height()));

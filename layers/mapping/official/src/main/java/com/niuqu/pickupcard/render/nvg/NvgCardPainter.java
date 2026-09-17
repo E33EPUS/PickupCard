@@ -230,11 +230,16 @@ public final class NvgCardPainter {
         nvgFillPaint(vg, paint);
         nvgFill(vg);
 
-        nvgBeginPath(vg);
-        nvgRoundedRect(vg, x + 0.5f, y + 0.5f, Math.max(0f, w - 1f), Math.max(0f, h - 1f), radius);
-        nvgStrokeWidth(vg, 1f);
-        nvgStrokeColor(vg, color(stack, style.border()));
-        nvgStroke(vg);
+        // 描边粗细可配：路径按半个线宽内缩，线才会整条落在框内（见上面的注释）
+        float stroke = style.borderWidth();
+        if (stroke > 0f) {
+            float half = stroke / 2f;
+            nvgBeginPath(vg);
+            nvgRoundedRect(vg, x + half, y + half, Math.max(0f, w - stroke), Math.max(0f, h - stroke), radius);
+            nvgStrokeWidth(vg, stroke);
+            nvgStrokeColor(vg, color(stack, style.border()));
+            nvgStroke(vg);
+        }
     }
 
     /** 稀有度竖条：从上往下长，不是从中间往两头长（用户报过那个版本）。 */
@@ -334,12 +339,14 @@ public final class NvgCardPainter {
         }
 
         // 文字：alpha 直接乘进颜色里（原版字形用的就是这个色的 alpha），不走全局色
-        String name = CardMetrics.fittedName(canvas, font, card, view.notice().count());
         String count = canvas.countText(view.notice().count());
         float textY = (h - font.lineHeight) / 2f;
-        float nameX = x + h + gap;
-        gui.drawString(font, name, Math.round(nameX + style.paddingH()), Math.round(textY),
-                fade(style.nameColor(), alpha), true);
+        if (canvas.settings().showItemName()) {
+            String name = CardMetrics.fittedName(canvas, font, card, view.notice().count());
+            float nameX = x + h + gap;
+            gui.drawString(font, name, Math.round(nameX + style.paddingH()), Math.round(textY),
+                    fade(style.nameColor(), alpha), true);
+        }
         float countX = slot.width() + shift - style.paddingH() - font.width(count);
         gui.drawString(font, count, Math.round(countX), Math.round(textY), fade(accent, alpha), true);
 

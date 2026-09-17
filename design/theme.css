@@ -62,7 +62,7 @@
 .box {
   border-radius: var(--pc-radius);
   background: linear-gradient(var(--pc-fill-top), var(--pc-fill-bottom));
-  outline: 1px solid var(--pc-border);
+  outline: var(--pc-border-w, 1px) solid var(--pc-border);
   outline-offset: -1px;
 }
 
