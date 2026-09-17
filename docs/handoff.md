@@ -33,9 +33,9 @@
 `最新那张下缘距底边 / 卡高` + `强调色自上而下` 两条指标，**都做过反例验证**（把锚翻上去
 → 报 +4.909；把 DOM 顺序倒过来 → 报颜色顺序反了）。
 
-✅ **已部署 2026-09-17 18:47（收口成 NanoVG 单一渲染路径 + 删掉投影/高光那一版）**：
+✅ **已部署 2026-09-17 19:2x（单一渲染路径 + 无投影高光 + 入场 480ms + 配置界面重做）**：
 `D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
-`sha256 901f85c7…`，与 `build/libs/` 的产物逐字节一致（自包含：51 个绑定类 + 四平台
+`sha256 f846081d…`，与 `build/libs/` 的产物逐字节一致（自包含：51 个绑定类 + 四平台
 native + `THIRD_PARTY_NOTICES.md`）。改完代码必须重新 `build` 再覆盖过去，**运行中的实例
 不会热加载**。
 
@@ -54,7 +54,7 @@ native + `THIRD_PARTY_NOTICES.md`）。改完代码必须重新 `build` 再覆�
 ```bash
 cd platforms/1.20.1-forge
 
-# 编译 + 单测（Java 79 个用例）
+# 编译 + 单测（Java 88 个用例）
 ./gradlew build
 
 # 无人值守截图
