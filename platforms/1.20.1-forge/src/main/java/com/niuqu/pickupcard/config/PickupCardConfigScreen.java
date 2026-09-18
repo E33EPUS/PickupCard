@@ -1,5 +1,6 @@
 package com.niuqu.pickupcard.config;
 
+import com.niuqu.pickupcard.filter.RuleListEdit;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.MergeMode;
@@ -30,6 +31,7 @@ import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
 import net.minecraftforge.common.ForgeConfigSpec;
+import org.lwjgl.glfw.GLFW;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -70,6 +72,8 @@ public final class PickupCardConfigScreen extends Screen {
     private static final long HOVER_OUT_MS = 150L;
     private static final long TAB_MS = 160L;
     private static final long PREVIEW_MS = 200L;
+    /** 「加一条」被拒时那句话在底部停留多久（够读完，又不会把悬停说明永久顶掉）。 */
+    private static final long FILTER_NOTE_MS = 6_000L;
     /** 换页时内容向上滑多少像素（只滑一点点：滑动是"从哪儿来"的提示，不是主体）。 */
     private static final float PAGE_SLIDE = 5f;
 
@@ -172,7 +176,13 @@ public final class PickupCardConfigScreen extends Screen {
         GENERAL("通用", "这些改的是「弹不弹、显示什么、什么算同一样东西」"),
         ANIM("动画", "这些改的是卡片怎么出现、数字怎么跳"),
         LAYOUT("位置与堆叠", "这些改的是卡片停在哪、同时显示几张（预览就是一摞卡）"),
-        LOOK("外观", "这些改的是卡片长什么样（预览就是当前设置画出来的）");
+        LOOK("外观", "这些改的是卡片长什么样（预览就是当前设置画出来的）"),
+        /**
+         * 【为什么单独一页】三张名单都不是"一个值"，而是可增删的列表 —— 一行一项那个版式
+         * 正好能装（一条规则一行、末尾一行输入框），但行数会随玩家自己加多少条涨，
+         * 跟"外观"那种固定八行的页面不是一回事。混在一起会让固定项被列表挤走。
+         */
+        FILTER("过滤", "这三张名单决定哪些东西不弹卡、一定要弹、弹了不出声");
 
         final String label;
         final String hint;
@@ -238,6 +248,13 @@ public final class PickupCardConfigScreen extends Screen {
     private NvgPalette palette = NvgPalette.dark();
     /** 控件里点出来的"切换分类/重建"请求：不在事件遍历中途重建列表。 */
     private boolean pendingRebuild;
+    /**
+     * 加规则被拒时说的一句话，短时间内在底部那行顶掉悬停说明。
+     * <p>【为什么要有它】"打字 → 回车 → 什么都没发生"是这类输入框最常见的失败方式，
+     * 而底部那行是这个界面唯一能自我解释的地方（见 {@code drawHint}）。
+     */
+    private String filterNote = "";
+    private long filterNoteAt;
 
     /** 这一帧的时刻（毫秒）。动画与悬停都按它取值，一帧里只取一次。 */
     private long now;
@@ -405,6 +422,7 @@ public final class PickupCardConfigScreen extends Screen {
             case ANIM -> buildAnim(v);
             case LAYOUT -> buildLayout(v);
             case LOOK -> buildLook(v);
+            case FILTER -> buildFilter(v);
         }
         layoutRows();
     }
@@ -478,6 +496,75 @@ public final class PickupCardConfigScreen extends Screen {
         cell("底色（下）", color(v.stFillBottom, style.fillBottom()), "下端。和上面写成一样就是纯色");
         cell("框色", color(v.stBorder, style.border()), "框描边的颜色");
         cell("物品名颜色", color(v.stNameColor, style.nameColor()), "名字的颜色");
+    }
+
+    /**
+     * 「过滤」：三张名单。
+     * <p>【为什么是三张】优先级见 {@code FilterRules}：白名单压过黑名单，静音名单与两者正交
+     * （同时在白、静音两表里 = 强调地静音弹卡）。界面不替玩家判断"这条该写进哪张"，
+     * 只把三张分别摆出来 —— 判定规则是一处，摆法是一处，改一处不会动另一处。
+     * <p>【为什么一条规则自己一行】「一行一项」正好装得下：标签那边是规则原文，控件那边是
+     * 「删除」—— 于是滚动、悬停高亮带、底部那句说明三样都不用为列表另写一套。
+     */
+    private void buildFilter(PickupCardConfig.Values v) {
+        filterList("黑名单", v.blacklist,
+                "命中就不弹卡。挖一片沙滩不想刷屏时写这里",
+                "加进黑名单：物品 minecraft:cobblestone / tag #forge:ores / 整个 mod @modid，回车加");
+        filterList("白名单", v.whitelist,
+                "命中就一定弹卡并且强调；它压过黑名单",
+                "加进白名单：写法同上；白名单 + 静音名单 = 强调地静音弹卡");
+        filterList("静音名单", v.muteList,
+                "照常弹卡，但稀有提示音和原版拾取音都被压掉",
+                "加进静音名单：写法同上");
+    }
+
+    private void filterList(String title, ForgeConfigSpec.ConfigValue<List<? extends String>> config,
+                            String what, String inputHint) {
+        List<String> rules = rules(config);
+        // 表头这一行：标签是名单名，右边那颗只读钮报"现在几条"——只读控件的底更暗、不画描边，
+        // 一眼能看出它点不动（见 NvgButton 的 action == null）
+        cell(title, new NvgButton("", () -> rules.size() + " 条", null), what);
+        for (int i = 0; i < rules.size(); i++) {
+            String rule = rules.get(i);
+            int index = i;
+            cell(rule, new NvgButton("", () -> "删除", () -> writeRules(config,
+                    RuleListEdit.remove(rules(config), index))),
+                    // 【为什么把规则原文放在最前】标签那一格只有几十像素宽，长规则在屏上就是
+                    // "minecraft:cobb" —— 底部这行是唯一能看全的地方，而且它自己也只显示到画布边上，
+                    // 所以原文必须排在前头，被截掉的是后半句解释
+                    rule + " —— 点「删除」把它从「" + title + "」里去掉");
+        }
+        cell("加一条", NvgTextField
+                .rule("", () -> "", RuleListEdit.MAX_RULE_LENGTH, text -> addRule(config, title, text))
+                .placeholder("写一条再回车"), inputHint);
+    }
+
+    private static List<String> rules(ForgeConfigSpec.ConfigValue<List<? extends String>> config) {
+        List<? extends String> raw = config.get();
+        return raw == null ? List.of() : List.copyOf(raw);
+    }
+
+    private void writeRules(ForgeConfigSpec.ConfigValue<List<? extends String>> config,
+                            List<String> rules) {
+        config.set(List.copyOf(rules));
+        changed();
+        // 【必须重建】名单变了 = 行数变了：不重建的话删掉的那一行会留在屏上继续可点，
+        // 而它背后的下标已经指向别人了
+        pendingRebuild = true;
+        layoutRows();
+    }
+
+    private void addRule(ForgeConfigSpec.ConfigValue<List<? extends String>> config,
+                         String title, String text) {
+        RuleListEdit.Result r = RuleListEdit.add(rules(config), text);
+        if (r.ok()) {
+            writeRules(config, r.rules());
+            return;
+        }
+        // 【为什么要把拒绝原因说出来】这里最容易变成"打了字、按了回车、什么都没发生"——
+        // 而"静默失败最毒"是这个项目已经付过一次学费的教训。
+        filterNote = title + "：" + RuleListEdit.message(r.reject());
+        filterNoteAt = System.currentTimeMillis();
     }
 
     private void cell(String label, NvgWidget widget, String hint) {
@@ -684,10 +771,15 @@ public final class PickupCardConfigScreen extends Screen {
     /** 底部那行说明：悬停谁就说谁，这是这个界面唯一能自我解释的地方。 */
     private void drawHint(GuiGraphics gui, int mouseX, int mouseY) {
         String hint = null;
+        // 【加规则被拒时先说话】它是玩家刚刚做的动作的结果，比"鼠标现在停在哪"更该被看见；
+        // 停几秒就还回去，免得把悬停说明永久顶掉
+        if (!filterNote.isEmpty() && now - filterNoteAt < FILTER_NOTE_MS) {
+            hint = filterNote;
+        }
         // 【为什么要夹在配置列里】滚出视口的行，它的矩形还在（只是被裁掉了）——
         // 不做这个判断的话，鼠标划过页眉时会说"这张卡的说明"，而那一行根本看不见。
         ConfigLayout.Rect items = layout().items();
-        if (mouseY >= items.y() && mouseY < items.bottom()) {
+        if (hint == null && mouseY >= items.y() && mouseY < items.bottom()) {
             for (Row row : rows) {
                 if (row.widget().hit(mouseX, mouseY)) {
                     hint = row.hint();
@@ -989,6 +1081,23 @@ public final class PickupCardConfigScreen extends Screen {
         return true;
     }
 
+    /**
+     * 走真实事件路径往某个文本框里打字并回车（点一下拿焦点 → 逐字 → 回车提交）。
+     * <p>【为什么要这个口子】「加一条」那条链（点 → 打字 → 回车 → 写配置 → 重建列表）全是键盘
+     * 事件，{@link #clickOption} 那条路一个都覆盖不到；而"文本框收不到字符"这种坏法在
+     * 截图里和"功能没做"长得一模一样。
+     */
+    public boolean typeOption(String label, String text) {
+        if (!clickOption(label)) {
+            return false;
+        }
+        for (char c : text.toCharArray()) {
+            charTyped(c, 0);
+        }
+        keyPressed(GLFW.GLFW_KEY_ENTER, 0, 0);
+        return true;
+    }
+
     /** 当前这一页有哪些选项（按玩家看到的顺序）。日志里留一份。 */
     public List<String> optionLabels() {
         return rows.stream().map(Row::label).toList();
@@ -1156,7 +1265,7 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     private NvgTextField color(ForgeConfigSpec.ConfigValue<String> config, int effectiveArgb) {
-        return new NvgTextField("", () -> {
+        return NvgTextField.color("", () -> {
             String raw = config.get();
             return raw == null || raw.isBlank() ? argbText(effectiveArgb) : raw;
         }, text -> {

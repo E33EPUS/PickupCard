@@ -389,10 +389,58 @@ public final class DevHarness {
                 checkPainted(mc);
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 88) {
+            if (configTicks == WARMUP_TICKS + 86) {
+                clickByLabel(mc, "过滤");
+                PickupCard.LOGGER.info("[harness-auto] 切到过滤页: {}", configState(mc));
+                PickupCard.LOGGER.info("[harness-auto] {}", configLabels(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 90) {
+                // 一条合法规则：走"点 → 逐字 → 回车"的完整键盘路径
+                typeByLabel(mc, "加一条", "minecraft:cobblestone");
+                PickupCard.LOGGER.info("[harness-auto] 加了一条合法规则后: {}", filterDump(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 94) {
+                // 一条缺命名空间的：必须被拒，而且要在界面上说出来（不是静默吞掉）
+                typeByLabel(mc, "加一条", "cobblestone");
+                PickupCard.LOGGER.info("[harness-auto] 加了一条非法规则后: {}", filterDump(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 96) {
+                // 停在刚加进去的那一条上：底部那行要能看全规则原文（标签格太窄，屏上是截断的）
+                hoverByLabel(mc, "minecraft:cobblestone");
+                PickupCard.LOGGER.info("[harness-auto] 悬停规则行: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 98) {
+                capture(mc, "filter");
+                PickupCard.LOGGER.info("[harness-auto] 过滤页: {}", configState(mc));
+                PickupCard.LOGGER.info("[harness-auto] 过滤页控件: {}", configLabels(mc));
+                PickupCard.LOGGER.info("[harness-auto] 配置列: {}", columnDump(mc));
+                checkPainted(mc);
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 102) {
+                // 点刚加进去那一条的「删除」：列表必须真的短回去
+                clickByLabel(mc, "minecraft:cobblestone");
+                PickupCard.LOGGER.info("[harness-auto] 删掉那条之后: {}", filterDump(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 106) {
+                capture(mc, "filter-after-delete");
+                PickupCard.LOGGER.info("[harness-auto] 删完的过滤页: {}", configLabels(mc));
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 110) {
                 PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
                 mc.stop();
             }
+        }
+
+        /** 三张名单现在的样子 —— 截图看不出"回车到底写没写进配置"，只有这个能。 */
+        private static String filterDump(Minecraft mc) {
+            return PickupCardConfig.filterDump();
         }
 
         /** 界面自己的状态读数（哪一页、哪个样例、动画走到哪）—— 截图看不出"动画有没有真播"。 */
@@ -455,6 +503,16 @@ public final class DevHarness {
             if (!screen.dragOption(label, ratio)) {
                 PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个控件", label);
             }
+        }
+
+        /** 往某个文本框打字并回车（点 → 逐字 → 回车提交）。 */
+        private static boolean typeByLabel(Minecraft mc, String label, String text) {
+            if (!(mc.screen instanceof PickupCardConfigScreen screen)) return false;
+            if (!screen.typeOption(label, text)) {
+                PickupCard.LOGGER.warn("[harness-auto] 界面上找不到『{}』这个输入框", label);
+                return false;
+            }
+            return true;
         }
 
         /** 界面上现在有哪些控件（按标签）。日志里留一份 —— 截图看不出"第 2 页到底有没有那几项"。 */

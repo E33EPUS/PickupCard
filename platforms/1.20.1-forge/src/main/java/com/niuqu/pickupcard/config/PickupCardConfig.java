@@ -83,6 +83,16 @@ public final class PickupCardConfig {
                 List.copyOf(VALUES.muteList.get()));
     }
 
+    /**
+     * 三张名单现在的样子，一行字符串。
+     * <p>【为什么要有它】界面上"加一条"走的是键盘路径，截图只能证明"框里有字"，
+     * 证明不了"回车真的写进了配置"。把这行打进日志，才能把界面动作和配置文件对上账。
+     */
+    public static String filterDump() {
+        FilterSettings f = filterSnapshot();
+        return "黑名单" + f.blacklist() + " 白名单" + f.whitelist() + " 静音" + f.muteList();
+    }
+
     /** 当前主题。 */
     public static Theme theme() {
         return VALUES.theme.get();

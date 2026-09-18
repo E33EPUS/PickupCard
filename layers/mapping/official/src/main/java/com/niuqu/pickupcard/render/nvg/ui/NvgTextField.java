@@ -1,30 +1,72 @@
 package com.niuqu.pickupcard.render.nvg.ui;
 
 import java.util.function.Consumer;
+import java.util.function.Predicate;
 import java.util.function.Supplier;
+import org.jetbrains.annotations.Nullable;
 import org.lwjgl.glfw.GLFW;
 
 /**
- * 文本框（现在只有颜色项用它）：<b>点一下拿焦点，光标闪，退格能删，回车放焦点。</b>
+ * 文本框：<b>点一下拿焦点，光标闪，退格能删，回车提交并放焦点，Esc 放弃。</b>
  *
- * <p>【为什么只有这一个控件要键盘】这个界面别的控件都是"点一下就有结果"，只有颜色必须让玩家
- * 打出 {@code #AARRGGBB}。旧版那套里它叫 {@code TextWidget}，是唯一一个需要焦点的控件 ——
- * 焦点这件事一旦扩散到全界面（Tab 漫游、快捷键、拖选），就真长成第二个 UI 框架了。
+ * <p>【它服务的两种活儿，差别只在"什么时候算数"】颜色框是<b>每敲一个字就生效</b> ——
+ * 颜色没有"提交"这个动作，打了合法值就该立刻在预览里看见。过滤名单是<b>回车才生效</b> ——
+ * 敲到一半的 {@code minecraft:cobb} 不该被当成一条规则记进配置。所以"字符集 / 长度上限 /
+ * 敲字时通不通知 / 回车做什么"四件事由构造参数给，类还是这一个。
  *
- * <p>【为什么每敲一个字就上报】颜色没有"提交"这个动作（回车只是放焦点），
- * 打了合法值就该立刻在预览里看见 —— 这也是这个界面唯一的即时反馈。
+ * <p>【为什么不再写"只有颜色需要键盘"】过滤名单也要打 {@code minecraft:cobblestone}、
+ * {@code #forge:ores}、{@code @modid}。旧注释把"当时只有它要打字"当成了长期理由，
+ * 于是一旦有第二种需要打字的控件，那句话就变成了错的。
+ *
+ * <p>【焦点为什么没有扩散】焦点仍然只在这一个控件类型里：没有 Tab 漫游、没有快捷键、
+ * 没有拖选。多一种要打字的控件不等于要长成第二个 UI 框架。
  */
 public final class NvgTextField extends NvgWidget {
 
     private final Supplier<String> value;
-    private final Consumer<String> onChange;
-    private String draft;
+    /** 敲字时通知谁；{@code null} = 只改草稿，等回车才交出去。 */
+    private final @Nullable Consumer<String> onChange;
+    private final Predicate<Character> accepts;
+    private final int maxLength;
+    /** 回车做什么；{@code null} = 回车只是放焦点（颜色框就是这样）。 */
+    private final @Nullable Consumer<String> onSubmit;
+    /** 没内容又没在编辑时显示的灰字提示（空串 = 什么都不显示）。 */
+    private String placeholder = "";
+
+    private @Nullable String draft;
     private boolean editing;
 
-    public NvgTextField(String label, Supplier<String> value, Consumer<String> onChange) {
+    public NvgTextField(String label, Supplier<String> value, @Nullable Consumer<String> onChange,
+                        Predicate<Character> accepts, int maxLength,
+                        @Nullable Consumer<String> onSubmit) {
         super(label);
         this.value = value;
         this.onChange = onChange;
+        this.accepts = accepts;
+        this.maxLength = maxLength;
+        this.onSubmit = onSubmit;
+    }
+
+    /** 颜色框：只收 {@code #AARRGGBB} 的字符，最多 9 个，每敲一个字就生效。 */
+    public static NvgTextField color(String label, Supplier<String> value,
+                                     Consumer<String> onChange) {
+        return new NvgTextField(label, value, onChange,
+                c -> c == '#' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')
+                        || (c >= 'A' && c <= 'F'),
+                9, null);
+    }
+
+    /** 规则框：收任意可打印字符，最多 {@code maxLength} 个，<b>回车才提交</b>。 */
+    public static NvgTextField rule(String label, Supplier<String> value, int maxLength,
+                                    Consumer<String> onSubmit) {
+        return new NvgTextField(label, value, null,
+                c -> !Character.isISOControl(c), maxLength, onSubmit);
+    }
+
+    /** 空着的时候显示一句灰字（"在这里写一条"这种）。 */
+    public NvgTextField placeholder(String text) {
+        this.placeholder = text == null ? "" : text;
+        return this;
     }
 
     @Override
@@ -46,6 +88,7 @@ public final class NvgTextField extends NvgWidget {
     public void blur() {
         super.blur();
         editing = false;
+        draft = null;
     }
 
     @Override
@@ -53,14 +96,27 @@ public final class NvgTextField extends NvgWidget {
         if (!editing) {
             return false;
         }
-        if (keyCode == GLFW.GLFW_KEY_BACKSPACE && !draft.isEmpty()) {
-            draft = draft.substring(0, draft.length() - 1);
-            onChange.accept(draft);
+        if (keyCode == GLFW.GLFW_KEY_BACKSPACE) {
+            if (draft != null && !draft.isEmpty()) {
+                draft = draft.substring(0, draft.length() - 1);
+                notifyChange();
+            }
             return true;
         }
-        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER
-                || keyCode == GLFW.GLFW_KEY_ESCAPE) {
+        if (keyCode == GLFW.GLFW_KEY_ENTER || keyCode == GLFW.GLFW_KEY_KP_ENTER) {
+            String submitted = draft == null ? "" : draft;
             editing = false;
+            draft = null;
+            if (onSubmit != null) {
+                onSubmit.accept(submitted);
+            }
+            return true;
+        }
+        if (keyCode == GLFW.GLFW_KEY_ESCAPE) {
+            // Esc = 放弃这一稿。颜色框那种"每敲一个字就生效"的，放弃也回不去，
+            // 所以它靠 blur() 收尾；这里只负责别再往下传（否则会把界面关掉）。
+            editing = false;
+            draft = null;
             return true;
         }
         return false;
@@ -68,27 +124,41 @@ public final class NvgTextField extends NvgWidget {
 
     @Override
     public boolean charTyped(char c) {
-        if (!editing || draft.length() >= 9) {
+        if (!editing) {
             return false;
         }
-        if (!isColorChar(c)) {
-            return true;      // 吃掉非法字符：颜色框里只该出现 0-9 a-f A-F #
+        if (draft != null && draft.length() >= maxLength) {
+            return true;      // 吃满就不再收，但别让这个键漏到别处去
         }
-        draft = draft + c;
-        onChange.accept(draft);
+        if (!accepts.test(c)) {
+            return true;
+        }
+        draft = (draft == null ? "" : draft) + c;
+        notifyChange();
         return true;
     }
 
-    private static boolean isColorChar(char c) {
-        return c == '#' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F');
+    private void notifyChange() {
+        if (onChange != null && draft != null) {
+            onChange.accept(draft);
+        }
+    }
+
+    /** 只在编辑时才叫草稿；没编辑时显示的是真实值。 */
+    public boolean editing() {
+        return editing;
     }
 
     @Override
     protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         ui.well(x, y, w, h, wellColor(p));
-        String shown = editing ? draft : value.get();
-        ui.text(shown, x + 4f, y + (h - ui.font().lineHeight) / 2f, p.text);
+        String shown = editing ? (draft == null ? "" : draft) : value.get();
+        if (shown.isEmpty() && !placeholder.isEmpty() && !editing) {
+            ui.text(placeholder, x + 4f, y + (h - ui.font().lineHeight) / 2f, p.textDim);
+        } else {
+            ui.text(shown, x + 4f, y + (h - ui.font().lineHeight) / 2f, p.text);
+        }
         if (editing && (System.currentTimeMillis() / 500) % 2 == 0) {
             // 光标：闪，且跟在文字后面 —— 不闪的话玩家分不清"在编辑"还是"只是显示"
             float caret = x + 5f + ui.textWidth(shown);
