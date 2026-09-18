@@ -474,11 +474,27 @@ public final class DevHarness {
                 PickupCard.LOGGER.info("[harness-auto] 删完的过滤页: {}", configLabels(mc));
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 110) {
+            if (configTicks >= WARMUP_TICKS + 110 && configTicks < WARMUP_TICKS + 111 + CYCLE_EVERY * CYCLE_FRAMES
+                    && (configTicks - WARMUP_TICKS - 111) % CYCLE_EVERY == 0) {
+                // 【为什么要在收工之后还拍一段】用户第 2 条要的是"预览重播设计时间线" ——
+                // 而"重播有没有真的发生"只有跨一个周期比像素才答得出来。回到通用页（单卡预览），
+                // 连拍一串；周期 4.6s，取 5 张、每张隔 1.2s，必然覆盖到入场 / 停 / 脉冲 / 淡出。
+                if (configTicks == WARMUP_TICKS + 111) {
+                    clickByLabel(mc, "通用");
+                    PickupCard.LOGGER.info("[harness-auto] 重播连拍：回到通用页看单卡预览");
+                }
+                capture(mc, "config-cycle" + ((configTicks - WARMUP_TICKS - 111) / CYCLE_EVERY));
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 111 + CYCLE_EVERY * CYCLE_FRAMES) {
                 PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
                 mc.stop();
             }
         }
+
+        /** 预览重播连拍：每 24 tick（1.2s）一张，5 张覆盖一个 4.6s 周期。 */
+        private static final int CYCLE_EVERY = 24;
+        private static final int CYCLE_FRAMES = 5;
 
         /** 三张名单现在的样子 —— 截图看不出"回车到底写没写进配置"，只有这个能。 */
         private static String filterDump(Minecraft mc) {

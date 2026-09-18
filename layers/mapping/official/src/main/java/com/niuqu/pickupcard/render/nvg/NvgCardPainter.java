@@ -407,92 +407,13 @@ public final class NvgCardPainter {
     // 配置界面的实时预览
     // ------------------------------------------------------------------
 
-    /**
-     * 画一张样例卡（静止的最终态）。
-     * <p>
-     * 【为什么必须共用同一段代码】预览要是自己画一遍，它迟早和真卡不一样 ——
-     * 那时候"所见即所得"就是假的，而且是<b>静默</b>的假（改了没用，但界面看着生效了）。
-     * 这里调的正是真卡在用的 {@link #paintShell}（影子 + 竖条 + 两个框 + 微光）
-     * 与下面那两行原版内容。
-     *
-     * @param cardW    卡片总宽；高度按样式算（图标 + 上下内边距）
-     * @param glow     预览是不是"会被强调的那种卡"（经验卡 / 白名单卡）。样例画的是经验，
-     *                 所以预览里看得到那层微光 —— 否则玩家永远调不出它
-     * @param showName 关掉"显示物品名"之后预览也必须不画名字，否则预览就成了说谎的那一份
-     * @param alpha    整张卡的不透明度（换样例时的淡入；1 = 不透明）
-     */
-    public static void paintPreview(GuiGraphics gui, StyleModel style, float x, float y, float cardW,
-                                    ItemStack icon, String name, String count, int accent,
-                                    boolean glow, boolean showName, float cardScale, float alpha) {
-        float h = style.boxHeight();
-        float bodyX = style.barWidth() + style.gap();
-        float gap = style.gap();
-        // 未缩放单位：内容按 100% 的尺寸算，缩放交给 pose 与 NanoVG 变换
-        float localW = cardW / cardScale;
-        float localH = h / cardScale;
-
-        gui.flush();
-        NvgCanvas nvg = NvgCanvas.shared();
-        if (nvg != null && nvg.valid()) {
-            float guiScale = (float) Minecraft.getInstance().getWindow().getGuiScale();
-            nvg.begin(gui.guiWidth(), gui.guiHeight(), guiScale);
-            try {
-                // 静止的最终态：竖条全开、窗口全开、不淡出。
-                // 【预览也要走缩放】预览要是按 100% 画，玩家把缩放调到 60% 时预览还在骗他。
-                long vg = nvg.handle();
-                nvgSave(vg);
-                nvgGlobalAlpha(vg, Easing.clamp01(alpha));
-                nvgTranslate(vg, x, y);
-                nvgScale(vg, cardScale, cardScale);
-                paintShell(vg, style, 0f, 0f, localW, localH, accent, 1f, 0f, 1f, glow,
-                        RevealWindow.of(style.barWidth(), gap, localW, false, 1f));
-                nvgRestore(vg);
-            } finally {
-                nvg.end();
-            }
-        }
-
-        Font font = Minecraft.getInstance().font;
-        float iconScale = style.iconSize() / CardMetrics.ICON_PX;
-        gui.pose().pushPose();
-        gui.pose().translate(x, y, 0f);
-        gui.pose().scale(cardScale, cardScale, 1f);
-        boolean fading = alpha < 0.999f;
-        if (fading) {
-            // 图标是原版画的，没有"染色"参数可传 —— 跟真卡淡出走同一个入口（全局色调制），
-            // 同样要先冲一次队列：前面排着的文字要是被这次设色带上了，跟着淡的就是别人。
-            gui.flush();
-            RenderSystem.setShaderColor(1f, 1f, 1f, Easing.clamp01(alpha));
-        }
-        gui.pose().pushPose();
-        gui.pose().translate(bodyX + localH / 2f, localH / 2f, 0f);
-        gui.pose().scale(iconScale, iconScale, 1f);
-        gui.renderItem(icon, -8, -8);
-        gui.pose().popPose();
-        if (fading) {
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        }
-
-        float textY = (localH - font.lineHeight) / 2f;
-        if (showName) {
-            // 【名字为什么要截】真卡的名字由 CardMetrics#fittedName 按屏宽截；预览这一份从前
-            // 不截，于是"长名字的卡"在窄预览列里会把字画到卡框外面去 —— 真卡不会。
-            // 预览一旦和真卡不一样，"所见即所得"就是假的（而且是静默的假）。
-            float nameX = bodyX + localH + gap + style.paddingH();
-            float room = localW - nameX - style.paddingH() - font.width(count) - gap;
-            String shown = name;
-            if (font.width(name) > room) {
-                shown = font.plainSubstrByWidth(name,
-                        (int) Math.max(0f, room - font.width(ELLIPSIS))) + ELLIPSIS;
-            }
-            gui.drawString(font, shown, Math.round(nameX), Math.round(textY),
-                    fade(style.nameColor(), alpha), true);
-        }
-        gui.drawString(font, count, Math.round(localW - style.paddingH() - font.width(count)),
-                Math.round(textY), fade(accent, alpha), true);
-        gui.pose().popPose();
-    }
-
+    // 【这里原来有一个 paintPreview：单独把静止的最终态重画一遍】
+    // 它 2026-09-18 删掉了，原因有两层：
+    //   ① 它和 drawContent 是**两份**绘制实现（图标 / 名字截断 / 数字各画一遍），
+    //      而预览迟早和真卡不一样就是这个界面的老毛病；
+    //   ② 用户要预览**重播时间线**（第 2 条），而那份静止实现没有时间的概念。
+    // 现在配置界面自己造一张真的 Notice + CardView + CardSlot，直接调本类的 paint() ——
+    // 预览与游戏里共用同一条时间线、同一份排版、同一套截断，改了真卡预览自动跟上。
     // ------------------------------------------------------------------
     // 公共
     // ------------------------------------------------------------------

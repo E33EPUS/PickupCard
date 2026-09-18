@@ -7,6 +7,14 @@ import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.notice.MergeMode;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.rarity.RarityAccent;
+import com.niuqu.pickupcard.notice.Notice;
+import com.niuqu.pickupcard.pickup.Inbox;
+import com.niuqu.pickupcard.pickup.CardContent;
+import com.niuqu.pickupcard.render.CardCanvas;
+import com.niuqu.pickupcard.render.CardMetrics;
+import com.niuqu.pickupcard.render.CardSlot;
+import com.niuqu.pickupcard.render.CardView;
+import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.render.nvg.ui.NvgButton;
@@ -210,17 +218,19 @@ public final class PickupCardConfigScreen extends Screen {
      * 不会抛异常，只会安安静静画成灰的，只有一条日志能拦住它。
      */
     private enum Sample {
-        COMMON("普通", Items.STONE, Rarity.COMMON, "+64", false, null,
+        COMMON("普通", Items.STONE, Rarity.COMMON, 64, false, null,
                 "最常见的那一档 —— 灰。原版绝大多数物品都在这档（钻石剑、钻石镐也是）"),
-        RARE("稀有", Items.GOLDEN_APPLE, Rarity.RARE, "+1", false, null,
+        RARE("稀有", Items.GOLDEN_APPLE, Rarity.RARE, 1, false, null,
                 "稀有档 —— 青。样例必须是真·稀有的物品：拿钻石剑当稀有样例只会得到一片灰"),
-        XP("经验", Items.NETHER_STAR, null, "+137", true, null,
+        XP("经验", Items.NETHER_STAR, null, 137, true, null,
                 "经验卡：绿是它专用的一档，刻意不参与稀有度分级"),
-        LONG_NAME("长名", Items.ENCHANTED_GOLDEN_APPLE, Rarity.EPIC, "+1", false,
+        LONG_NAME("长名", Items.ENCHANTED_GOLDEN_APPLE, Rarity.EPIC, 1, false,
                 "附魔金苹果（珍藏 · 来自末地城）", "史诗档 —— 紫；顺带验名字太长会被截断");
 
         final String label;
-        final String count;
+        /** 这一格的数量。<b>不是显示字符串</b> —— 显示成 "+64" 还是 "×64" 由玩家选的
+         *  {@code CountFormat} 决定，所以「数量写法」那一格现在在预览里立刻看得见。 */
+        final int amount;
         /** 值得给一层稀有度微光的卡（经验卡）。 */
         final boolean glow;
         final String hint;
@@ -228,11 +238,11 @@ public final class PickupCardConfigScreen extends Screen {
         private final Rarity tier;
         private final ItemStack icon;
 
-        Sample(String label, Item item, Rarity tier, String count, boolean glow,
+        Sample(String label, Item item, Rarity tier, int amount, boolean glow,
                String customName, String hint) {
             this.label = label;
             this.tier = tier;
-            this.count = count;
+            this.amount = amount;
             this.glow = glow;
             this.hint = hint;
             this.icon = new ItemStack(item);
@@ -262,17 +272,9 @@ public final class PickupCardConfigScreen extends Screen {
 
         private static boolean verifyDone;
 
-
-        /** 卡上那个名字：开了「显示物品ID」就跟真卡一样显示 ID。 */
-        String name(boolean showItemId) {
-            return showItemId ? BuiltInRegistries.ITEM.getKey(icon.getItem()).toString()
-                    : icon.getHoverName().getString();
-        }
-
-        /** 强调色走真卡的同一张色表 —— 预览里的颜色必须就是游戏里那个颜色。 */
-        int accent() {
-            StyleModel.Accents a = CardStage.INSTANCE.previewStyle().accents();
-            return this == XP ? RarityAccent.xp(a) : RarityAccent.of(icon, a);
+        /** 样例物品（{@code XP} 那格的真卡内容不是物品，见 {@code previewNotice}）。 */
+        ItemStack icon() {
+            return icon;
         }
     }
 
@@ -447,7 +449,9 @@ public final class PickupCardConfigScreen extends Screen {
                     return;
                 }
                 sample = s;
-                previewAnim.snap(0f);   // 换样例：淡入，别硬切
+                // 【换样例现在不用另做淡入了】预览跑的是真卡那条时间线，把周期重置一下，
+                // 新样例就从头播一遍入场 —— 比整张卡淡一下更接近游戏里真正发生的事。
+                previewCycleAt = -1L;
             }, false).hint(s.hint);
             // 【为什么位置是每次重建算的】预览会不会出现、切换行画不画，都取决于画布大小；
             // 算一次存起来的话，窗口一缩它们就全错位了。
@@ -757,8 +761,12 @@ public final class PickupCardConfigScreen extends Screen {
      * 就没人说得清了 —— 那种 bug 表现为"偶尔动画不动"。
      */
     private void driveAnimations(int mouseX, int mouseY) {
+        // 预览那条时间线的"出生时刻"：一轮走完就把整张卡重新生一次 —— 于是入场、脉冲、
+        // 数字滚动、淡出会一遍遍重播，拨任何一个时长键都能立刻在预览里看见效果。
+        if (previewCycleAt < 0L || now - previewCycleAt > PREVIEW_CYCLE_MS) {
+            previewCycleAt = now;
+        }
         pageAnim.retarget(1f, now, PAGE_MS);
-        previewAnim.retarget(1f, now, PREVIEW_MS);
         tabAccentAnim.retarget(section.ordinal(), now, TAB_MS);
         for (Row row : rows) {
             boolean on = forcedHover != null ? row.label().equals(forcedHover)
@@ -957,20 +965,23 @@ public final class PickupCardConfigScreen extends Screen {
         }
     }
 
-    /** 一张样例卡：宽度按内容算（跟真卡同一个公式），放不下才截名字。 */
+    /**
+     * 把预览画成<b>真卡</b>：造一张真的 {@code Notice + CardView + CardSlot}，交给真卡在用的
+     * {@code NvgCardPainter#paint}。预览因此不再是"第二份绘制实现" —— 入场、合并脉冲、
+     * 数字滚动、退场、名字截断全是真卡那一套，改了真卡预览自动跟上。
+     * <p>【为什么要重播时间线（用户 2026-09-18 第 2 条）】预览从前只画"静止的最终态"：
+     * 拨「入场时长」那一格时屏幕上什么都不动，等于那个滑条没有反馈。现在它按周期把这张卡
+     * 的一生重播一遍 —— 入场 → 停一会儿 → 再被拾起一次（脉冲 + 数字滚动）→ 淡出 → 重来。
+     */
     private void renderSampleCard(GuiGraphics gui, ConfigLayout.Rect area, StyleModel style) {
-        PickupCardSettings settings = PickupCardConfig.snapshot();
-        boolean showName = settings.showItemName();
-        String name = sample.name(settings.showItemId());
+        CardView view = previewView(sample);
         float scale = previewScale();
-        float cardW = Math.min(naturalWidth(style, name, sample.count, showName) * scale,
-                area.w() - 2f);
+        float cardW = Math.min(cardWidth(view, style, scale), area.w() - 2f);
         float cardH = style.boxHeight() * scale;
         // 【为什么竖直居中】预览面板的高度随画布变，卡高只随缩放变 —— 贴顶放的话，
         // 高面板里它会孤零零挂在上面，看着像没画完。
-        NvgCardPainter.paintPreview(gui, style, area.x() + 1f,
-                area.y() + Math.max(0f, (area.h() - cardH) / 2f), cardW, sample.icon, name,
-                sample.count, sample.accent(), sample.glow, showName, scale, previewAnim.at(now));
+        paintPreviewCards(gui, style, List.of(new CardSlot(view, area.x() + 1f,
+                area.y() + Math.max(0f, (area.h() - cardH) / 2f), cardW, cardH)));
     }
 
     /**
@@ -982,7 +993,6 @@ public final class PickupCardConfigScreen extends Screen {
      */
     private void renderStackPreview(GuiGraphics gui, ConfigLayout.Rect area, StyleModel style) {
         PickupCardSettings settings = PickupCardConfig.snapshot();
-        boolean showName = settings.showItemName();
         LayoutSettings layout = PickupCardConfig.layoutSnapshot();
         float scale = previewScale();
         // 选中的样例当最新那张（贴底），另外两张按枚举顺序补齐 —— 宽度差别才看得出来
@@ -994,36 +1004,83 @@ public final class PickupCardConfigScreen extends Screen {
             }
         }
         // 最新的排第一（{@link StackLayout#stack} 的约定：第 0 张贴着底线）
+        List<CardView> views = new ArrayList<>();
         List<StackLayout.Size> sizes = new ArrayList<>();
         for (Sample s : trio) {
-            float w = Math.min(naturalWidth(style, s.name(settings.showItemId()), s.count, showName) * scale,
-                    area.w() - 6f);
+            CardView view = previewView(s);
+            views.add(view);
+            float w = Math.min(cardWidth(view, style, scale), area.w() - 6f);
             sizes.add(new StackLayout.Size(Math.max(24f, w), style.boxHeight() * scale));
         }
         // 【为什么底部留白是个小数字】这一块是"模拟屏"，不是真屏幕 —— 原版 HUD 不在这个
         // 面板里，套 HudSafeZone 会把卡顶到面板外面去。同理**不套右侧条带**（leftMin = 0）：
         // 预览要展示的是排布与间距，把快捷栏那条硬下限也搬进来只会让预览里的卡莫名贴到右边。
+        List<CardSlot> slots = new ArrayList<>();
         for (StackLayout.Slot slot : StackLayout.stack(sizes, area.w(), area.h(), layout, 6, 4,
                 layout.separation() * scale, 0f)) {
-            Sample s = trio.get(slot.index());
-            NvgCardPainter.paintPreview(gui, style, area.x() + slot.x(), area.y() + slot.y(),
-                    slot.width(), s.icon, s.name(settings.showItemId()), s.count, s.accent(),
-                    s.glow, showName, scale, previewAnim.at(now));
+            slots.add(new CardSlot(views.get(slot.index()), area.x() + slot.x(), area.y() + slot.y(),
+                    slot.width(), slot.height()));
         }
+        paintPreviewCards(gui, style, slots);
+    }
+
+    /** 一张样例在 100% 下的自然宽度 —— 走真卡的 {@code CardMetrics#naturalWidth}，不另写一份公式。 */
+    private float cardWidth(CardView view, StyleModel style, float scale) {
+        return CardMetrics.naturalWidth(previewCanvas(style, scale), this.font, view) * scale;
     }
 
     /**
-     * 样例卡在 100% 下的自然宽度：跟真卡同一个公式（竖条 + 间隙 + 图标格 + 间隙 + 信息框）。
-     * <p>自己写一个"看起来差不多"的宽度，就等于预览和真卡各有一套尺寸 —— 那正是这个界面
-     * 最不该有的东西。
+     * 一张样例造出的真卡。数量与名字都由真卡的规则给（{@code CountFormat} / {@code displayName}），
+     * 于是「数量写法」「显示物品ID」这些键在预览里立刻看得见。
      */
-    private float naturalWidth(StyleModel style, String name, String count, boolean showName) {
-        float info = style.paddingH() * 2f + this.font.width(count);
-        if (showName) {
-            info += style.gap() + this.font.width(name);
+    private CardView previewView(Sample s) {
+        long born = previewCycleAt;
+        long enterMs = CardStage.INSTANCE.previewStyle().enterMs();
+        // 周期内的节奏：先入场，停 800ms，再"拾起一次"（脉冲 + 数字滚动），再停 900ms 开始淡出
+        long bumpAt = born + enterMs + 800L;
+        CardView view = new CardView(previewNotice(s, s.amount, born));
+        if (now >= bumpAt) {
+            // 走的就是真卡的合并入口：它会记下旧数量（数字滚动从它滚到新值）并刷新跳动时刻
+            view.absorbMerge(previewNotice(s, s.amount + 1, bumpAt), bumpAt);
+            long exitAt = bumpAt + 900L;
+            if (now >= exitAt) {
+                view.beginExit(exitAt);
+            }
         }
-        return style.barWidth() + style.gap() + style.boxHeight() + style.gap() + info;
+        return view;
     }
+
+    private Notice<Inbox.Card> previewNotice(Sample s, int amount, long bornAt) {
+        Inbox.Card payload = new Inbox.Card(
+                s == Sample.XP ? new CardContent.Experience() : new CardContent.Item(s.icon()),
+                s.glow);
+        return new Notice<>("preview:" + s.label, "preview", payload, amount, false,
+                bornAt, bornAt, 0);
+    }
+
+    /** 这一帧要用的画布 —— 缩放与主题都按界面上当前生效的值给，预览才不会说谎。 */
+    private CardCanvas previewCanvas(StyleModel style, float scale) {
+        return new CardCanvas(now,
+                new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(),
+                        style.bumpEnabled()),
+                style, PickupCardConfig.snapshot(), PickupCardConfig.layoutSnapshot(),
+                this.width, this.height, scale, 0f);
+    }
+
+    /** 交给真卡的画笔。整摞一次画完 —— 它自己开一帧 NanoVG，比一张一张开省。 */
+    private void paintPreviewCards(GuiGraphics gui, StyleModel style, List<CardSlot> slots) {
+        if (slots.isEmpty()) {
+            return;
+        }
+        previewPainter.paint(gui, previewCanvas(style, previewScale()), slots);
+    }
+
+    private final NvgCardPainter previewPainter = new NvgCardPainter();
+
+    /** 重播周期：入场 + 停 + 再拾起 + 淡出，一轮走完从头来。 */
+    private static final long PREVIEW_CYCLE_MS = 4_600L;
+    /** 这一轮是从哪一刻开始的（预览那条时间线的"出生时刻"）。 */
+    private long previewCycleAt = -1L;
 
     /**
      * 预览该用多大的缩放。
