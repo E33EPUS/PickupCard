@@ -670,9 +670,13 @@ public final class DevHarness {
                 PickupCard.LOGGER.info("[harness-auto] HUD 读数 cards={} painted={} layout={}us",
                         s.live(), s.painted(), s.layoutMicros());
                 logHudSafeZone(mc);
-                // 在屏的是哪几张：「少了我的那张卡」是最常见的问题，不能靠推断
+                // 在屏的是哪几张 + <b>每张的实际矩形</b>：「少了我的那张卡」与「位置又不对」是最常见的
+                // 两类反馈，而"画在哪"只有从渲染层的 slot 上读才是准的 —— 从截图上量要按颜色挑、
+                // 要跟世界纹理分开，量出来还可能是别的元素（2026-09-18 就为了四个 x 绕了半天）。
                 PickupCard.LOGGER.info("[harness-auto] HUD 在屏: {}", CardStage.INSTANCE.lastSlots()
-                        .stream().map(slot -> slot.view().key())
+                        .stream().map(slot -> String.format(java.util.Locale.ROOT,
+                                "%s@(%.0f,%.0f %.0fx%.0f)", slot.view().key(),
+                                slot.x(), slot.y(), slot.width(), slot.height()))
                         .collect(java.util.stream.Collectors.joining(", ")));
                 Screenshot.grab(mc.gameDirectory, "pickupcard-hud", mc.getMainRenderTarget(),
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
@@ -783,7 +787,7 @@ public final class DevHarness {
             // 而只报最低边是看不出这件事的 —— 上一版就这么漏过去了。
             PickupCard.LOGGER.info(
                     "[harness-auto] HUD 安全区：卡堆最低边 y={}，HUD 带顶 y={}（缝 {}，底部留白 {}，"
-                            + "画布 {}x{}，卡堆顶 y={}，放得下 {} 张）",
+                            + "画布 {}x{}，卡堆顶 y={}，放得下 {} 张，落点 {}）",
                     Math.round(lowestCard), Math.round(hudTop), Math.round(hudTop - lowestCard),
                     com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
                     mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
@@ -794,7 +798,12 @@ public final class DevHarness {
                             // 用**本帧生效的**卡高与间距算（乘上当前缩放），否则这行日志会
                             // 在缩放档下说"放得下 7 张"而排布实际只放得下 5 张
                             CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
-                            PickupCardConfig.layoutSnapshot().separation() * effectiveScale(mc)));
+                            PickupCardConfig.layoutSnapshot().separation() * effectiveScale(mc)),
+                    // 【为什么缝可以是负的】条带档下卡片横向上已经避开快捷栏，纵向就不必让开它 ——
+                    // 那个负数正是"卡片下到快捷栏那一层了"的证据，不是回归。落在哪一档由这行末尾的
+                    // [落点] 日志回答（见 CardStage#place）。
+                    CardStage.INSTANCE.lastSlots().isEmpty() ? "-"
+                            : com.niuqu.pickupcard.render.CardStage.INSTANCE.placementNote());
         }
 
         /** 这一帧有没有卡正在退场（含淡回）：探针靠它决定"什么时候该拍"。 */

@@ -26,16 +26,26 @@ class HudSafeZoneTest {
     /** 两块瞬时居中文字的宽度：从"一个字符"到"很长的一句提示语"。 */
     private static final float[] TEXT_WIDTHS = {8f, 60f, 160f, 320f};
 
+    /**
+     * 条带里的卡堆与原版 HUD 的关系 —— <b>判据是"横向不相交"，不是"矩形不相交"</b>。
+     * <p>
+     * 【为什么换了判据】卡片现在整列落在快捷栏右边那条带里，并且一路下到屏幕底
+     * （{@link HudSafeZone#STRIP_BOTTOM}）—— 那正是用户从 2026-09-17 起报了四次的
+     * 「屏幕右侧和物品栏之间那一块区域」。落在那一块里之后，卡片与快捷栏在<b>纵向上是重叠的</b>，
+     * 靠的是<b>横向让开</b>才不撞上。所以断言必须问"x 方向是否分开"：
+     * 快捷栏那几块都是居中、半宽有界的（±92 / ±91 / 等级 ±24），条带左缘在 {@code cx+92} 之外，
+     * 天然分开；只有两块<b>宽度不定</b>的居中文字（手持物品名、动作栏提示语）够宽时能伸进来。
+     */
     @Test
-    void cardsNeverTouchAnyVanillaBand() {
+    void cardsInTheStripNeverShareColumnsWithTheVanillaBands() {
         for (float[] canvas : CANVASES) {
             for (float width : TEXT_WIDTHS) {
-                assertNoOverlap(canvas[0], canvas[1], width);
+                assertColumnsAreClear(canvas[0], canvas[1], width);
             }
         }
     }
 
-    private void assertNoOverlap(float guiWidth, float guiHeight, float textWidth) {
+    private void assertColumnsAreClear(float guiWidth, float guiHeight, float textWidth) {
         for (boolean leftHanded : new boolean[] {false, true}) {
             HudSafeZone.Strip strip = HudSafeZone.strip(guiWidth, guiHeight, 16, 0f, leftHanded);
             float cardWidth = Math.min(guiWidth * 0.45f, strip.width());
@@ -47,9 +57,17 @@ class HudSafeZoneTest {
             HudSafeZone.Rect cards = strip.cards(cardWidth, guiHeight, stackHeight);
 
             for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, textWidth, textWidth)) {
-                assertFalse(cards.intersects(band),
+                boolean clearInX = cards.x() >= band.x() + band.w() || band.x() >= cards.x() + cards.w();
+                if (clearInX) {
+                    continue;
+                }
+                // 横向压上了：那只能是那两块宽度不定的居中文字，而且必然是因为它够宽
+                float bandHalf = band.w() / 2f;
+                assertTrue(bandHalf > strip.left() - guiWidth / 2f,
                         canvasLabel(guiWidth, guiHeight, textWidth) + " 卡堆 " + describe(cards)
-                                + " 撞上了原版带 " + describe(band));
+                                + " 与" + describe(band) + " 横向相交，但它<b>不该</b>伸这么远"
+                                + "（半宽 " + bandHalf + " ≤ 条带左缘外沿 "
+                                + (strip.left() - guiWidth / 2f) + "）");
             }
         }
     }

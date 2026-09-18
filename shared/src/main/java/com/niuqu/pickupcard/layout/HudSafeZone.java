@@ -168,7 +168,7 @@ public final class HudSafeZone {
      * @param left        条带左缘 = {@link #stripLeft}（快捷栏那一带的右缘）
      * @param right       条带右缘 = 画布宽 − 右边距 − 右侧要让开的东西
      * @param width       {@code right − left}；<b>负数代表这条带装不下任何卡</b>
-     * @param bottomInset 底部留白 = {@link #bottomInset()}（让开 HUD 带）
+     * @param bottomInset 底部留白 = {@link #STRIP_BOTTOM}（<b>不是</b> {@link #bottomInset()}）
      */
     public record Strip(float left, float right, float width, float bottomInset) {
 
@@ -185,6 +185,23 @@ public final class HudSafeZone {
     }
 
     /**
+     * 条带里的底部留白。<b>只有 2px</b> —— 卡片可以一路下到屏幕底、跟快捷栏并排。
+     * <p>
+     * 【为什么这里不用 {@link #bottomInset()}（75）】那 75px 是为了"让开底部那一整条居中 HUD 带"
+     * 而算的，而它成立的前提是卡片<b>横跨在那一带上方</b>。进了条带之后卡片整体在快捷栏的
+     * <b>右边</b>，横向上与快捷栏不相交，让开纵向那一整条就变成白让了 ——
+     * 用户从 2026-09-17 起报了四次「为什么还是在物品栏上方」，要的就是"屏幕右侧和物品栏之间
+     * 那一块区域"，而那一块是<b>从屏幕底一直到顶</b>的。
+     * <p>
+     * 【这条选择换来了什么、代价是什么】换来的是卡片真的落在那一块里（最新那张的底边与
+     * 快捷栏的底边齐平）。代价要认：底部那一带还有两块<b>居中、宽度不定</b>的原版文字
+     * （手持物品名 H-63、动作栏提示语 H-73），够宽的时候右端会伸进条带里。
+     * 它们是瞬时文字、而卡片画在它们之上，冲突是"卡片盖住半句提示"，不是"卡片压住快捷栏"。
+     * 真机上如果看着碍事，下一步就照 {@code reserve} 那套"碰上了才让"给它们加一条。
+     */
+    public static final int STRIP_BOTTOM = PAD;
+
+    /**
      * 算出这一帧的右侧条带。
      * <p>
      * 【它取代了什么】从前这里叫 {@code place()}，返回一个"左缘软下限 + 底部留白"，
@@ -193,7 +210,7 @@ public final class HudSafeZone {
      * 右手玩家实际有 105.5px。用户为此报了三次「为什么还在物品栏上方」。
      * <p>
      * 现在这里只回答"条带在哪儿、多宽"，装不装得下交给调用方按真实的卡宽判断
-     * （{@code CardStage} 会先按宽度收一次缩放，实在收不下才回退）。
+     * （{@code CardStage} 会先按宽度截名字，实在装不下才回退到 HUD 带上方）。
      *
      * @param marginX      距屏幕右边的留白
      * @param rightReserve 右侧额外要让开多少（侧栏 / 状态效果图标），0 = 不用让
@@ -203,7 +220,7 @@ public final class HudSafeZone {
                               boolean leftHanded) {
         float left = stripLeft(guiWidth, leftHanded);
         float right = guiWidth - marginX - Math.max(0f, rightReserve);
-        return new Strip(left, right, right - left, bottomInset());
+        return new Strip(left, right, right - left, STRIP_BOTTOM);
     }
 
     /**

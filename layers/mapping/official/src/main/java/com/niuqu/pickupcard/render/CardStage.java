@@ -317,24 +317,27 @@ public final class CardStage {
                              PickupCardSettings settings, LayoutSettings layout) {
         boolean leftHanded = isLeftHanded(mc);
         lastGuiWidth = gui.guiWidth();
-        float availableH = gui.guiHeight() - HudSafeZone.bottomInset();
-        float scaleH = layout.scale(availableH, style.boxHeight(), live.size(), layout.separation());
 
-        CardCanvas probe = newCanvas(now, style, settings, layout, gui, scaleH, 0f);
-        float widestNatural = widestNatural(probe, mc);
+        // 【先量"不可再压的宽度"，再决定落在哪一档】这个数不含缩放、也不含名字
+        // （名字是唯一能截掉的部分），所以它可以在定缩放之前就算出来 —— 于是
+        // "条带装不装得下"这件事不必先假设一个缩放，也就不会绕成环。
+        CardCanvas probe0 = newCanvas(now, style, settings, layout, gui, 1f, 0f);
+        float fixedNatural = fixedNatural(
+                newCanvas(now, style, settings, layout, gui, 1f, stripWidthGuess(gui, mc, leftHanded)), mc);
+        float probeFixed = fixedNatural(probe0, mc);
+
         // 侧栏 / 状态效果图标要先扣，否则条带右缘还是错的
         HudSafeZone.Strip open = HudSafeZone.strip(gui.guiWidth(), gui.guiHeight(),
                 MARGIN_X, 0f, leftHanded);
         // 【stackHeight 不能传 0】reserve 判的是"卡堆矩形与侧栏/图标<b>相交</b>"，
         // 高度为 0 的矩形永远不相交 —— 传 0 等于把这条规则静默关掉（侧栏会被压住而没人知道）。
-        float cardH = style.boxHeight() * scaleH;
-        float sep = layout.separation() * scaleH;
-        float stackH = live.size() * cardH + Math.max(0, live.size() - 1) * sep;
+        float cardH = style.boxHeight();
+        float stackH = live.size() * cardH + Math.max(0, live.size() - 1) * layout.separation();
         // 条带里卡片可以停在 [左缘, 右缘−卡宽] 之间，所以送进去的是**整个条带**那一条：
         // 判断"会不会压到侧栏"看的是最靠右的那种摆法，用整条最保守也最诚实。
         HudSafeZone.Rect reach = new HudSafeZone.Rect(open.left(),
-                gui.guiHeight() - HudSafeZone.bottomInset() - stackH, open.width(), stackH);
-        float reserve = rightReserve(mc, probe, reach);
+                gui.guiHeight() - open.bottomInset() - stackH, open.width(), stackH);
+        float reserve = rightReserve(mc, probe0, reach);
         HudSafeZone.Strip strip = HudSafeZone.strip(gui.guiWidth(), gui.guiHeight(),
                 MARGIN_X, reserve, leftHanded);
 
@@ -342,19 +345,17 @@ public final class CardStage {
         // （427×0.45 = 192）—— 在那之下名字不会被截断，于是"卡比条带宽"会被误判成"该缩卡"，
         // 实测就是"按宽度收到 87%"，而按设计这里应该是**截名字、字号不动**
         // （数量与图标才是卡上要一眼读到的东西，缩字体比截名字更伤）。
-        widestNatural = widestNatural(
-                newCanvas(now, style, settings, layout, gui, scaleH, strip.width()), mc);
-        float fixedNatural = fixedNatural(
-                newCanvas(now, style, settings, layout, gui, scaleH, strip.width()), mc);
-        float scale = scaleH;
+        CardCanvas bounded = newCanvas(now, style, settings, layout, gui, 1f, strip.width());
+        float widestNatural = widestNatural(bounded, mc);
+        fixedNatural = fixedNatural(bounded, mc);
 
         String note;
         boolean on = true;
         if (layout.scalePercent() != LayoutSettings.AUTO_SCALE) {
-            // 手动档：玩家说了算，不自动收。装不下也不回退 —— 那是他自己设的值。
-            on = fixedNatural * scale <= strip.width();
-            note = fmt("手动 %.0f%%：条带 %.0fpx，卡最宽 %.0fpx%s",
-                    scale * 100f, strip.width(), widestNatural * scale,
+            // 手动档：玩家说了算。装不下也不回退 —— 那是他自己设的值。
+            on = fixedNatural * (layout.scalePercent() / 100f) <= strip.width();
+            note = fmt("手动 %d%%：条带 %.0fpx，卡最宽 %.0fpx%s",
+                    layout.scalePercent(), strip.width(), widestNatural,
                     on ? "" : "（装不下，按玩家设定照画）");
         } else if (fixedNatural > strip.width()) {
             // 【判据为什么是"固定部分"而不是一个缩放下限】名字是唯一能被截掉的部分，
@@ -362,24 +363,35 @@ public final class CardStage {
             // 只剩"把字缩小"这一条路 —— 而缩字比换个位置糟得多，于是回退。
             // 用 MIN_AUTO_PERCENT 当判据是错的：320×180 画布上条带 52px、fixed 62px，
             // 按 62/52 = 84% 缩放"能过"那个下限，结果是字号缩到 84% 而名字只剩一个省略号。
-            scale = scaleH;
             on = false;
             note = fmt("条带 %.0fpx 连固定部分（%.0fpx）都放不下，回退到 HUD 带上方",
                     strip.width(), fixedNatural);
         } else {
-            note = fmt("条带 x[%.0f,%.0f] 宽 %.0fpx（空条带 %.0fpx，让开右侧 %.0fpx），缩放 %.0f%%",
+            note = fmt("条带 x[%.0f,%.0f] 宽 %.0fpx（空条带 %.0fpx，让开右侧 %.0fpx），底部留白 %d",
                     strip.left(), strip.right(), strip.width(), open.width(), reserve,
-                    scale * 100f);
+                    HudSafeZone.STRIP_BOTTOM);
         }
+
+        // 【底部留白跟着落点走】条带模式下卡片横向上已经避开快捷栏，不需要再让开底部那一整条
+        // （75px）；回退档才要 —— 那时卡片横跨在 HUD 带上方，不让就会压上去。
+        stripModeOn = on;
+        lastBottomMargin = on ? HudSafeZone.STRIP_BOTTOM : HudSafeZone.bottomInset();
+        lastStripWidth = on ? strip.width() : 0f;
+        float scale = layout.scale(gui.guiHeight() - lastBottomMargin,
+                style.boxHeight(), live.size(), layout.separation());
+
         if (!note.equals(stripNote)) {
             stripNote = note;
-            PickupCard.LOGGER.info("[落点] {}；卡最宽 {}/{}px；{}", note,
-                    Math.round(widestNatural), Math.round(fixedNatural),
+            PickupCard.LOGGER.info("[落点] {}；缩放 {}%；卡最宽 {}/{}px；{}", note,
+                    Math.round(scale * 100f), Math.round(widestNatural), Math.round(fixedNatural),
                     leftHanded ? "左撇子：副手在右" : "右手：副手在左");
         }
-        stripModeOn = on;
-        lastStripWidth = on ? strip.width() : 0f;
         return newCanvas(now, style, settings, layout, gui, scale, lastStripWidth);
+    }
+
+    /** 定缩放之前先估一个条带宽（用空条带），只为了让"截名字"在第一遍探针里也生效。 */
+    private float stripWidthGuess(GuiGraphics gui, Minecraft mc, boolean leftHanded) {
+        return HudSafeZone.strip(gui.guiWidth(), gui.guiHeight(), MARGIN_X, 0f, leftHanded).width();
     }
 
     private static String fmt(String pattern, Object... args) {
@@ -427,7 +439,7 @@ public final class CardStage {
         float cardHeight = CardMetrics.height(canvas, mc.font);
         // 间距跟着缩放走：卡缩到 60% 而缝还是 4px 的话，一摞卡会显得"缝比卡还宽"
         float separation = canvas.layout().separation() * canvas.scale();
-        int fits = StackLayout.fittingCount(canvas.guiHeight(), HudSafeZone.bottomInset(),
+        int fits = StackLayout.fittingCount(canvas.guiHeight(), lastBottomMargin,
                 cardHeight, separation);
         if (fits >= 1 && fits < alive.size()) {
             for (CardView dropped : new ArrayList<>(alive.subList(fits, alive.size()))) {
@@ -456,13 +468,13 @@ public final class CardStage {
         float left = Math.max(0f, Math.min(canvas.layout().leftLimit(canvas.guiWidth()),
                 canvas.guiWidth() - MARGIN_X - widest));
         float reserve = rightReserve(mc, canvas, new HudSafeZone.Rect(left,
-                canvas.guiHeight() - HudSafeZone.bottomInset() - stackHeight, widest, stackHeight));
+                canvas.guiHeight() - lastBottomMargin - stackHeight, widest, stackHeight));
 
         List<CardSlot> slots = new ArrayList<>(alive.size());
         long now = canvas.now();
         for (StackLayout.Slot slot : StackLayout.stack(
                 sizes, canvas.guiWidth(), canvas.guiHeight(), canvas.layout(),
-                MARGIN_X, HudSafeZone.bottomInset(), separation, stripLeft(mc))) {
+                MARGIN_X, lastBottomMargin, separation, stripLeft(mc))) {
             CardView view = alive.get(slot.index());
             // 【条带模式下不再整列左移】条带的右缘在 place() 里已经扣过 reserve 了，
             // 这里再移一次会把卡片推到条带左缘之外 —— 那正是"不许再左"要禁止的。
@@ -495,10 +507,17 @@ public final class CardStage {
     private boolean stripModeOn;
     /** 条带模式生效时本帧的条带宽（屏幕像素）；回退档是 0。 */
     private float lastStripWidth;
+    /** 本帧生效的底部留白：条带档 {@link HudSafeZone#STRIP_BOTTOM}，回退档 {@link HudSafeZone#bottomInset()}。 */
+    private int lastBottomMargin = HudSafeZone.bottomInset();
     /** 上一次落点变化时打过的日志（变了才打，不刷屏）。 */
     private String stripNote = "";
     /** 本帧画布宽（条带左缘按它算）。 */
     private int lastGuiWidth;
+
+    /** 本帧的落点说明（只读诊断；harness 那行"安全区"日志末尾会带上它）。 */
+    public String placementNote() {
+        return stripNote;
+    }
 
     /**
      * 右侧要让开多少：<b>计分板侧栏</b>与<b>状态效果图标</b> —— 两者都只在卡堆<b>真的碰到</b>
