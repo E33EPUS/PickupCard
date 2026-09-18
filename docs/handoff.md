@@ -46,13 +46,14 @@
 **harness 现在能全自动跑**（`--quickPlaySingleplayer` 自己进世界 → 自己操作 → 自己截图 → 自己退出），
 跑测纪律与踩过的坑写在下面"跑测的纪律"那条里 —— **别再用前台调用跑它**。
 
-✅ **已部署 2026-09-18 10:5x（配置界面重铸 + 标签列漏画修复 + 底部撞字修复 + 过滤页）**：
+✅ **已部署 2026-09-18 11:0x（配置界面重铸 + 标签列漏画修复 + 底部撞字修复 + 过滤页 + 强调色接真源）**：
 `D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
-`sha256 550c0b7fcdd04d15…`（**含 `32c5731` 的过滤页**；在不在 jar 里是**解包查字节码**验的
-——`RuleListEdit.class` 在新包里、`NvgTextField` 有新工厂、`typeOption`/`buildFilter` 都在，
+`sha256 3151b2ee520144e8…`（**含 `dce1afe` 的强调色接真源**；在不在 jar 里是**解包查字节码**验的
+——`StyleModel$Accents.class` 在包里、`assets/.../default.json` 的 `accent` 六个键齐全，
 不是靠时间戳猜；`mods/` 里仍只有这一份；玩家侧 TOML 已删，下次启动重新生成）。
-提交线：`32c5731`（过滤页）→ `4eba40f` + `7c9beaa`（底部撞字 + 文档）→ `8881c1c`（harness 两个 bug）
-→ `14b7d4e` + `0b85e1e`（标签列漏画 + 文档）。历史 sha：`951ab7b15017adbc…`、`b260353d9f2bc964…`。
+提交线：`dce1afe`（强调色）→ `32c5731`（过滤页）→ `4eba40f` + `7c9beaa`（底部撞字 + 文档）
+→ `8881c1c`（harness 两个 bug）→ `14b7d4e` + `0b85e1e`（标签列漏画 + 文档）。
+历史 sha：`550c0b7fcdd04d15…`、`951ab7b15017adbc…`、`b260353d9f2bc964…`。
 
 - **harness 现在自己会进世界了**（用户报的"每次都要我手动进世界、你没有任何作为"）。
   三个根因一起修：① 注入需要 `mc.level != null`，而**没有任何东西让它进过世界** —— 带
