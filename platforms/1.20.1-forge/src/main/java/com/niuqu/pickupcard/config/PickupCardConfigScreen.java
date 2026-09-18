@@ -3,6 +3,7 @@ package com.niuqu.pickupcard.config;
 import com.niuqu.pickupcard.filter.RuleListEdit;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.layout.StackLayout;
+import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.notice.MergeMode;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.rarity.RarityAccent;
@@ -30,6 +31,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.Rarity;
 import net.minecraftforge.common.ForgeConfigSpec;
 import org.lwjgl.glfw.GLFW;
 
@@ -198,23 +200,36 @@ public final class PickupCardConfigScreen extends Screen {
      * <p>【为什么不是一个固定的"经验卡"】排版问题只在特定内容下才露出来 —— 名字长到要截断、
      * 稀有度换颜色、微光、只有数字。给一个样例等于只验一种，而"预览看着好好的、
      * 真卡糊成一团"正是这么发生的。
+     * <p>【四格为什么正好是四个颜色】用户 2026-09-18 问「为什么预览里的四个等级，颜色都是
+     * 一样的灰色？原版有稀有度这个机制吗？怎么读取的？」—— 机制有（{@code net.minecraft.
+     * world.item.Rarity}，{@code ItemStack#getRarity()} 读），但<b>样例物品选错了</b>：
+     * 「稀有」那一格用的是<b>钻石剑</b>，而钻石剑在原版是 {@code COMMON}。现在每一格都写死
+     * 标称档位，{@link #verify()} 在启动时对一次，标称与实际不符就报 ERROR —— 这种错不会崩、
+     * 不会抛异常，只会安安静静画成灰的，只有一条日志能拦住它。
      */
     private enum Sample {
-        COMMON("普通", Items.STONE, "+64", false, null, "灰档：最常见的那种"),
-        RARE("稀有", Items.DIAMOND_SWORD, "+1", false, null, "青档：稀有度换强调色"),
-        XP("经验", Items.NETHER_STAR, "+137", true, null, "微光：经验卡会亮一层"),
-        LONG_NAME("长名", Items.DIAMOND_PICKAXE, "+1", false,
-                "钻石镐（效率 V · 时运 III）", "截断：名字太长就补省略号");
+        COMMON("普通", Items.STONE, Rarity.COMMON, "+64", false, null,
+                "最常见的那一档 —— 灰。原版绝大多数物品都在这档（钻石剑、钻石镐也是）"),
+        RARE("稀有", Items.GOLDEN_APPLE, Rarity.RARE, "+1", false, null,
+                "稀有档 —— 青。样例必须是真·稀有的物品：拿钻石剑当稀有样例只会得到一片灰"),
+        XP("经验", Items.NETHER_STAR, null, "+137", true, null,
+                "经验卡：绿是它专用的一档，刻意不参与稀有度分级"),
+        LONG_NAME("长名", Items.ENCHANTED_GOLDEN_APPLE, Rarity.EPIC, "+1", false,
+                "附魔金苹果（珍藏 · 来自末地城）", "史诗档 —— 紫；顺带验名字太长会被截断");
 
         final String label;
         final String count;
         /** 值得给一层稀有度微光的卡（经验卡）。 */
         final boolean glow;
         final String hint;
+        /** 这一格<b>标称</b>的稀有度；{@code null} = 不参与稀有度演示（经验卡）。 */
+        private final Rarity tier;
         private final ItemStack icon;
 
-        Sample(String label, Item item, String count, boolean glow, String customName, String hint) {
+        Sample(String label, Item item, Rarity tier, String count, boolean glow,
+               String customName, String hint) {
             this.label = label;
+            this.tier = tier;
             this.count = count;
             this.glow = glow;
             this.hint = hint;
@@ -224,6 +239,27 @@ public final class PickupCardConfigScreen extends Screen {
                 this.icon.setHoverName(Component.literal(customName));
             }
         }
+
+        /**
+         * 启动时对一次：标称档位必须就是<b>原版读出来的</b>那一档。
+         * <p>只在第一次用到样例时跑（{@code verifyDone}），不进每帧路径。
+         */
+        static void verify() {
+            if (verifyDone) {
+                return;
+            }
+            verifyDone = true;
+            for (Sample s : values()) {
+                if (s.tier != null && s.icon.getRarity() != s.tier) {
+                    PickupCard.LOGGER.error("[样例] {} 标称 {}，实际读到的是 {}（{}）—— 预览的颜色会不对",
+                            s.label, s.tier, s.icon.getRarity(),
+                            BuiltInRegistries.ITEM.getKey(s.icon.getItem()));
+                }
+            }
+        }
+
+        private static boolean verifyDone;
+
 
         /** 卡上那个名字：开了「显示物品ID」就跟真卡一样显示 ID。 */
         String name(boolean showItemId) {
@@ -358,6 +394,8 @@ public final class PickupCardConfigScreen extends Screen {
     public PickupCardConfigScreen(Screen parent) {
         super(Component.literal("拾起卡片 · 设置"));
         this.parent = parent;
+        // 预览一打开就核对样例的真实稀有度（只跑一次）—— 标称与实际不符会在日志里报 ERROR
+        Sample.verify();
     }
 
     // ------------------------------------------------------------------
