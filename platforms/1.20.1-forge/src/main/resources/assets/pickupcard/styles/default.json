@@ -24,7 +24,8 @@
     "uncommon": "#FFD83D",
     "rare": "#55EBFF",
     "epic": "#D78BFF",
-    "xp": "#7DFF8A"
+    "xp": "#7DFF8A",
+    "overflow": "#A8B2C0"
   },
   "animation": {
     "enterMs": 480,

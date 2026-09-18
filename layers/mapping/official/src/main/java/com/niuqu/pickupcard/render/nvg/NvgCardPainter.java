@@ -163,7 +163,7 @@ public final class NvgCardPainter {
                 nvgTranslate(vg, slot.x(), slot.y());
                 nvgScale(vg, cardScale, cardScale);
                 paintShell(vg, style, 0f, 0f, slot.width() / cardScale, slot.height() / cardScale,
-                        accentOf(card), canvas.barOf(slot.view()),
+                        accentOf(card, style.accents()), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise), rise, isHighlighted(card),
                         windowOf(canvas, slot, style, rise));
                 nvgRestore(vg);
@@ -333,7 +333,7 @@ public final class NvgCardPainter {
         float shift = clip ? 0f : -(1f - rise) * bodyW;
         float alpha = exitAlphaOf(canvas, slot);
         float x = bodyX + shift;
-        int accent = accentOf(card);
+        int accent = accentOf(card, style.accents());
 
         gui.pose().pushPose();
         gui.pose().translate(slot.x(), slot.y(), 0f);
@@ -513,13 +513,13 @@ public final class NvgCardPainter {
         return canvas.exitAlphaOf(slot.view());
     }
 
-    private static int accentOf(Inbox.Card card) {
+    private static int accentOf(Inbox.Card card, StyleModel.Accents accents) {
         // 【为什么用 if 而不是 switch】1.20.1 这一支是 Java 17，模式匹配的 switch 还是预览特性
         if (card.content() instanceof CardContent.Item item) {
-            return RarityAccent.of(item.stack());
+            return RarityAccent.of(item.stack(), accents);
         }
         return card.content() instanceof CardContent.Overflow
-                ? RarityAccent.OVERFLOW : RarityAccent.XP;
+                ? RarityAccent.overflow(accents) : RarityAccent.xp(accents);
     }
 
     /**

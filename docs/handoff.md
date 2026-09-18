@@ -467,13 +467,36 @@ opaque=true → `RenderSystem.disableBlend()`；而 `BlendMode.lastApplied` 是 
      第 5 颗会顶出标签列底边（dev 专用，真玩家到不了）。
 4. **主题数据化（⑤）**：用户当时没选。记在这儿当一个方向：把 `tokens.css` 之外的
    颜色/几何真正搬进主题 JSON，让玩家能整套换肤（现在只有单键覆盖 `StyleOverrides`）。
-5. **阴影的尺子**：浅灰底 + 竖直灰度剖面，草稿与游戏并排 —— 尺子做完再谈调参。
-6. **清理第二真源与死代码**：`RarityAccent` 改成从主题取强调色；删 `BaselineCardPainter`；
-   级差收进 token（现在三份）。
+5. ❌ **阴影的尺子 —— 这条作废了（2026-09-18 核实）**。影子（投影）早就删了，代码注释写着
+   「投影删了之后，这是唯一还需要软边的地方」—— `softBox` / `nvgBoxGradient` 现在只服务
+   **微光**。没有量影子的对象，尺子也就没有主。**别再照这条开工。**
+6. ✅ **清理第二真源与死代码 —— 做完了（2026-09-18）**。三个分句的实际状态：
+   - **`删 BaselineCardPainter`：早就删了**（它随 SDF 形状层一起走的，清单这条是过时的）。
+   - **`RarityAccent` 改成从主题取强调色：真做了，而且比清单说的更严重** ——
+     主题 JSON 里 `accent.*` **从第一天就写着那六个数，但没有任何代码读它**（`StyleModel`
+     里根本没有 accent 字段），`RarityAccent` 把同样的值硬编码了一遍。也就是
+     **一份真源两份数据，而且是"那五个键改了没反应"的静默陷阱**。修法：`StyleModel` 加一个
+     嵌套 record `StyleModel.Accents`（六个色：common/uncommon/rare/epic/xp/overflow），
+     从 `accent.*` 解析 + 夹逼；`RarityAccent.of(stack, accents)` 只负责"vanilla 四档 → 主题的
+     四个位置"（是"哪一档"的知识，不是"什么颜色"的知识）；RarityCore 将来接的就是**一个
+     Accents 实例**。`accent.overflow` 是唯一没进 token 的，已补进 `tokens.css` +
+     `css_tokens.py` 的 SCHEMA + 两份主题 JSON。
+   - **「级差」（= 强调色的第三份）：`NvgPalette.dark()/light()` 里写死的 `0xFF7DFF8A /
+     0xFF2E9E45` 正好就是 `accent.xp`** —— 界面选中色因此不跟主题走。已改成取
+     `style.accents().xp()`。**界面其余几色留在 `NvgPalette` 自己这儿**：它们不是任何卡片
+     颜色的副本、只有一份，让界面 chrome 也能整套换肤是另一个决定（不是"清理重复"）。
+   - **端到端验过**（判别实验：把主题里的值改成不可能自然出现的纯色，看真机跟不跟）：
+     `accent.rare` → `#FF0000`、`accent.xp` → `#0000FF` 后跑 `-PharnessAuto=shot`，
+     `pickupcard-harness-p1` 里量到 **619 个纯红像素、837 个纯蓝**——而一张卡的竖条是
+     4×16 逻辑px = 12×48 物理 = 576 px（加抗锯齿边正好 ≈619），红像素在图上就是
+     **一条 4 格宽 × 18 行的整条竖条**，数量文字同色。改之前这条链是断的（竖条恒为硬编码的青），
+     所以这是有效判别。（量到的青/绿是**物品图标**本身，不是强调色。）
 7. **提醒**：`run/config/*.toml` 在 `run/` 里被 gitignore，且**优先于代码默认值**。
    改了 `PickupCardConfig` 的默认值之后要么删掉让它重新生成、要么手动改。
 8. **`ConfigLayout` 的已知边角**：画布高 < ~140px 时 `items.h` 会算成 0（BOTTOM 那 22px 说明行
    吃掉了）。**真玩家到不了**（原版下限 320×240），没修，记在这儿免得下次当新 bug 查。
+9. **超长名字截断（Q8 的屏宽上限）**：`nameMaxWidth = 0` 时按屏宽自动截断，真机没专门验过。
+   `card.html` 的草稿侧有对应版面，但"名字长到顶格时卡片右缘会不会出界"只有真机能证。
 
 ## 方法论：踩过、别重踩
 

@@ -67,4 +67,47 @@ class StyleModelTest {
         assertTrue(!parsed.bumpEnabled());
         assertTrue(!parsed.glowPulseEnabled());
     }
+
+    // ---- 强调色：主题里从第一天就写着这些键，但 2026-09-18 之前没人读 ----
+
+    @Test
+    void accentsComeFromTheTheme() {
+        StyleModel parsed = StyleModel.parse("""
+                {"accent": {"common": "#111111", "uncommon": "#222222", "rare": "#333333",
+                            "epic": "#444444", "xp": "#555555", "overflow": "#666666"}}""");
+        StyleModel.Accents a = parsed.accents();
+        assertEquals(0xFF111111, a.common());
+        assertEquals(0xFF222222, a.uncommon());
+        assertEquals(0xFF333333, a.rare());
+        assertEquals(0xFF444444, a.epic());
+        assertEquals(0xFF555555, a.xp());
+        assertEquals(0xFF666666, a.overflow());
+    }
+
+    @Test
+    void missingAccentKeysFallBackOneByOne() {
+        // 主题文件永远允许只写想改的那几行：写了的生效，没写的回默认
+        StyleModel.Accents def = StyleModel.Accents.defaults();
+        StyleModel.Accents a = StyleModel.parse("{\"accent\": {\"rare\": \"#010203\"}}").accents();
+        assertEquals(0xFF010203, a.rare());
+        assertEquals(def.common(), a.common());
+        assertEquals(def.overflow(), a.overflow());
+    }
+
+    @Test
+    void accentsSurviveOverridesAndSanitize() {
+        // 覆盖不改强调色（它整套归主题），但夹逼不能把它丢掉
+        StyleModel themed = StyleModel.parse("{\"accent\": {\"rare\": \"#0A0B0C\"}}");
+        StyleModel applied = StyleOverrides.builder().cornerRadius(9).build().apply(themed);
+        assertEquals(0xFF0A0B0C, applied.accents().rare());
+        assertEquals(9, applied.cornerRadius());
+    }
+
+    @Test
+    void nullAccentsCannotReachTheRenderer() {
+        // 手搓一个 accents 为空的主题也应被夹逼兜住，而不是让渲染层 NPE
+        StyleModel broken = new StyleModel(4, 4, 3, 3, 16, 4, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+                true, true, true, null);
+        assertEquals(StyleModel.Accents.defaults().rare(), broken.sanitized().accents().rare());
+    }
 }

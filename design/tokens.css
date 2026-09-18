@@ -55,6 +55,9 @@
   --pc-accent-rare: #55EBFF;
   --pc-accent-epic: #D78BFF;
   --pc-accent-xp: #7DFF8A;
+  /* 溢出卡（"还有 N 项"）的强调色。中性灰蓝：它的成员混着各种稀有度，跟谁都会让
+     "这张卡是什么档"说不清 —— 它本来就不是一件东西，是一个"还有更多"的信号。 */
+  --pc-accent-overflow: #A8B2C0;
 
   /* ---- 动画 ---- */
   --pc-enter-ms: 480;        /* 入场总时长；竖条占前 50%（240ms），内容从 20%（96ms）起跑、
@@ -84,4 +87,5 @@
   --pc-accent-rare: #0089A8;
   --pc-accent-epic: #A64FD1;
   --pc-accent-xp: #2E9E45;
+  --pc-accent-overflow: #6B7480;
 }

@@ -54,6 +54,7 @@ SCHEMA = {
     "--pc-accent-rare":     ("accent", "rare", "color"),
     "--pc-accent-epic":     ("accent", "epic", "color"),
     "--pc-accent-xp":       ("accent", "xp", "color"),
+    "--pc-accent-overflow": ("accent", "overflow", "color"),
     # 动画
     "--pc-enter-ms":        ("animation", "enterMs", "int"),
     "--pc-bump-ms":         ("animation", "bumpMs", "int"),

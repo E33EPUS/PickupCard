@@ -47,23 +47,32 @@ public final class NvgPalette {
     public float knobRadius = 5f;
 
     /** 深色界面。默认就是它 —— 游戏里九成时间在暗环境，浅色面板会晃眼。 */
-    public static NvgPalette dark() {
+    public static NvgPalette dark(StyleModel.Accents a) {
         return new NvgPalette(0xF0101218, 0xC0202836, 0x80202836, 0xB0364152, 0xC04A5871,
-                0xFF7DFF8A, 0x40FFFFFF, 0xFFEBEFF6, 0xFF9AA4AD);
+                a.xp(), 0x40FFFFFF, 0xFFEBEFF6, 0xFF9AA4AD);
     }
 
     /** 浅色：跟着主题走（主题是浅色时用这套）。 */
-    public static NvgPalette light() {
+    public static NvgPalette light(StyleModel.Accents a) {
         return new NvgPalette(0xF0E9ECF3, 0xC0FFFFFF, 0x60D5DAE5, 0xA0C3CAD8, 0xC0A9B2C4,
-                0xFF2E9E45, 0x40000000, 0xFF1B1F27, 0xFF5A6272);
+                a.xp(), 0x40000000, 0xFF1B1F27, 0xFF5A6272);
     }
 
-    /** 按卡面主题选一套界面配色 —— 界面跟卡面同族，不然像两个 mod 拼在一起。 */
+    /**
+     * 按卡面主题选一套界面配色 —— 界面跟卡面同族，不然像两个 mod 拼在一起。
+     * <p>【强调色为什么也从主题取】它原本写死成 {@code 0xFF7DFF8A / 0xFF2E9E45}，
+     * 而那两个数<b>正好就是主题里 {@code accent.xp} 的值</b> —— 又一处"一份真源两份数据"：
+     * 玩家把主题的 xp 色改掉之后，卡片的经验条跟着变、界面上的选中色却不动。
+     * <p>【其余几色为什么留在界面自己这儿】它们不是任何卡片颜色的副本，只有这一份
+     * （见类注释：旧版正是"颜色散在六个控件文件里"才改不干净的）。让界面 chrome 也能
+     * 整套换肤是另一个决定，不属于"清理重复"。
+     */
     public static NvgPalette of(StyleModel style) {
         // 卡面底色偏亮（fillTop 的 alpha/亮度高）就当作浅色主题
         int rgb = style.fillTop() & 0xFFFFFF;
         int brightness = ((rgb >> 16) & 0xFF) + ((rgb >> 8) & 0xFF) + (rgb & 0xFF);
-        return brightness > 3 * 128 ? light() : dark();
+        StyleModel.Accents accents = style.accents();
+        return brightness > 3 * 128 ? light(accents) : dark(accents);
     }
 
     private NvgPalette(int backdrop, int panel, int well, int wellHover, int wellPressed,

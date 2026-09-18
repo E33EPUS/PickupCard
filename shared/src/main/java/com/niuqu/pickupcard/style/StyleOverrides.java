@@ -99,7 +99,9 @@ public record StyleOverrides(OptionalInt cornerRadius,
                 bumpMs.orElse(theme.bumpMs()),
                 enterEnabled.orElse(theme.enterEnabled()),
                 bumpEnabled.orElse(theme.bumpEnabled()),
-                theme.glowPulseEnabled()).sanitized();
+                theme.glowPulseEnabled(),
+                // 强调色不在 TOML 覆盖项里：它是"哪一档"的色表，整套归主题（或 RarityCore）
+                theme.accents()).sanitized();
     }
 
     /** 可变构建器：每设一项都显式命名，杜绝位置错。 */

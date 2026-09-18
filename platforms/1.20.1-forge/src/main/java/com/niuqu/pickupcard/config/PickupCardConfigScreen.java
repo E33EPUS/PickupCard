@@ -233,7 +233,8 @@ public final class PickupCardConfigScreen extends Screen {
 
         /** 强调色走真卡的同一张色表 —— 预览里的颜色必须就是游戏里那个颜色。 */
         int accent() {
-            return this == XP ? RarityAccent.XP : RarityAccent.of(icon);
+            StyleModel.Accents a = CardStage.INSTANCE.previewStyle().accents();
+            return this == XP ? RarityAccent.xp(a) : RarityAccent.of(icon, a);
         }
     }
 
@@ -245,7 +246,7 @@ public final class PickupCardConfigScreen extends Screen {
     private final List<NvgWidget> tabButtons = new ArrayList<>();
     /** 预览底下那排「切样例」按钮（预览收起时它们是零矩形，点不到）。 */
     private final List<NvgWidget> sampleButtons = new ArrayList<>();
-    private NvgPalette palette = NvgPalette.dark();
+    private NvgPalette palette = NvgPalette.dark(StyleModel.Accents.defaults());
     /** 控件里点出来的"切换分类/重建"请求：不在事件遍历中途重建列表。 */
     private boolean pendingRebuild;
     /**

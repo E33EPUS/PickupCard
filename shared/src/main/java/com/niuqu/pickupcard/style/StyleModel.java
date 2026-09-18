@@ -41,6 +41,7 @@ import org.jetbrains.annotations.Nullable;
  * @param enterEnabled   入场动画开关
  * @param bumpEnabled    数字跳动开关
  * @param glowPulseEnabled 稀有度微光呼吸开关
+ * @param accents        稀有度强调色一组六个数（含经验卡与溢出卡）
  */
 public record StyleModel(int cornerRadius,
                          int paddingH,
@@ -59,7 +60,26 @@ public record StyleModel(int cornerRadius,
                          long bumpMs,
                          boolean enterEnabled,
                          boolean bumpEnabled,
-                         boolean glowPulseEnabled) {
+                         boolean glowPulseEnabled,
+                         Accents accents) {
+
+    /**
+     * 稀有度强调色（竖条 + 数量同色）。
+     * <p>【为什么是一个嵌套 record 而不是六个分量】{@code StyleModel} 已经有 18 个分量，
+     * 再摊六个颜色进去，构造器与 {@code parse} 会长到读不动；而这六个数是同一件事
+     * （"这张卡算哪一档"），合成一个概念更好叫、也更好整套传给渲染层。加第七档
+     * （RarityCore）时也只需要动这里。
+     * <p>【为什么 Java 里不再留一份硬编码】主题 JSON 里 {@code accent.*} 从第一天就写着
+     * 同样的六个数，而 {@code RarityAccent} 里又写了一遍 —— <b>一份真源两份数据</b>，
+     * 改主题时 Java 那份不会跟着动（这正是"第二真源"的坏处）。tokens.css 的注释也写明
+     * 这组值是"无 RarityCore 联动时的兜底"，即本来就应该由主题提供。
+     */
+    public record Accents(int common, int uncommon, int rare, int epic, int xp, int overflow) {
+        public static Accents defaults() {
+            return new Accents(0xFF9AA4AD, 0xFFFFD83D, 0xFF55EBFF, 0xFFD78BFF,
+                    0xFF7DFF8A, 0xFFA8B2C0);
+        }
+    }
 
     public static StyleModel defaults() {
         return new StyleModel(
@@ -67,7 +87,8 @@ public record StyleModel(int cornerRadius,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 46,
                 0xF0EBEFF6,
-                560L, 300L, true, true, true);
+                560L, 300L, true, true, true,
+                Accents.defaults());
     }
 
     /** 主题里的数值全部过一遍夹逼：玩家手写的 JSON 不该能把渲染打崩。 */
@@ -86,7 +107,8 @@ public record StyleModel(int cornerRadius,
                 nameColor,
                 Math.max(0, enterMs),
                 Math.max(0, bumpMs),
-                enterEnabled, bumpEnabled, glowPulseEnabled);
+                enterEnabled, bumpEnabled, glowPulseEnabled,
+                accents == null ? Accents.defaults() : accents);
     }
 
     // iconSize() 是 record 自带的存取器，不要再定义一遍
@@ -104,6 +126,8 @@ public record StyleModel(int cornerRadius,
             JsonObject mat = obj(root, "material");
             JsonObject tex = obj(root, "text");
             JsonObject anim = obj(root, "animation");
+            JsonObject acc = obj(root, "accent");
+            Accents def = Accents.defaults();
             return new StyleModel(
                     i(geo, "cornerRadius", 4),
                     i(geo, "paddingH", 4),
@@ -122,7 +146,14 @@ public record StyleModel(int cornerRadius,
                     i(anim, "bumpMs", 300),
                     b(anim, "enterEnabled", true),
                     b(anim, "bumpEnabled", true),
-                    b(anim, "glowPulseEnabled", true)).sanitized();
+                    b(anim, "glowPulseEnabled", true),
+                    new Accents(
+                            color(acc, "common", def.common()),
+                            color(acc, "uncommon", def.uncommon()),
+                            color(acc, "rare", def.rare()),
+                            color(acc, "epic", def.epic()),
+                            color(acc, "xp", def.xp()),
+                            color(acc, "overflow", def.overflow()))).sanitized();
         } catch (Exception e) {
             return defaults();
         }
