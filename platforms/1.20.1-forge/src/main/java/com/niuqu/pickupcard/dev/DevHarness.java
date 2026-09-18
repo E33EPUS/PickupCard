@@ -119,14 +119,31 @@ public final class DevHarness {
          */
         private static final int EXIT_PUSH_AFTER = SHOT_AFTER_OPEN + 2;
         private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
-        /** 看见第一帧退场之后，再过几帧才算"淡到一半"（那时再捡同一个物品触发淡回）。 */
-        private static final int REVIVE_AFTER_EXIT_SEEN = 3;
+        /**
+         * 淡出<b>后段</b>拍一张（退场全长约 29 tick，取第 12 tick ≈ 只剩两成不透明）。
+         * <p>【为什么非要这一帧】"图标到底跟不跟着淡"在前段看不出来：那时卡还有九成亮，
+         * 图标满不透明和跟着淡只差 10%。到了后段，外壳只剩两成 —— 图标要是没跟着淡，
+         * 它会**亮得刺眼**，一眼可辨、也可量。2026-09-18 的根因（`renderItem` 不自己 flush）
+         * 就是靠这一帧定死的。
+         */
+        private static final int EXIT_LATE_TICK = 4;
+        /** 连拍间隔（帧）与张数：4/6/8/10/12… 覆盖退场的整个后段。 */
+        private static final int EXIT_LATE_EVERY = 4;
+        private static final int EXIT_LATE_FRAMES = 6;
+        /**
+         * 看见第一帧退场之后，再过几帧才算"淡到一半"（那时再捡同一个物品触发淡回）。
+         * <p>【为什么从 3 挪到 15】3 太早：淡回一触发，退场就被撤销，**后段根本不存在**，
+         * 上面那一帧永远拍不到。挪到 15 之后，12 那一帧是干净的退场后段，
+         * 15 再验"救回"，两件事各拍各的。
+         */
+        private static final int REVIVE_AFTER_EXIT_SEEN = 15;
         /** 淡回开始之后再过几帧拍一张。 */
         private static final int REVIVE_SHOT_AFTER = 2;
 
         /** 探针状态：退场与淡回各只做一次，靠"看见"驱动而不是靠固定 tick。 */
         private static boolean exitSeen;
         private static boolean exitShotDone;
+        
         private static boolean reviveDone;
         private static int ticksSinceExitSeen;
         private static int ticksSinceRevive;
@@ -632,6 +649,17 @@ public final class DevHarness {
                     Screenshot.grab(mc.gameDirectory, "pickupcard-hud-exit", mc.getMainRenderTarget(),
                             m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud-exit -> {}",
                                     m.getString()));
+                } else if (exitSeen && ticksSinceExitSeen >= EXIT_LATE_TICK
+                        && (ticksSinceExitSeen - EXIT_LATE_TICK) % EXIT_LATE_EVERY == 0
+                        && ticksSinceExitSeen <= EXIT_LATE_TICK + EXIT_LATE_EVERY * (EXIT_LATE_FRAMES - 1)) {
+                    // 【为什么连拍一串】"tick" 这个计数挂在渲染事件上、按帧走，而退场按毫秒走，
+                    // 两者的换算随帧率变 —— 想精确命中"淡到两成"那一帧就得靠猜，猜错过一次
+                    // （抓到的是一张还没开始退场的卡，A/B 白做）。改成固定间隔连拍，
+                    // 事后在图上挑出真正在淡的那一帧。
+                    Screenshot.grab(mc.gameDirectory,
+                            "pickupcard-hud-exit-late" + ticksSinceExitSeen, mc.getMainRenderTarget(),
+                            m -> PickupCard.LOGGER.info("[harness-auto] 截图: exit-late{} -> {}",
+                                    ticksSinceExitSeen, m.getString()));
                 } else if (exitShotDone && !reviveDone && anyExiting()
                         && ticksSinceExitSeen >= REVIVE_AFTER_EXIT_SEEN) {
                     // 【为什么要推这一下】用户报过「淡出最后一帧图标和文字完全不透明，然后消失」。

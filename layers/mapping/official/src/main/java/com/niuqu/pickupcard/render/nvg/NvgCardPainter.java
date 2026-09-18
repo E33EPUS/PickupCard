@@ -368,6 +368,15 @@ public final class NvgCardPainter {
         gui.renderItem(iconStack, -8, -8);
         gui.pose().popPose();
         if (fading) {
+            // 【复位之前必须先冲一次 —— 2026-09-18 补的，补之前整段淡出是坏的】
+            // 上面那句"renderItem 内部自己会 flush"是**错的**：1.20.1 的
+            // {@code GuiGraphics#renderItem(ItemStack,int,int)} 从头到尾一次 flush 都没有
+            // （javap -c 核过，它只把四边形入队）。所以真实顺序是：
+            //   设色(alpha) → 图标入队 → 立刻复位成 1.0 → 稍后别处 flush 才真正提交
+            // 提交时色已经被复位，**图标整段淡出都是满不透明的**，到点跟着卡一起消失。
+            // 玩家看到的两件事是同一个根因：①「淡出的最后一帧图标闪一下」；
+            // ②「卡片根本没有淡出动画」—— 图标是卡上最大最亮的一块，它不淡，整张卡就不像在淡。
+            gui.flush();
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
 
@@ -458,6 +467,9 @@ public final class NvgCardPainter {
         gui.renderItem(icon, -8, -8);
         gui.pose().popPose();
         if (fading) {
+            // 同正文那条：renderItem 不自己 flush，不复位前先冲一次就等于没设过色
+            // （见 {@code drawContent} 里那段说明）。预览与真卡共用同一个坑，两处都要补。
+            gui.flush();
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
 
