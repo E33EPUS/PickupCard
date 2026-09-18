@@ -60,7 +60,7 @@ public final class CardView {
 
     /**
      * 被救回（同一个物品又捡到了）：不瞬间回到全不透明，而是从「退场已经播到哪儿」补回去，
-     * 时长见 {@link com.niuqu.pickupcard.style.CardTimeline#REVIVE_MS}。
+     * 时长是主题里的 {@code --pc-revive-ms}（见 {@code StyleModel#reviveMs()}）。
      */
     public void beginRevive(long now) {
         if (exitStartAt != NO_EXIT && reviveAt == NO_EXIT) {

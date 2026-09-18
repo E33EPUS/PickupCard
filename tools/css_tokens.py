@@ -58,6 +58,7 @@ SCHEMA = {
     # 动画
     "--pc-enter-ms":        ("animation", "enterMs", "int"),
     "--pc-bump-ms":         ("animation", "bumpMs", "int"),
+    "--pc-revive-ms":       ("animation", "reviveMs", "int"),
     "--pc-enter-enabled":   ("animation", "enterEnabled", "bool"),
     "--pc-bump-enabled":    ("animation", "bumpEnabled", "bool"),
     "--pc-glow-pulse":      ("animation", "glowPulseEnabled", "bool"),

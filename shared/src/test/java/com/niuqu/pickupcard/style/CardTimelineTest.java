@@ -90,6 +90,31 @@ class CardTimelineTest {
     }
 
     @Test
+    void exitAlphaIsOneMinusEaseOutCubicOfProgress() {
+        for (long t = 0; t <= 480; t += 20) {
+            float p = CardTimeline.exit(1_000L + t, 1_000L, 480L);
+            assertEquals(1f - Easing.easeOutCubic(p),
+                    CardTimeline.exitAlpha(1_000L + t, 1_000L, 480L), 1e-6, "t=" + t);
+        }
+        assertEquals(1f, CardTimeline.exitAlpha(1_000L, 1_000L, 480L), 1e-6);
+        assertEquals(0f, CardTimeline.exitAlpha(1_480L, 1_000L, 480L), 1e-6);
+    }
+
+    /**
+     * 「淡到看不见」的门槛落在淡出的哪一刻 —— 这条钉的是用户 2026-09-18 报的那件事。
+     * <p>救回的不透明度是从"已经淡到哪儿"补回来的，所以救回发生在淡出末段时，屏幕上是
+     * 一张已经看不见的卡凭空冒出来（也就是"最后一帧文字和图标突然闪一下"）。0.15 这个门槛
+     * 配 easeOutCubic 意味着：<b>默认 480ms 的淡出里，前 225ms 值得救回，之后不值得</b>。
+     * 数字被改了的话这条会红 —— 那时候要重新想"救回 vs 重播入场"的分界。
+     */
+    @Test
+    void theTooFadedToReviveThresholdSitsJustBeforeHalfTheFade() {
+        assertEquals(0.15f, CardTimeline.exitAlpha(1_225L, 1_000L, 480L), 0.005f);
+        assertTrue(CardTimeline.exitAlpha(1_200L, 1_000L, 480L) > 0.15f, "前半段还看得见，该救回");
+        assertTrue(CardTimeline.exitAlpha(1_250L, 1_000L, 480L) < 0.15f, "过了就没救了，该重播入场");
+    }
+
+    @Test
     void easeOutBackOvershootsThenSettles() {
         // 过冲是"弹性"档的灵魂：中途必须超过 1，终点必须恰好落回 1
         assertTrue(Easing.easeOutBack(0.6f) > 1f, "easeOutBack 应该过冲");

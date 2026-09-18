@@ -67,7 +67,9 @@ public record CardCanvas(long now,
         if (!view.reviving()) {
             return 0f;
         }
-        long ms = CardTimeline.REVIVE_MS;
+        // 时长来自主题（--pc-revive-ms）。从前是 CardTimeline 里一个常量 160ms，
+        // 而淡出（exitMs 480）是配置项 —— 回来比离开快 3 倍，读起来就是"凭空冒出来"。
+        long ms = style.reviveMs();
         return ms <= 0L ? 1f : Easing.clamp01((now - view.reviveAt()) / (float) ms);
     }
 

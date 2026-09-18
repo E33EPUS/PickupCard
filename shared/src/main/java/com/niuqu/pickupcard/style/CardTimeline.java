@@ -19,13 +19,18 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     }
 
     /**
-     * 「淡回」的时长：被救回时，不透明度从当前位置补回 1 所需的时间。
+     * 「淡回」时长的兜底值：主题没给 {@code --pc-revive-ms} 时用它（正常路径见
+     * {@link com.niuqu.pickupcard.style.StyleModel#reviveMs()}）。
      * <p>
      * 【为什么不是瞬间回到 1】从前那一版就是瞬间的 —— 屏幕上看是「淡到一半突然全不透明」，
-     * 也就是用户 2026-09-17 报的那个 bug。他在三个选项里选了这一档（淡回）：160ms 刚好
-     * 让人觉得「这张卡又活了」，又不至于慢到像重播一遍入场。
+     * 也就是用户 2026-09-17 报的那个 bug。
+     * <p>
+     * 【为什么从 160 挪到 300】160ms 那个数是在"淡回只跟入场比"的前提下定的，漏了真正对称的
+     * 那一头：<b>淡出</b>。淡出 480ms、淡回 160ms = 回来比离开快 3 倍，而救回往往发生在淡出
+     * 末尾（卡片已经淡到 alpha ≈ 0.01）—— 于是"文字和图标突然闪一下"（用户 2026-09-18 的原话）。
+     * 300ms 比离开利落、又不至于快到读成闪；它在主题里，跟别的动画参数一样可调。
      */
-    public static final long REVIVE_MS = 160L;
+    public static final long DEFAULT_REVIVE_MS = 300L;
 
     /**
      * 入场两段的窗口 —— 2026-09-17 定的节奏，配 {@code --pc-enter-ms: 480}：
@@ -109,5 +114,16 @@ public record CardTimeline(long enterMs, long bumpMs, boolean enterEnabled, bool
     public static float exit(long now, long exitStartAt, long exitMs) {
         if (exitMs <= 0L) return 1f;
         return Easing.clamp01((now - exitStartAt) / (float) exitMs);
+    }
+
+    /**
+     * 退场中的不透明度 ∈ [0,1]：{@code 1 - easeOutCubic(进度)}。
+     * <p>
+     * 【为什么单开一个纯函数】这条曲线有两个用它的地方：画的时候（要按它设色）和
+     * <b>决定要不要救回的时候</b>（淡到几乎看不见的卡不该被拽回来，见 {@code CardStage}）。
+     * 两处各写一遍迟早会分叉，而分叉的表现正是"判据说还看得见、画出来却已经没了"。
+     */
+    public static float exitAlpha(long now, long exitStartAt, long exitMs) {
+        return 1f - Easing.easeOutCubic(exit(now, exitStartAt, exitMs));
     }
 }

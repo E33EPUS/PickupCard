@@ -32,6 +32,7 @@ public record StyleOverrides(OptionalInt cornerRadius,
                              Optional<Integer> nameColor,
                              OptionalLong enterMs,
                              OptionalLong bumpMs,
+                             OptionalLong reviveMs,
                              Optional<Boolean> enterEnabled,
                              Optional<Boolean> bumpEnabled) {
 
@@ -97,6 +98,7 @@ public record StyleOverrides(OptionalInt cornerRadius,
                 nameColor.orElse(theme.nameColor()),
                 enterMs.orElse(theme.enterMs()),
                 bumpMs.orElse(theme.bumpMs()),
+                reviveMs.orElse(theme.reviveMs()),
                 enterEnabled.orElse(theme.enterEnabled()),
                 bumpEnabled.orElse(theme.bumpEnabled()),
                 theme.glowPulseEnabled(),
@@ -120,6 +122,7 @@ public record StyleOverrides(OptionalInt cornerRadius,
         private Optional<Integer> nameColor = Optional.empty();
         private OptionalLong enterMs = OptionalLong.empty();
         private OptionalLong bumpMs = OptionalLong.empty();
+        private OptionalLong reviveMs = OptionalLong.empty();
         private Optional<Boolean> enterEnabled = Optional.empty();
         private Optional<Boolean> bumpEnabled = Optional.empty();
 
@@ -193,6 +196,11 @@ public record StyleOverrides(OptionalInt cornerRadius,
             return this;
         }
 
+        public Builder reviveMs(long value) {
+            reviveMs = OptionalLong.of(value);
+            return this;
+        }
+
         public Builder enterEnabled(boolean value) {
             enterEnabled = Optional.of(value);
             return this;
@@ -206,7 +214,7 @@ public record StyleOverrides(OptionalInt cornerRadius,
         public StyleOverrides build() {
             return new StyleOverrides(cornerRadius, paddingH, paddingV, gap, iconSize, barWidth,
                     barInsetY, borderWidth, fillTop, fillBottom, border, nameColor,
-                    enterMs, bumpMs, enterEnabled, bumpEnabled);
+                    enterMs, bumpMs, reviveMs, enterEnabled, bumpEnabled);
         }
     }
 }

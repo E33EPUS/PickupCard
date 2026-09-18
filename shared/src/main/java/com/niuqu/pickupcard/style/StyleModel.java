@@ -38,6 +38,7 @@ import org.jetbrains.annotations.Nullable;
  * @param nameColor      物品名颜色
  * @param enterMs        入场动画时长
  * @param bumpMs         数字跳动时长
+ * @param reviveMs       淡回时长（退场中被再次拾起时，补回全不透明要多久）
  * @param enterEnabled   入场动画开关
  * @param bumpEnabled    数字跳动开关
  * @param glowPulseEnabled 稀有度微光呼吸开关
@@ -58,6 +59,7 @@ public record StyleModel(int cornerRadius,
                          int nameColor,
                          long enterMs,
                          long bumpMs,
+                         long reviveMs,
                          boolean enterEnabled,
                          boolean bumpEnabled,
                          boolean glowPulseEnabled,
@@ -87,7 +89,7 @@ public record StyleModel(int cornerRadius,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 46,
                 0xF0EBEFF6,
-                560L, 300L, true, true, true,
+                560L, 300L, CardTimeline.DEFAULT_REVIVE_MS, true, true, true,
                 Accents.defaults());
     }
 
@@ -107,6 +109,7 @@ public record StyleModel(int cornerRadius,
                 nameColor,
                 Math.max(0, enterMs),
                 Math.max(0, bumpMs),
+                Math.max(0, reviveMs),
                 enterEnabled, bumpEnabled, glowPulseEnabled,
                 accents == null ? Accents.defaults() : accents);
     }
@@ -144,6 +147,7 @@ public record StyleModel(int cornerRadius,
                     color(tex, "nameColor", 0xF0EBEFF6),
                     i(anim, "enterMs", 560),
                     i(anim, "bumpMs", 300),
+                    i(anim, "reviveMs", (int) CardTimeline.DEFAULT_REVIVE_MS),
                     b(anim, "enterEnabled", true),
                     b(anim, "bumpEnabled", true),
                     b(anim, "glowPulseEnabled", true),

@@ -151,8 +151,11 @@ public final class CardStage {
      */
     public void renderInto(GuiGraphics gui, Minecraft mc) {
         long now = System.currentTimeMillis();
-        pump(now);
+        // 【为什么先取再 pump】pump 会把账本事件变成屏幕上的卡，而"这次合并该救回还是该重播入场"
+        // 要用到 exitMs 与 reviveMs —— 事件处理拿不到它们，判据就只能靠猜。
         PickupCardSettings settings = Inbox.INSTANCE.settingsSnapshot();
+        StyleModel style = styles.current(now).sanitized();
+        pump(now, settings, style);
 
         // 【总开关】关掉就整条路都不走：屏上的卡立刻清、账本里的也一起忘掉。
         // 只"不再新弹"是不够的 —— 重新打开时那一堆旧卡会一起涌出来，像卡了半分钟。
@@ -171,7 +174,6 @@ public final class CardStage {
             return;
         }
 
-        StyleModel style = styles.current(now).sanitized();
         LayoutSettings layout = layoutSource.get().sanitized();
         // 本帧的缩放：手动档直接用玩家给的；自动档看"账本里这几张塞不塞得进 HUD 带之上"。
         // 用 live.size() 而不是"最终画出来的张数"是刻意的 —— 张数要先知道缩放才能定，
@@ -215,13 +217,23 @@ public final class CardStage {
     }
 
     /** 消费积压的账本事件。 */
-    private void pump(long now) {
+    private void pump(long now, PickupCardSettings settings, StyleModel style) {
         if (pending.isEmpty()) return;
         for (Inbox.Event e : pending) {
-            absorb(e, now);
+            absorb(e, now, settings, style);
         }
         pending.clear();
     }
+
+    /**
+     * 淡到多不透明以下就不再"救回"，改当新卡重播入场。
+     * <p>【判据从哪来】用户 2026-09-18 报「卡片淡出的最后一帧，文字和图标还是会突然闪一下」。
+     * 逐帧量下来它的成因是：救回的不透明度从"已经淡到哪儿"补回来，而在淡出末尾那个位置是
+     * <b>alpha ≈ 0.01</b> —— 一张已经看不见的卡在 300ms 内冲回全不透明，屏幕上就是凭空冒出来
+     * 一块，怎么调时长都还是闪。0.15 是"还看得出是同一张卡"的下限：低于它就等于换了一件东西，
+     * 那本来就该是入场。
+     */
+    private static final float REVIVE_MIN_ALPHA = 0.15f;
 
     /**
      * 上一帧画了哪些卡、量了多久。**只读遥测，没有写入口**——它存在是为了让 harness 能把
@@ -244,7 +256,7 @@ public final class CardStage {
     // ------------------------------------------------------------------
 
     /** 账本事件 → 屏幕上的卡。 */
-    private void absorb(Inbox.Event event, long now) {
+    private void absorb(Inbox.Event event, long now, PickupCardSettings settings, StyleModel style) {
         if (event instanceof Inbox.Event.Added added) {
             // 【为什么要记这一笔】同一个 key 又"新增"了一张，说明屏幕上那张（可能正在淡出）
             // 会被**整张换掉**：新 CardView 的 exitStartAt = NO_EXIT，不透明度瞬间回到 1。
@@ -259,12 +271,20 @@ public final class CardStage {
             if (view == null) {
                 // 时序兜底：账本说有、渲染却没见过，按新卡补挂
                 live.put(merged.notice().key(), new CardView(merged.notice()));
+            } else if (view.exiting()
+                    && CardTimeline.exitAlpha(now, view.exitStartAt(), settings.exitMs())
+                            < REVIVE_MIN_ALPHA) {
+                // 已经淡到几乎看不见：救回来就是"从无到有"，补得再慢也读成闪。
+                // 换一张新卡重播入场 —— 玩家按下拾取键的那一刻，本来就该看见"东西进来了"。
+                live.put(view.key(), new CardView(merged.notice()));
+                PickupCard.LOGGER.info("[救回→新卡] key={}：淡到 alpha<{} 才被再次拾起，改播入场",
+                        merged.notice().key(), REVIVE_MIN_ALPHA);
             } else {
                 if (view.exiting()) {
                     // 合并撤销退场，但**不是瞬间回到全不透明**：CardView#beginRevive 记下起点，
-                    // 之后 160ms 补回去（用户 2026-09-17 选的这一档）。同样进日志。
+                    // 之后 reviveMs（主题 --pc-revive-ms）补回去。同样进日志。
                     PickupCard.LOGGER.info("[救回] key={}：淡出改播淡回（{}ms 补回全不透明）",
-                            merged.notice().key(), CardTimeline.REVIVE_MS);
+                            merged.notice().key(), style.reviveMs());
                 }
                 view.absorbMerge(merged.notice(), now);
             }

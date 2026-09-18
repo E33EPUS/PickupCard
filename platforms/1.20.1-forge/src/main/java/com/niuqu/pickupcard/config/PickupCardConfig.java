@@ -150,6 +150,10 @@ public final class PickupCardConfig {
         if (bumpMs >= 0) {
             b.bumpMs(bumpMs);
         }
+        long reviveMs = VALUES.stReviveMs.get();
+        if (reviveMs >= 0) {
+            b.reviveMs(reviveMs);
+        }
         int enterOn = VALUES.stEnterEnabled.get();
         if (enterOn >= 0) {
             b.enterEnabled(enterOn == 1);
@@ -217,6 +221,7 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.ConfigValue<String> stNameColor;
         final ForgeConfigSpec.LongValue stEnterMs;
         final ForgeConfigSpec.LongValue stBumpMs;
+        final ForgeConfigSpec.LongValue stReviveMs;
         final ForgeConfigSpec.IntValue stEnterEnabled;
         final ForgeConfigSpec.IntValue stBumpEnabled;
 
@@ -348,6 +353,11 @@ public final class PickupCardConfig {
             stBumpMs = builder
                     .comment("合并时数字跳动时长（毫秒）。", "-1 = 跟随主题（默认）。")
                     .defineInRange("bumpMs", -1L, -1L, 5_000L);
+            stReviveMs = builder
+                    .comment("淡回时长（毫秒）：退场途中被再次拾起时，不透明度补回全不透明的耗时。",
+                            "160 太短：回来比离开（exitMs）快 3 倍，屏幕上是\"文字和图标突然闪一下\"。",
+                            "-1 = 跟随主题（默认 300）。")
+                    .defineInRange("reviveMs", -1L, -1L, 5_000L);
             stEnterEnabled = styleInt(builder, "enterEnabled", "入场动画开关。0 = 关（动画敏感玩家可以关掉，卡片直接出现）", 1);
             stBumpEnabled = styleInt(builder, "bumpEnabled", "合并时数字跳动开关。0 = 关", 1);
             builder.pop();

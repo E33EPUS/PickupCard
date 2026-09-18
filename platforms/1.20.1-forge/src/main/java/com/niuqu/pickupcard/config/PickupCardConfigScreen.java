@@ -459,6 +459,8 @@ public final class PickupCardConfigScreen extends Screen {
         cell("数字跳动", styleSwitch(v.stBumpEnabled, style.bumpEnabled()),
                 "连续捡同一种东西时，数字弹一下");
         cell("跳动时长", styleTime(v.stBumpMs, style.bumpMs(), 0, 1_000, 20), "数字弹一下持续多久");
+        cell("回魂时长", styleTime(v.stReviveMs, style.reviveMs(), 0, 1_000, 20),
+                "消失到一半又被捡到，多久补回不透明（默认 300ms）");
     }
 
     /** 「位置与堆叠」：停在哪、怎么展开、卡与卡的距离、同屏几张。 */
