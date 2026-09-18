@@ -888,9 +888,10 @@ public final class PickupCardConfigScreen extends Screen {
             sizes.add(new StackLayout.Size(Math.max(24f, w), style.boxHeight() * scale));
         }
         // 【为什么底部留白是个小数字】这一块是"模拟屏"，不是真屏幕 —— 原版 HUD 不在这个
-        // 面板里，套 HudSafeZone 会把卡顶到面板外面去。
+        // 面板里，套 HudSafeZone 会把卡顶到面板外面去。同理**不套右侧条带**（leftMin = 0）：
+        // 预览要展示的是排布与间距，把快捷栏那条硬下限也搬进来只会让预览里的卡莫名贴到右边。
         for (StackLayout.Slot slot : StackLayout.stack(sizes, area.w(), area.h(), layout, 6, 4,
-                layout.separation() * scale)) {
+                layout.separation() * scale, 0f)) {
             Sample s = trio.get(slot.index());
             NvgCardPainter.paintPreview(gui, style, area.x() + slot.x(), area.y() + slot.y(),
                     slot.width(), s.icon, s.name(settings.showItemId()), s.count, s.accent(),

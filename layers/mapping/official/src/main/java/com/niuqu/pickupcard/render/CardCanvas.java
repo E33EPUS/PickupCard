@@ -28,6 +28,8 @@ import javax.annotation.Nullable;
  * @param guiHeight GUI 逻辑高度
  * @param scale     本帧生效的卡片缩放（1.0 = 100%）。布局用它算卡的屏幕尺寸，
  *                  绘制用它决定 pose / NanoVG 变换 —— 两边必须是同一个数
+ * @param stripWidth 右侧条带的宽度（屏幕像素）。<b>卡片宽度上限取它与屏宽比例的较小者</b>；
+ *                   0 = 没有条带（回退档 / 配置界面的预览），此时只按屏宽比例
  */
 public record CardCanvas(long now,
                          CardTimeline timeline,
@@ -36,7 +38,8 @@ public record CardCanvas(long now,
                          LayoutSettings layout,
                          int guiWidth,
                          int guiHeight,
-                         float scale) {
+                         float scale,
+                         float stripWidth) {
 
     /** 入场进度 ∈ [0,1]，1 = 已就位。 */
     public float enterOf(CardView view) {

@@ -46,9 +46,31 @@ public final class CardMetrics {
         return canvas.style().boxHeight() * canvas.scale();
     }
 
-    /** 这张卡允许的最大宽度。 */
+    /**
+     * 这张卡<b>不可再压</b>的宽度：竖条 + 间隙 + 图标框 + 间隙 + 内边距 + 数量。
+     * <p>名字是唯一能被截掉的部分，所以这个数就是"再怎么截也这么大"。条带比它还窄时，
+     * 只剩两条路：把整张卡缩小（下限 {@code MIN_AUTO_PERCENT}），或者回退位置 ——
+     * 判据要有这个数才算得出来。
+     */
+    public static float fixedWidth(CardCanvas canvas, Font font, CardView view) {
+        var style = canvas.style();
+        float gap = style.gap();
+        return style.barWidth() + gap + style.boxHeight() + gap
+                + style.paddingH() * 2f + canvas.countWidth(view, font);
+    }
+
+    /**
+     * 这张卡允许的最大宽度（屏幕像素）= <b>屏宽比例</b>与<b>右侧条带宽度</b>的较小者。
+     * <p>
+     * 【为什么要看条带】从前只有 {@code guiWidth × 0.45} 一条：卡片最宽可以到 192px，
+     * 而快捷栏右边那条带在 427 宽的画布上只有 105.5px —— 长名字的卡会横着溢出条带、
+     * 压在快捷栏上。收住上限之后，"名字太长"就退化成已有的那条路：截断加省略号，
+     * 而不是把整张卡缩小（缩到 55% 的卡，8px 的字就成 4.4px 了）。
+     */
     public static float maxWidth(CardCanvas canvas) {
-        return canvas.guiWidth() * MAX_WIDTH_RATIO;
+        float ratio = canvas.guiWidth() * MAX_WIDTH_RATIO;
+        float strip = canvas.stripWidth();
+        return strip > 0f ? Math.min(ratio, strip) : ratio;
     }
 
     /**
@@ -58,6 +80,18 @@ public final class CardMetrics {
      * —— 卡会明显变窄，而"竖条 + 图标 + 数量"这个最小组合仍然一眼能读。
      */
     public static float width(CardCanvas canvas, Font font, CardView view) {
+        return naturalWidth(canvas, font, view) * canvas.scale();
+    }
+
+    /**
+     * 同一张卡在 <b>100%</b> 下的宽度（不乘当前缩放）。
+     * <p>
+     * 【为什么要单独有一个】缩放在"知道卡有多宽"之前就得定下来（右侧条带装不下时要按宽度
+     * 再收一次，见 {@code CardStage#layout}），而 {@link #width} 里已经乘过缩放了 ——
+     * 用 {@code width()/scale} 反推的话，改缩放的那一刻就会拿错值。分成两个函数之后，
+     * "未缩放宽度"只有一个出处。
+     */
+    public static float naturalWidth(CardCanvas canvas, Font font, CardView view) {
         Inbox.Card card = view.notice().payload();
         int count = view.notice().count();
         var style = canvas.style();
@@ -67,7 +101,7 @@ public final class CardMetrics {
         if (canvas.settings().showItemName()) {
             infoBox += gap + font.width(fittedName(canvas, font, card, count));
         }
-        return (style.barWidth() + gap + style.boxHeight() + gap + infoBox) * canvas.scale();
+        return style.barWidth() + gap + style.boxHeight() + gap + infoBox;
     }
 
     /**

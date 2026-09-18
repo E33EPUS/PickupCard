@@ -61,10 +61,14 @@ public final class StackLayout {
      * @param marginX   距屏幕右边的安全留白（左边固定时，左边的默认值也取自它）
      * @param marginY   距屏幕<b>下边</b>的留白
      * @param gap       卡与卡之间的间隙
+     * @param leftMin   左缘的<b>硬下限</b>：卡片左缘永远不小于它（右侧条带的左缘，见
+     *                  {@link HudSafeZone#stripLeft}）。与 {@code layout} 给的"软目标"不同 ——
+     *                  软目标会被内容顶歪，这个不会。传 0 = 不限制（配置界面的预览用它）。
      * @return 与 {@code sizes} 同序的位置列表
      */
     public static List<Slot> stack(List<Size> sizes, float guiWidth, float guiHeight,
-                                   LayoutSettings layout, int marginX, int marginY, float gap) {
+                                   LayoutSettings layout, int marginX, int marginY, float gap,
+                                   float leftMin) {
         int n = sizes.size();
         List<Slot> slots = new ArrayList<>(n);
         if (n == 0) return slots;
@@ -80,7 +84,11 @@ public final class StackLayout {
             y -= size.height();
             // 放得下的最右位置；再夹到屏幕内，避免超宽卡算出负坐标
             float maxLeft = guiWidth - marginX - size.width();
-            float x = Math.max(0f, Math.min(limit, maxLeft));
+            // 【条带装不下时 maxLeft < leftMin】此时 min(limit, maxLeft) 必然 < leftMin，
+            // max() 于是取 leftMin —— 卡会向右溢出条带。这不是"没处理"，而是**故意让溢出可见**：
+            // 调用方（CardStage）负责先按宽度把缩放收到装得下，真收不下（低于缩放下限）才回退。
+            // 悄悄把卡挤回条带左边反而会把"放不下"这件事藏起来。
+            float x = Math.max(leftMin, Math.min(limit, maxLeft));
             slots.add(new Slot(i, x, y, size.width(), size.height()));
             y -= gap;
         }

@@ -36,18 +36,69 @@ class HudSafeZoneTest {
     }
 
     private void assertNoOverlap(float guiWidth, float guiHeight, float textWidth) {
-        float cardWidth = guiWidth * 0.45f;                    // 卡宽上限
-        float stackHeight = 5 * 20f + 4 * 4f;                  // 5 张卡 + 间隙
-        HudSafeZone.Placement place = HudSafeZone.place(guiWidth, guiHeight, cardWidth, stackHeight, 0f);
-        // 最靠左的那种摆法（右缘贴右边距）—— 最容易撞到居中那一带
-        float left = Math.max(0f, guiWidth - 16f - cardWidth);
-        HudSafeZone.Rect cards = place.cards(left, cardWidth, guiHeight, stackHeight);
+        for (boolean leftHanded : new boolean[] {false, true}) {
+            HudSafeZone.Strip strip = HudSafeZone.strip(guiWidth, guiHeight, 16, 0f, leftHanded);
+            float cardWidth = Math.min(guiWidth * 0.45f, strip.width());
+            if (cardWidth <= 0f) {
+                continue;                                   // 条带是空的，没东西可撞
+            }
+            float stackHeight = 5 * 20f + 4 * 4f;           // 5 张卡 + 间隙
+            // 条带里最靠左的摆法（右缘贴条带右缘）—— 最容易撞到居中那一带
+            HudSafeZone.Rect cards = strip.cards(cardWidth, guiHeight, stackHeight);
 
-        for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, textWidth, textWidth)) {
-            assertFalse(cards.intersects(band),
-                    canvasLabel(guiWidth, guiHeight, textWidth) + " 卡堆 " + describe(cards)
-                            + " 撞上了原版带 " + describe(band));
+            for (HudSafeZone.Rect band : HudSafeZone.bottomBands(guiWidth, guiHeight, textWidth, textWidth)) {
+                assertFalse(cards.intersects(band),
+                        canvasLabel(guiWidth, guiHeight, textWidth) + " 卡堆 " + describe(cards)
+                                + " 撞上了原版带 " + describe(band));
+            }
         }
+    }
+
+    /**
+     * 右侧条带的左缘<b>永远是快捷栏那一带的右缘</b> —— 这是用户 2026-09-18 那条抱怨的正面断言
+     * （「只能在物品栏和屏幕右侧之间，不管再右都不要左」）。
+     * <p>
+     * 【为什么左撇子要单独测】副手槽画在<b>主手的反侧</b>：右手玩家（默认）副手在左，
+     * 条带从 {@code cx+92} 起；左撇子副手在右，条带要退到 {@code cx+120}，<b>正好窄 29px</b>。
+     * 从前代码里写死了后者（把左撇子的几何当成了所有人的），右侧条带因此被少算 29px，
+     * 而"那条缝放不下一张卡"的结论就是从这儿来的。
+     */
+    @Test
+    void theStripStartsRightOfTheHotbarForBothHandednesses() {
+        float guiWidth = 426f;
+        float cx = guiWidth / 2f;
+        HudSafeZone.Strip right = HudSafeZone.strip(guiWidth, 240f, 16, 0f, false);
+        assertEquals(cx + HudSafeZone.HOTBAR_HALF + 1, right.left(), 0.01f,
+                "右手玩家：条带从选中框右缘起");
+        HudSafeZone.Strip left = HudSafeZone.strip(guiWidth, 240f, 16, 0f, true);
+        assertEquals(cx + HudSafeZone.OFFHAND_RIGHT, left.left(), 0.01f,
+                "左撇子：副手槽在右，条带要再退 29px");
+        assertEquals(HudSafeZone.OFFHAND_W - 1, left.left() - right.left(), 0.01f,
+                "两种手性的条带左缘差一个副手槽宽减 1 —— 右手那侧还多算了选中框的 1px（HOTBAR_HALF+1）");
+        assertTrue(right.width() > left.width(), "右手玩家的条带更宽");
+    }
+
+    /**
+     * 条带宽度的<b>实数</b>：427 画布上右手玩家 105.5px。这条钉住的是"卡片到底放不放得下"
+     * 的前提 —— 它一旦变小，"回退到 HUD 带上方"就会在更多分辨率上触发。
+     */
+    @Test
+    void stripWidthOnCommonCanvases() {
+        // 426：426/2 + 92 = 305 → 右缘 426-16 = 410 → 105
+        assertEquals(105f, HudSafeZone.strip(426f, 240f, 16, 0f, false).width(), 0.6f);
+        // 640（1920×1080 的 guiScale 3）：320+92 = 412 → 624 → 212
+        assertEquals(212f, HudSafeZone.strip(640f, 360f, 16, 0f, false).width(), 0.6f);
+        // 320（guiScale 4）：160+92 = 252 → 304 → 52；只够放"竖条+图标+数量"那种最窄的卡
+        assertEquals(52f, HudSafeZone.strip(320f, 180f, 16, 0f, false).width(), 0.6f);
+    }
+
+    /** 右侧要让开的东西（侧栏 / 效果图标）从条带<b>宽度</b>里扣，而不是把整列往左推。 */
+    @Test
+    void reserveNarrowsTheStripInsteadOfPushingTheColumnLeft() {
+        HudSafeZone.Strip open = HudSafeZone.strip(640f, 360f, 16, 0f, false);
+        HudSafeZone.Strip squeezed = HudSafeZone.strip(640f, 360f, 16, 90f, false);
+        assertEquals(open.left(), squeezed.left(), 0.01f, "左缘不许变 —— 那是硬下限");
+        assertEquals(90f, open.width() - squeezed.width(), 0.01f, "扣掉的正好是让位量");
     }
 
     /**

@@ -37,7 +37,7 @@ class StackLayoutTest {
     }
 
     private static List<StackLayout.Slot> stack(LayoutSettings layout, StackLayout.Size... sizes) {
-        return StackLayout.stack(List.of(sizes), GUI_W, GUI_H, layout, MARGIN, MARGIN, 6f);
+        return StackLayout.stack(List.of(sizes), GUI_W, GUI_H, layout, MARGIN, MARGIN, 6f, 0f);
     }
 
     @Test
@@ -128,9 +128,40 @@ class StackLayoutTest {
     @DisplayName("默认：竖条左缘停在自动锚点，内容往右伸")
     void defaultAnchorsTheBarLeftEdge() {
         var s = StackLayout.stack(List.of(new StackLayout.Size(120, 30)), GUI_W, GUI_H,
-                LayoutSettings.defaults(), MARGIN, MARGIN, 6f);
+                LayoutSettings.defaults(), MARGIN, MARGIN, 6f, 0f);
         assertEquals(LayoutSettings.autoLeftEdge(GUI_W), s.get(0).x(), EPS, "竖条左缘停在自动锚点");
         assertEquals(BOTTOM, s.get(0).y() + s.get(0).height(), EPS);
+    }
+
+    @Test
+    @DisplayName("左缘硬下限：软目标再靠左，也压不过它（右侧条带）")
+    void hardLeftFloorBeatsTheSoftAnchor() {
+        float floor = 305f;
+        // 自动锚点是 426-16-0.45×426 ≈ 218 —— 比硬下限靠左，于是必须取硬下限
+        assertTrue(LayoutSettings.autoLeftEdge(GUI_W) < floor, "这条断言的前提是软目标更靠左");
+        var s = StackLayout.stack(List.of(new StackLayout.Size(105, 30)), GUI_W, GUI_H,
+                LayoutSettings.defaults(), MARGIN, MARGIN, 6f, floor);
+        assertEquals(floor, s.get(0).x(), EPS, "卡片左缘必须停在条带左缘上");
+    }
+
+    @Test
+    @DisplayName("右对齐时也一样：硬下限压过\"尽量往右推\"算出来的位置")
+    void hardLeftFloorAlsoAppliesToRightAlignment() {
+        // GUI_W 427 − 16 边距 − 105 卡宽 = 306，正好是被当作硬下限的那个数
+        float floor = GUI_W - MARGIN - 105f;
+        var s = StackLayout.stack(List.of(new StackLayout.Size(105, 30)), GUI_W, GUI_H,
+                right(), MARGIN, MARGIN, 6f, floor);
+        assertEquals(floor, s.get(0).x(), 0.01f, "右对齐算出来的位置正好落在硬下限上");
+    }
+
+    @Test
+    @DisplayName("条带比卡还窄时：左缘仍守硬下限（溢出由调用方按宽度缩/回退解决）")
+    void floorHoldsEvenWhenTheCardIsWiderThanTheStrip() {
+        float floor = 305f;
+        var s = StackLayout.stack(List.of(new StackLayout.Size(160, 30)), GUI_W, GUI_H,
+                LayoutSettings.defaults(), MARGIN, MARGIN, 6f, floor);
+        assertEquals(floor, s.get(0).x(), EPS,
+                "宁可向右溢出，也不许越过硬下限 —— 溢出一眼可见，越界却会被当成\"位置又错了\"");
     }
 
     @Test
@@ -206,6 +237,6 @@ class StackLayoutTest {
             sizes[i] = new StackLayout.Size(100, 20);
         }
         return StackLayout.stack(List.of(sizes), GUI_W, guiHeight, LayoutSettings.defaults(),
-                MARGIN, 75, 4f);
+                MARGIN, 75, 4f, 0f);
     }
 }

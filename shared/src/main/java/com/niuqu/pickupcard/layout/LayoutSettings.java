@@ -132,8 +132,7 @@ public record LayoutSettings(Side stickTo, int leftEdge, Appear appearMode, floa
     }
 
     /** 外部来的值一律过一遍：配置文件是玩家可改的，非法值不该变成崩溃或卡片消失。 */
-    public LayoutSettings sanitized() {
-        return new LayoutSettings(
+    public LayoutSettings sanitized() {        return new LayoutSettings(
                 stickTo == null ? Side.LEFT : stickTo,
                 // -1 = 自动（跟着画布算），其余是绝对 x。负数只许是 -1，别的负数按 0 处理
                 leftEdge == AUTO_LEFT_EDGE ? AUTO_LEFT_EDGE : Math.max(0, leftEdge),
