@@ -173,18 +173,20 @@ public final class PickupCardConfigScreen extends Screen {
      * 分类。
      * <p>【为什么每页带一句说明】底部那行字是这个界面唯一的自我解释：悬停在标签上时应该说
      * <em>那一页</em>是干嘛的，而不是当前这页的 —— 否则"点了没反应"和"说明没变"长得一样。
+     * <p>【为什么五句不再用同一个句式】它们从前全是「这些改的是…」开头 —— 五条读起来像一条，
+     * 扫过去等于没读。现在每条说清"这一页能解决什么问题"，各写各的。
      */
     private enum Section {
-        GENERAL("通用", "这些改的是「弹不弹、显示什么、什么算同一样东西」"),
-        ANIM("动画", "这些改的是卡片怎么出现、数字怎么跳"),
-        LAYOUT("位置与堆叠", "这些改的是卡片停在哪、同时显示几张（预览就是一摞卡）"),
-        LOOK("外观", "这些改的是卡片长什么样（预览就是当前设置画出来的）"),
+        GENERAL("通用", "弹不弹卡、要不要显示名字、什么算同一样东西"),
+        ANIM("动画", "卡片出现和消失的快慢，以及数量变化怎么动"),
+        LAYOUT("位置与堆叠", "卡片停在哪、同时最多几张（预览画的就是一摞卡）"),
+        LOOK("外观", "卡片的长相：内边距、圆角、描边、各种颜色"),
         /**
          * 【为什么单独一页】三张名单都不是"一个值"，而是可增删的列表 —— 一行一项那个版式
          * 正好能装（一条规则一行、末尾一行输入框），但行数会随玩家自己加多少条涨，
          * 跟"外观"那种固定八行的页面不是一回事。混在一起会让固定项被列表挤走。
          */
-        FILTER("过滤", "这三张名单决定哪些东西不弹卡、一定要弹、弹了不出声");
+        FILTER("过滤", "哪些东西不弹卡、一定要弹、或者弹了不出声");
 
         final String label;
         final String hint;
@@ -495,24 +497,24 @@ public final class PickupCardConfigScreen extends Screen {
         cell("停留时长", time(v.holdMs, eff.holdMs(), 500, 10_000, 250), "一张卡在屏幕上待多久");
         cell("消失时长", time(v.exitMs, eff.exitMs(), 0, 2_000, 20), "消失时淡出多久；0 = 直接消失");
         cell("数字跳动", styleSwitch(v.stBumpEnabled, style.bumpEnabled()),
-                "连续捡同一种东西时，数字弹一下");
-        cell("跳动时长", styleTime(v.stBumpMs, style.bumpMs(), 0, 1_000, 20), "数字弹一下持续多久");
-        cell("回魂时长", styleTime(v.stReviveMs, style.reviveMs(), 0, 1_000, 20),
-                "消失到一半又被捡到，多久补回不透明（默认 300ms）");
+                "连续捡同一种东西时，整张卡鼓一下、数字滚到新值");
+        cell("跳动时长", styleTime(v.stBumpMs, style.bumpMs(), 0, 1_000, 20), "上面那下动作持续多久");
+        cell("淡回时长", styleTime(v.stReviveMs, style.reviveMs(), 0, 1_000, 20),
+                "卡片快消失时又被捡到，用多久补回不透明（默认 300ms）");
     }
 
     /** 「位置与堆叠」：停在哪、怎么展开、卡与卡的距离、同屏几张。 */
     private void buildLayout(PickupCardConfig.Values v) {
         LayoutSettings eff = PickupCardConfig.layoutSnapshot();
         PickupCardSettings settings = PickupCardConfig.snapshot();
-        cell("贴边", cycle(v.stickTo, LayoutSettings.Side.values(), PickupCardConfigScreen::sideName),
-                "左 = 竖条成一条竖线；右 = 卡的右缘齐、竖条参差");
+        cell("对齐方式", cycle(v.stickTo, LayoutSettings.Side.values(), PickupCardConfigScreen::sideName),
+                "左 = 五条竖条对齐成一条竖线；右 = 卡的右缘对齐、竖条参差");
         cell("竖条位置", anchor(v.leftEdge, eff.leftEdge()), "竖条左缘停在哪；「自动」= 跟着画布宽度算");
         cell("展开方式", cycle(v.appearMode, LayoutSettings.Appear.values(),
                 PickupCardConfigScreen::appearName),
-                "火车 = 整块滑出来；拉幕 = 可见范围一点点变宽（先露图标）");
+                "滑出 = 内容整块从竖条后面滑出来；拉幕 = 可见范围一点点变宽");
         cell("卡片缩放", percent(v.scalePercent, eff.scalePercent()),
-                "100% 原样。「自动」= 一摞卡塞不进 HUD 带之上就按比例缩，最多缩到 60%");
+                "100% 原样。「自动」= 一摞卡放不下就按比例缩，最多缩到 60%");
         cell("同屏上限", number(v.maxOnScreen, settings.maxOnScreen(), 1, 16, 1, " 张"),
                 "同时在屏最多几张。GUI 缩放越大、画布越小，放得下的越少");
         cell("排队上限", number(v.queueSize, settings.queueSize(), 0, 32, 1, " 张"),
@@ -525,17 +527,17 @@ public final class PickupCardConfigScreen extends Screen {
      */
     private void buildLook(PickupCardConfig.Values v) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
-        cell("卡片厚薄", styleNumber(v.stPaddingV, style.paddingV(), 0, 8, 1, ""),
-                "上下各留多少；调大卡片变厚，图标大小不变");
+        cell("卡片内边距", styleNumber(v.stPaddingV, style.paddingV(), 0, 8, 1, ""),
+                "图标上下各留多少；调大卡片变高，图标大小不变");
         cell("图标大小", styleNumber(v.stIconSize, style.iconSize(), 8, 64, 1, "px"),
                 "原版物品图标是 16 —— 取 16 或它的整数倍最清晰");
         cell("圆角", styleNumber(v.stCornerRadius, style.cornerRadius(), 0, 16, 1, "px"),
                 "三个框的圆角半径；调到很大就变成胶囊");
-        cell("框粗细", styleNumber(v.stBorderWidth, style.borderWidth(), 0, 4, 1, "px"),
+        cell("描边粗细", styleNumber(v.stBorderWidth, style.borderWidth(), 0, 4, 1, "px"),
                 "框描边的粗细；0 = 不描边");
         cell("底色（上）", color(v.stFillTop, style.fillTop()), "卡面底色上端；留空 = 用主题里的");
         cell("底色（下）", color(v.stFillBottom, style.fillBottom()), "下端。和上面写成一样就是纯色");
-        cell("框色", color(v.stBorder, style.border()), "框描边的颜色");
+        cell("描边颜色", color(v.stBorder, style.border()), "框描边的颜色");
         cell("物品名颜色", color(v.stNameColor, style.nameColor()), "名字的颜色");
     }
 
@@ -634,6 +636,7 @@ public final class PickupCardConfigScreen extends Screen {
 
     @Override
     public void render(GuiGraphics gui, int mouseX, int mouseY, float partialTick) {
+        long frameStart = System.nanoTime();
         now = System.currentTimeMillis();
         if (pendingRebuild) {
             pendingRebuild = false;
@@ -684,7 +687,68 @@ public final class PickupCardConfigScreen extends Screen {
         // 两者在屏幕上不重叠，顺序只影响"哪一批先上 GPU"。
         drawPreview(gui);
         drawHint(gui, mouseX, mouseY);
+        frameCost(System.nanoTime() - frameStart);
     }
+
+    /**
+     * 逐帧耗时统计 —— 用户报过「配置界面动画掉帧」，而掉帧只有数字能定死。
+     * <p>【为什么不是"看一眼卡不卡"】掉帧是<b>少数几帧特别慢</b>，肉眼看整体帧率往往看不出来
+     * （平均值被大量快帧摊平）。所以这里记的是 <b>最大值</b>与"超过 16.7ms 的帧数"，
+     * 每 {@value #FRAME_LOG_EVERY} 帧往日志里报一次；不刷屏、也不进每帧的绘制路径。
+     * <p>【为什么只统计不自动处理】先量再改：不知道是"换页那一下"慢还是"每一帧都慢"，
+     * 改哪儿都是猜。日志里那一行把两者分开。
+     */
+    private void frameCost(long nanos) {
+        long us = nanos / 1_000L;
+        frameCount++;
+        if (us > frameMaxUs) {
+            frameMaxUs = us;
+            // 【为什么要记第几帧】"最慢 80ms"这个数只有配上"第 1 帧"才有用 ——
+            // 第 1 帧慢是开屏的一次性开销（建 NanoVG 上下文、烘图标），
+            // 第 300 帧慢才是动画中途真的卡了。少了这个下标，两种情况的日志长得一模一样。
+            frameMaxAt = frameCount;
+        }
+        frameSumUs += us;
+        if (us > 16_700L) {
+            frameJanky++;
+        }
+        if (frameCount >= FRAME_LOG_EVERY) {
+            reportFrames();
+        }
+    }
+
+    /**
+     * 报一次统计并把窗口清零。
+     * <p>【为什么要有一个"关界面时报一次"】常驻每 {@value #FRAME_LOG_EVERY} 帧报一次是为了长时间
+     * 盯；而进出一次配置界面只有十来秒、往往凑不满一个窗口 —— 只在退出时报，才不会"来了一趟
+     * 却什么都没量到"。
+     */
+    private void reportFrames() {
+        if (frameCount == 0) {
+            return;
+        }
+        PickupCard.LOGGER.info("[配置界面/帧] {} 帧：平均 {}us，最慢 {}us（第 {} 帧），超过 16.7ms 的有 {} 帧",
+                frameCount, frameSumUs / frameCount, frameMaxUs, frameMaxAt, frameJanky);
+        frameCount = 0;
+        frameSumUs = 0L;
+        frameMaxUs = 0L;
+        frameMaxAt = 0;
+        frameJanky = 0;
+    }
+
+    @Override
+    public void removed() {
+        reportFrames();
+        super.removed();
+    }
+
+    /** 每多少帧报一次（约 10 秒 @60fps）。 */
+    private static final int FRAME_LOG_EVERY = 600;
+    private int frameCount;
+    private long frameSumUs;
+    private long frameMaxUs;
+    private int frameMaxAt;
+    private int frameJanky;
 
     /**
      * 把这一帧的动画目标推进一步。
@@ -708,11 +772,22 @@ public final class PickupCardConfigScreen extends Screen {
         NvgPalette p = ui.palette;
         ConfigLayout lo = layout();
         PickupCardSettings eff = PickupCardConfig.snapshot();
+        // 【标题栏的两行各是什么】第一行只有标题；第二行是这一页的元信息 —— 左边一句玩家真正
+        // 会问的（改坏了怎么办），右端是那两个随时想知道的状态。从前三样全挤在第一行，而且
+        // 副标题写着 config/pickupcard-client.toml：那是给开发者看的，玩家不需要知道文件叫什么；
+        // "改动即时生效"与"每拨一下立刻生效"本来也是同一句话。
         ui.text(this.title.getString(), contentLeft(), 6f, 0xFFFFFFFF);
-        ui.text("改动即时生效 · 记进 config/pickupcard-client.toml", contentLeft(), 17f, p.textDim);
-        // 右上角那行状态：总开关是"整体生效没生效"的唯一真源，藏进页里就得翻页才知道
-        ui.textRight((eff.enabled() ? "总开关 开" : "总开关 关") + " · " + scaleText(),
-                contentRight(), 6f, eff.enabled() ? p.accent : p.textDim);
+        // 【副标题要能截断】它右边同一行还有那行状态，而窄画布（320 宽档）上两者会撞上 ——
+        // 用 plainSubstrByWidth 按像素截，跟卡片名字是同一条路：窄了就少说几个字，
+        // 而不是两段字叠在一起。
+        String status = (eff.enabled() ? "总开关 开" : "总开关 关") + " · " + scaleText();
+        float statusW = ui.font().width(status);
+        float room = contentRight() - statusW - 10f - contentLeft();
+        ui.text(ui.font().plainSubstrByWidth(
+                        "每拨一下立刻生效 · 想恢复默认就删掉配置文件", (int) Math.max(0f, room)),
+                contentLeft(), 17f, p.textDim);
+        // 第二行右端那行状态：总开关是"整体生效没生效"的唯一真源，藏进页里就得翻页才知道
+        ui.textRight(status, contentRight(), 17f, eff.enabled() ? p.accent : p.textDim);
         // 标题和内容之间那条线：没有它，标题行和第一行标签会连成一片
         ui.fillRoundRect(ConfigLayout.MARGIN, ConfigLayout.TOP - 5f,
                 Math.max(0f, this.width - ConfigLayout.MARGIN * 2f), 1f, 0.5f,
