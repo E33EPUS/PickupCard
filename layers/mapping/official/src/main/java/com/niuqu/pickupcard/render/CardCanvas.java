@@ -23,13 +23,11 @@ import javax.annotation.Nullable;
  * @param timeline 入场/跳动时间轴（来自主题）
  * @param style    当前主题（已 sanitize）
  * @param settings 当前会话参数
- * @param layout   水平对齐与展开方式（行为参数，来自 TOML）
+ * @param layout   锚点与展开方式（行为参数，来自 TOML）
  * @param guiWidth  GUI 逻辑宽度
  * @param guiHeight GUI 逻辑高度
  * @param scale     本帧生效的卡片缩放（1.0 = 100%）。布局用它算卡的屏幕尺寸，
  *                  绘制用它决定 pose / NanoVG 变换 —— 两边必须是同一个数
- * @param stripWidth 右侧条带的宽度（屏幕像素）。<b>卡片宽度上限取它与屏宽比例的较小者</b>；
- *                   0 = 没有条带（回退档 / 配置界面的预览），此时只按屏宽比例
  */
 public record CardCanvas(long now,
                          CardTimeline timeline,
@@ -38,8 +36,7 @@ public record CardCanvas(long now,
                          LayoutSettings layout,
                          int guiWidth,
                          int guiHeight,
-                         float scale,
-                         float stripWidth) {
+                         float scale) {
 
     /** 入场进度 ∈ [0,1]，1 = 已就位。 */
     public float enterOf(CardView view) {

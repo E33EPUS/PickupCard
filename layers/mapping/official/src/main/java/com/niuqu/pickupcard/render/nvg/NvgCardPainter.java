@@ -245,28 +245,28 @@ public final class NvgCardPainter {
     /**
      * 一个框：渐变底 -> 内缩 1px 描边（顺序与 CSS 叠法一致）。
      * <p>
-     * 【描边为什么要内缩 0.5】草稿写的是 {@code outline: 1px / outline-offset: -1px}，
-     * 那 1px 整条都在框内。NanoVG 的 stroke 是骑在路径上的（各出一半），照外框描会有
-     * 一半跑到框外，看起来比草稿粗一倍还会盖住相邻的框。路径内缩半个线宽就等价了。
+     * 【填充与描边共用同一条路径 —— border-box】NanoVG 的 stroke 骑在路径上（各出一半），
+     * 路径内缩半个线宽后，描边外缘正好落在矩形原边上。圆角半径必须<b>同步减</b>半个线宽：
+     * 从前只内缩矩形、半径照旧，四个角上描边外缘比填充的圆角缩进去零点几个像素，
+     * 暗色底就从描边外面露出来一圈（用户报的「背景溢出边框一点点」就是它）。
+     * 填充沿同一条路径画，被描边盖住的那半圈正好是接缝 —— 既不露底也不开缝。
      */
     private static void box(long vg, MemoryStack stack, StyleModel style,
                             float x, float y, float w, float h, float radius) {
         if (w <= 0f || h <= 0f) {
             return;
         }
+        float stroke = style.borderWidth();
+        float half = stroke / 2f;
         nvgBeginPath(vg);
-        nvgRoundedRect(vg, x, y, w, h, radius);
-        NVGPaint paint = nvgLinearGradient(vg, x, y, x, y + h,
+        nvgRoundedRect(vg, x + half, y + half, Math.max(0f, w - stroke), Math.max(0f, h - stroke),
+                Math.max(0f, radius - half));
+        NVGPaint paint = nvgLinearGradient(vg, x + half, y + half, x + half, y + half + Math.max(0f, h - stroke),
                 color(stack, style.fillTop()), color(stack, style.fillBottom()), NVGPaint.mallocStack(stack));
         nvgFillPaint(vg, paint);
         nvgFill(vg);
 
-        // 描边粗细可配：路径按半个线宽内缩，线才会整条落在框内（见上面的注释）
-        float stroke = style.borderWidth();
         if (stroke > 0f) {
-            float half = stroke / 2f;
-            nvgBeginPath(vg);
-            nvgRoundedRect(vg, x + half, y + half, Math.max(0f, w - stroke), Math.max(0f, h - stroke), radius);
             nvgStrokeWidth(vg, stroke);
             nvgStrokeColor(vg, color(stack, style.border()));
             nvgStroke(vg);
@@ -384,10 +384,14 @@ public final class NvgCardPainter {
             RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
         }
 
-        // 文字：alpha 直接乘进颜色里（原版字形用的就是这个色的 alpha），不走全局色
+        // 文字：alpha 直接乘进颜色里（原版字形用的就是这个色的 alpha），不走全局色。
+        // 【alpha 字节掉到 4 以下就整段不画】原版 Font.adjustColor（1.20.1 Font.java:109）
+        // 会把 alpha 字节 0~3 的颜色强制改成完全 opaque —— 退场末尾 alpha 单调下穿这个区间，
+        // 那几帧文字会「闪回不透明」，一帧后整卡才被摘掉（用户连报两次的末帧闪就是它）。
+        // 图标走 setShaderColor，是连续调制，没有这个坑。
         String count = canvas.countText(view.notice().count());
         float textY = (h - font.lineHeight) / 2f;
-        if (canvas.settings().showItemName()) {
+        if (canvas.settings().showItemName() && textVisible(style.nameColor(), alpha)) {
             String name = CardMetrics.fittedName(canvas, font, card, view.notice().count());
             float nameX = x + h + gap;
             gui.drawString(font, name, Math.round(nameX + style.paddingH()), Math.round(textY),
@@ -508,6 +512,10 @@ public final class NvgCardPainter {
      */
     private static void drawCount(GuiGraphics gui, CardCanvas canvas, CardView view, Font font,
                                   float right, float textY, int accent, float alpha) {
+        // 同「末帧闪」的闸：数量与名字走同一个原版 drawString，同一个坑
+        if (!textVisible(accent, alpha)) {
+            return;
+        }
         String cur = canvas.countText(view.notice().count());
         String prev = canvas.prevCountText(view);
         float roll = canvas.rollOf(view);
@@ -554,6 +562,18 @@ public final class NvgCardPainter {
             return argb;
         }
         return withAlpha(argb, Math.round(((argb >>> 24) & 0xFF) * Easing.clamp01(alpha)));
+    }
+
+    /**
+     * 这一档不透明度还<b>该不该画字</b>：算出来的 alpha 字节一旦小于 4，原版
+     * {@code Font.adjustColor} 会把它强制改成完全不透明（见 {@link #content} 里的说明），
+     * 所以不是「画得淡」而是「干脆不画」—— 宁可让文字比外壳早没半帧，也不闪那一下。
+     */
+    private static boolean textVisible(int argb, float alpha) {
+        if (alpha >= 0.999f) {
+            return true;
+        }
+        return Math.round(((argb >>> 24) & 0xFF) * Easing.clamp01(alpha)) >= 4;
     }
 
     private static int withAlpha(int argb, int alpha) {

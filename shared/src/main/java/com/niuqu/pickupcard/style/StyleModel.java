@@ -87,7 +87,7 @@ public record StyleModel(int cornerRadius,
 
     public static StyleModel defaults() {
         return new StyleModel(
-                4, 4, 3, 3, 16, 4, 1, 1,
+                4, 4, 3, 3, 16, 2, 1, 1,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 46,
                 0xF0EBEFF6,
@@ -145,7 +145,7 @@ public record StyleModel(int cornerRadius,
                     i(geo, "paddingV", 3),
                     i(geo, "gap", 3),
                     i(geo, "iconSize", 16),
-                    i(geo, "barWidth", 4),
+                    i(geo, "barWidth", 2),
                     i(geo, "barInsetY", 1),
                     i(geo, "borderWidth", 1),
                     color(mat, "fillTop", 0xD1262B38),

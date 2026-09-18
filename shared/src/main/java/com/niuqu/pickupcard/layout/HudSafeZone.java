@@ -30,8 +30,12 @@ import java.util.List;
  * 只要名字够长就会横伸过来。它的行在 H-59，而旧的底部留白 52 让最下面那张卡正好落在
  * H-52..H-72，与它整行相交。所以底部留白必须让到 H-60 以上（{@link #bottomInset}）。
  *
- * <p>【"物品栏和屏幕右侧之间那块空白"到底有多大】见 {@link #stripLeft} —— 它<b>跟主手有关</b>，
- * 而这正是 2026-09-18 之前算错的地方（把左撇子的几何当成了所有人的）。
+ * <p>【2026-09-18 晚删掉的一组】"快捷栏右侧条带"几何（stripLeft / hotbarRightHalf /
+ * {@code STRIP_BOTTOM} / Strip）—— 卡堆改锚准星下方、向下生长，不再贴快捷栏，
+ * 那套几何失去服务对象。本类剩下的是三样仍然活着的东西：
+ * <b>底部留白</b>（{@link #bottomInset}，锚点以下算"放几张"的下界）、
+ * <b>侧栏/状态效果让位</b>（{@link #reserve}，锚点在画布中部后更容易碰上）、
+ * 与<b>底部各带的矩形</b>（给单测与诊断日志）。
  */
 public final class HudSafeZone {
 
@@ -40,10 +44,6 @@ public final class HudSafeZone {
     public static final int HOTBAR_HALF = 91;
     /** 快捷栏底行（含选中框）距屏幕底多少像素。 */
     public static final int HOTBAR_TOP = 23;
-    /** 副手槽宽：W/2+91 起、29 宽。它在<b>哪一侧</b>见 {@link #hotbarRightHalf}。 */
-    public static final int OFFHAND_W = 29;
-    /** 副手槽右缘（<b>仅当副手在右侧</b>时成立）：W/2 + 91 + 29。 */
-    public static final int OFFHAND_RIGHT = HOTBAR_HALF + OFFHAND_W;
     /**
      * 攻击指示器（快捷栏档）的宽度与它距快捷栏右缘的距离：画在 {@code W/2+91+6} 起、18 宽。
      * <p>它<b>只在充能时出现</b>（挥击后那不到一秒），而且只占快捷栏那一带。
@@ -70,32 +70,15 @@ public final class HudSafeZone {
     public static final int PAD = 2;
 
     /**
-     * 快捷栏那一带<b>向右</b>伸到哪儿（距屏幕中心的半宽）。
-     * <p>
-     * 【为什么跟主手有关，而且必须问】副手槽画在<b>主手的反侧</b> —— 原版
-     * {@code Gui#renderHotbar} 第一句就是 {@code HumanoidArm arm = player.getMainArm().getOpposite()}，
-     * 然后 {@code if (arm == LEFT) blit(cx - 91 - 29, …) else blit(cx + 91, …)}。
-     * 也就是说：<b>右手玩家（默认）副手在左边</b>，只有左撇子玩家才会伸到右边来。
-     * <p>
-     * 【这条曾经是错的，而它正是"卡片放不进右侧条带"的来源】2026-09-18 之前这里写着
-     * "副手槽 W/2+91 .. W/2+120"，那是<b>左撇子</b>的几何，却被当成了所有人的。
+     * 【这段记录留着当初的教训】快捷栏那一带向右伸到哪儿，曾经被算错成左撇子的几何：
+     * "副手槽 W/2+91 .. W/2+120"是<b>左撇子</b>才有的事实，却被当成了所有人的。
      * 于是 427 宽的画布上右侧条带被算成 77.5px（真实 105.5px，宽了 36%），
      * 结论一度成了"那条缝放不下一张卡，所以整列放到 HUD 带上方去" —— 用户为此报了三次。
-     * <p>
-     * 攻击指示器（快捷栏档）画在 {@code cx+91+6} 起、18 宽，但<b>只在快捷栏那一带</b>；
-     * 卡片按 {@link #bottomInset()} 压根不进那一带，所以它不用单独让。
+     * 副手槽画在<b>主手的反侧</b>（原版 {@code Gui#renderHotbar}：
+     * {@code HumanoidArm arm = player.getMainArm().getOpposite()}）——
+     * 右手玩家（默认）副手在左边，只有左撇子才会伸到右边来。
+     * 条带几何随 2026-09-18 晚的锚点化一起删除。
      */
-    public static int hotbarRightHalf(boolean leftHanded) {
-        return leftHanded ? OFFHAND_RIGHT : HOTBAR_HALF + 1;
-    }
-
-    /**
-     * 右侧条带的左缘：<b>卡片左缘不许小于它</b>
-     * （用户 2026-09-18 的原话：「只能在物品栏和屏幕右侧之间，不管再右都不要左」）。
-     */
-    public static float stripLeft(float guiWidth, boolean leftHanded) {
-        return guiWidth / 2f + hotbarRightHalf(leftHanded);
-    }
 
     private HudSafeZone() {
     }
@@ -160,67 +143,6 @@ public final class HudSafeZone {
     public static Rect sidebar(float guiWidth, float guiHeight, float width, int lines) {
         float h = Math.max(9f, lines * 9f + 12f);
         return new Rect(guiWidth - width - 5f, guiHeight / 2f - h / 2f, width + 5f, h);
-    }
-
-    /**
-     * 右侧条带这一帧的几何：<b>卡堆只准待在这个矩形里</b>。
-     *
-     * @param left        条带左缘 = {@link #stripLeft}（快捷栏那一带的右缘）
-     * @param right       条带右缘 = 画布宽 − 右边距 − 右侧要让开的东西
-     * @param width       {@code right − left}；<b>负数代表这条带装不下任何卡</b>
-     * @param bottomInset 底部留白 = {@link #STRIP_BOTTOM}（<b>不是</b> {@link #bottomInset()}）
-     */
-    public record Strip(float left, float right, float width, float bottomInset) {
-
-        /** 条带里能不能放下一张给定宽度的卡。 */
-        public boolean fits(float cardWidth) {
-            return cardWidth > 0f && cardWidth <= width;
-        }
-
-        /** 这一摞卡在条带里的矩形（贴右下；给单测与诊断用）。 */
-        public Rect cards(float cardWidth, float guiHeight, float stackHeight) {
-            return new Rect(right - cardWidth, guiHeight - bottomInset - stackHeight,
-                    cardWidth, stackHeight);
-        }
-    }
-
-    /**
-     * 条带里的底部留白。<b>只有 2px</b> —— 卡片可以一路下到屏幕底、跟快捷栏并排。
-     * <p>
-     * 【为什么这里不用 {@link #bottomInset()}（75）】那 75px 是为了"让开底部那一整条居中 HUD 带"
-     * 而算的，而它成立的前提是卡片<b>横跨在那一带上方</b>。进了条带之后卡片整体在快捷栏的
-     * <b>右边</b>，横向上与快捷栏不相交，让开纵向那一整条就变成白让了 ——
-     * 用户从 2026-09-17 起报了四次「为什么还是在物品栏上方」，要的就是"屏幕右侧和物品栏之间
-     * 那一块区域"，而那一块是<b>从屏幕底一直到顶</b>的。
-     * <p>
-     * 【这条选择换来了什么、代价是什么】换来的是卡片真的落在那一块里（最新那张的底边与
-     * 快捷栏的底边齐平）。代价要认：底部那一带还有两块<b>居中、宽度不定</b>的原版文字
-     * （手持物品名 H-63、动作栏提示语 H-73），够宽的时候右端会伸进条带里。
-     * 它们是瞬时文字、而卡片画在它们之上，冲突是"卡片盖住半句提示"，不是"卡片压住快捷栏"。
-     * 真机上如果看着碍事，下一步就照 {@code reserve} 那套"碰上了才让"给它们加一条。
-     */
-    public static final int STRIP_BOTTOM = PAD;
-
-    /**
-     * 算出这一帧的右侧条带。
-     * <p>
-     * 【它取代了什么】从前这里叫 {@code place()}，返回一个"左缘软下限 + 底部留白"，
-     * 而它的注释写着"那条缝只有 76 像素、放不下一张卡，所以整列放到 HUD 带上方去" ——
-     * 那个 76 是<b>照左撇子的副手位置算出来的</b>（见 {@link #hotbarRightHalf}），
-     * 右手玩家实际有 105.5px。用户为此报了三次「为什么还在物品栏上方」。
-     * <p>
-     * 现在这里只回答"条带在哪儿、多宽"，装不装得下交给调用方按真实的卡宽判断
-     * （{@code CardStage} 会先按宽度截名字，实在装不下才回退到 HUD 带上方）。
-     *
-     * @param marginX      距屏幕右边的留白
-     * @param rightReserve 右侧额外要让开多少（侧栏 / 状态效果图标），0 = 不用让
-     * @param leftHanded   玩家是不是左撇子（副手在右，条带因此窄 29px）
-     */
-    public static Strip strip(float guiWidth, float guiHeight, int marginX, float rightReserve,
-                              boolean leftHanded) {
-        float left = stripLeft(guiWidth, leftHanded);
-        float right = guiWidth - marginX - Math.max(0f, rightReserve);
-        return new Strip(left, right, right - left, STRIP_BOTTOM);
     }
 
     /**

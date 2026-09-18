@@ -47,30 +47,12 @@ public final class CardMetrics {
     }
 
     /**
-     * 这张卡<b>不可再压</b>的宽度：竖条 + 间隙 + 图标框 + 间隙 + 内边距 + 数量。
-     * <p>名字是唯一能被截掉的部分，所以这个数就是"再怎么截也这么大"。条带比它还窄时，
-     * 只剩两条路：把整张卡缩小（下限 {@code MIN_AUTO_PERCENT}），或者回退位置 ——
-     * 判据要有这个数才算得出来。
-     */
-    public static float fixedWidth(CardCanvas canvas, Font font, CardView view) {
-        var style = canvas.style();
-        float gap = style.gap();
-        return style.barWidth() + gap + style.boxHeight() + gap
-                + style.paddingH() * 2f + canvas.countWidth(view, font);
-    }
-
-    /**
-     * 这张卡允许的最大宽度（屏幕像素）= <b>屏宽比例</b>与<b>右侧条带宽度</b>的较小者。
-     * <p>
-     * 【为什么要看条带】从前只有 {@code guiWidth × 0.45} 一条：卡片最宽可以到 192px，
-     * 而快捷栏右边那条带在 427 宽的画布上只有 105.5px —— 长名字的卡会横着溢出条带、
-     * 压在快捷栏上。收住上限之后，"名字太长"就退化成已有的那条路：截断加省略号，
-     * 而不是把整张卡缩小（缩到 55% 的卡，8px 的字就成 4.4px 了）。
+     * 这张卡允许的最大宽度（屏幕像素）= 屏宽比例上限。
+     * <p>名字比这更长就截断加省略号 —— 收的是"名字"，不是字号（数量与图标才是卡上要一眼
+     * 读到的东西，缩字体比截名字更伤）。
      */
     public static float maxWidth(CardCanvas canvas) {
-        float ratio = canvas.guiWidth() * MAX_WIDTH_RATIO;
-        float strip = canvas.stripWidth();
-        return strip > 0f ? Math.min(ratio, strip) : ratio;
+        return canvas.guiWidth() * MAX_WIDTH_RATIO;
     }
 
     /**

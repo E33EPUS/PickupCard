@@ -1,6 +1,7 @@
 package com.niuqu.pickupcard.dev;
 
 import com.niuqu.pickupcard.PickupCard;
+import com.niuqu.pickupcard.config.AnchorEditScreen;
 import com.niuqu.pickupcard.config.PickupCardConfig;
 import com.niuqu.pickupcard.config.PickupCardConfigScreen;
 import com.niuqu.pickupcard.layout.LayoutSettings;
@@ -304,7 +305,11 @@ public final class DevHarness {
             // 【为什么反复开、而不是开一次】quickPlay 期间 MC 自己还会换几次界面（收块屏、地形
             // 加载屏），开一次会被它盖掉 —— 实测截图拍的是世界、日志写着"(不是配置界面)"。
             // 所以：一直开到它真的挂上；**挂上之后再动缩放**（那时没别人会再改窗口）。
-            if (!(mc.screen instanceof PickupCardConfigScreen)) {
+            // 【编辑场要放行】拖拽编辑场是配置流程的一部分（点『位置』打开）；不放行的话
+            // 它挂上来的下一个 tick 就被这里硬换回配置界面 —— 2026-09-18 第三轮实测抓到，
+            // removed() 堆栈点名就是这一行。
+            if (!(mc.screen instanceof PickupCardConfigScreen)
+                    && !(mc.screen instanceof AnchorEditScreen)) {
                 mc.setScreen(new PickupCardConfigScreen(null));
                 return;
             }
@@ -351,22 +356,39 @@ public final class DevHarness {
                 return;
             }
             if (configTicks == WARMUP_TICKS + 46) {
-                LayoutSettings.Side before = PickupCardConfig.layoutSnapshot().stickTo();
-                clickByLabel(mc, "贴边");
-                LayoutSettings.Side after = PickupCardConfig.layoutSnapshot().stickTo();
-                PickupCard.LOGGER.info("[harness-auto] 点『贴边』：{} → {}（变了才算这条链通）",
-                        before, after);
+                // 「位置」那颗钮：点开整屏拖拽编辑场，再 Esc 取消 —— 开关这条链要能自动走通
+                clickByLabel(mc, "位置");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 47) {
+                if (!(mc.screen instanceof AnchorEditScreen editor)) {
+                    PickupCard.LOGGER.error("[harness-auto] 点『位置』后没进编辑场（当前 {}）",
+                            mc.screen == null ? "无界面" : mc.screen.getClass().getSimpleName());
+                    return;
+                }
+                PickupCard.LOGGER.info("[harness-auto] 进编辑场: {}", editor.stateDump());
+                // 真实事件路径拖到 (70%, 60%)，dump 出来"变没变"一眼可读
+                editor.dragForHarness(0.70, 0.60);
+                PickupCard.LOGGER.info("[harness-auto] 拖到 (70%,60%) 后: {}", editor.stateDump());
                 return;
             }
             if (configTicks == WARMUP_TICKS + 48) {
-                clickByLabel(mc, "动画");        // 拖拽那项在动画页，先切回去
+                // Esc 取消：配置必须原样（没写盘），回到配置界面
+                if (mc.screen instanceof AnchorEditScreen editor) {
+                    editor.cancelForHarness();
+                }
+                PickupCard.LOGGER.info("[harness-auto] Esc 后：{}", PickupCardConfig.anchorDump());
+                clickByLabel(mc, "动画");        // 下一项要拖的滑条在动画页
                 return;
             }
             if (configTicks == WARMUP_TICKS + 52) {
                 long before = CardStage.INSTANCE.previewStyle().enterMs();
-                dragOption(mc, "入场时长", 0.35);
+                // 【为什么拖到 50% 不是 35%】0.35 × 2000 = 700，吸附到 40 的倍数是 680 ——
+                // 撞上 dev 配置目录里上一次拖拽残留的 680，"变了才算通"就永远等不到变化
+                // （第三轮实测：680 → 680，其实链路是好的，日志冤枉了它）。
+                dragOption(mc, "入场时长", 0.5);
                 long after = CardStage.INSTANCE.previewStyle().enterMs();
-                PickupCard.LOGGER.info("[harness-auto] 拖『入场时长』到 35%：{} → {}（变了才算拖拽这条链通）",
+                PickupCard.LOGGER.info("[harness-auto] 拖『入场时长』到 50%：{} → {}（变了才算拖拽这条链通）",
                         before, after);
                 return;
             }
@@ -809,6 +831,11 @@ public final class DevHarness {
                     mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
                     highestCard == Float.MAX_VALUE ? "-" : Math.round(highestCard),
                     com.niuqu.pickupcard.layout.StackLayout.fittingCount(
+                            // 锚点化之后"放几张"从锚点起算：夹取后的锚点顶 + HUD 带定可用高
+                            PickupCardConfig.layoutSnapshot().anchorTop(
+                                    mc.getWindow().getGuiScaledHeight(),
+                                    CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
+                                    com.niuqu.pickupcard.layout.HudSafeZone.bottomInset()),
                             mc.getWindow().getGuiScaledHeight(),
                             com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
                             // 用**本帧生效的**卡高与间距算（乘上当前缩放），否则这行日志会
@@ -828,14 +855,18 @@ public final class DevHarness {
                     .anyMatch(slot -> slot.view().exiting() || slot.view().reviving());
         }
 
-        /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式）。 */
+        /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式：锚点以下可用高）。 */
         private static float effectiveScale(Minecraft mc) {
-            return PickupCardConfig.layoutSnapshot().scale(
+            LayoutSettings layout = PickupCardConfig.layoutSnapshot();
+            float cardH = CardStage.INSTANCE.previewStyle().boxHeight();
+            float anchorTop = layout.anchorTop(mc.getWindow().getGuiScaledHeight(), cardH,
+                    com.niuqu.pickupcard.layout.HudSafeZone.bottomInset());
+            return layout.scale(
                     mc.getWindow().getGuiScaledHeight()
-                            - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
-                    CardStage.INSTANCE.previewStyle().boxHeight(),
+                            - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset() - anchorTop,
+                    cardH,
                     Math.max(1, CardStage.INSTANCE.stats().live()),
-                    PickupCardConfig.layoutSnapshot().separation());
+                    layout.separation());
         }
 
         private static void capture(Minecraft mc, String suffix) {

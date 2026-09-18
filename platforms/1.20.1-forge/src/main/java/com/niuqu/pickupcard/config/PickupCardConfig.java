@@ -68,11 +68,11 @@ public final class PickupCardConfig {
      */
     public static LayoutSettings layoutSnapshot() {
         return new LayoutSettings(
-                VALUES.stickTo.get(),
-                VALUES.leftEdge.get(),
                 VALUES.appearMode.get(),
                 VALUES.separation.get().floatValue(),
-                VALUES.scalePercent.get()).sanitized();
+                VALUES.scalePercent.get(),
+                VALUES.anchorX.get().floatValue(),
+                VALUES.anchorY.get().floatValue()).sanitized();
     }
 
     /** 采样过滤三表。列表元素不做校验——坏规则由 FilterRule.parse 静默跳过。 */
@@ -91,6 +91,14 @@ public final class PickupCardConfig {
     public static String filterDump() {
         FilterSettings f = filterSnapshot();
         return "黑名单" + f.blacklist() + " 白名单" + f.whitelist() + " 静音" + f.muteList();
+    }
+
+    /**
+     * 两个锚点值一行（给 harness 的日志：拖拽编辑场"写没写进配置"，截图看不出来，
+     * 只有数字能对账）。
+     */
+    public static String anchorDump() {
+        return "anchorX=" + VALUES.anchorX.get() + " anchorY=" + VALUES.anchorY.get();
     }
 
     /** 当前主题。 */
@@ -199,11 +207,11 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.ConfigValue<List<? extends String>> blacklist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> muteList;
-        final ForgeConfigSpec.EnumValue<LayoutSettings.Side> stickTo;
-        final ForgeConfigSpec.IntValue leftEdge;
         final ForgeConfigSpec.EnumValue<LayoutSettings.Appear> appearMode;
         final ForgeConfigSpec.DoubleValue separation;
         final ForgeConfigSpec.IntValue scalePercent;
+        final ForgeConfigSpec.DoubleValue anchorX;
+        final ForgeConfigSpec.DoubleValue anchorY;
 
         // ---- [style] 外观：全部用 -1 表示"跟随主题" ----
         final ForgeConfigSpec.EnumValue<Theme> theme;
@@ -285,31 +293,27 @@ public final class PickupCardConfig {
                     .defineInRange("scalePercent", LayoutSettings.AUTO_SCALE,
                             LayoutSettings.AUTO_SCALE, LayoutSettings.MAX_SCALE_PERCENT);
 
-            stickTo = builder
-                    .comment("卡片靠屏幕哪一边停。一摞卡锚在屏幕下方，最新的贴底、旧的往上顶。",
-                            "  LEFT  = 卡片左边尽量停在 leftEdge 的位置，内容往右伸展。推荐（默认）。",
-                            "          一摞卡排下来，稀有度竖条成一条竖线 —— 卡的长短不影响竖条在哪。",
-                            "  RIGHT = 卡片右边固定不动，左边随内容长短伸缩。",
-                            "          内容再长也只是往左伸，永远不会超出屏幕右边；",
-                            "          代价是卡越宽竖条越靠左，一摞卡的竖条参差。")
-                    .defineEnum("stickTo", LayoutSettings.Side.LEFT);
-
-            leftEdge = builder
-                    .comment("只有上面选了 LEFT 才有用：竖条左缘想停在离屏幕左边多少像素的地方。",
-                            "-1（默认）= 自动：让最宽的那张卡右缘正好落在右边距上（跟着画布算）。",
-                            "  画布宽度随 GUI 缩放剧烈变化（guiScale 3 是 426 宽、5 只剩 256），",
-                            "  写死一个绝对数会在另一种缩放下被右边界夹住 —— 那时竖条又参差了，",
-                            "  而配置里那个数看着还挺正常。所以默认交给自动。",
-                            ">= 0 = 绝对 x（草稿 animation.html 里那个「锚点 X」滑块就是这个）。",
-                            "两种都是「想停在这儿」而不是「一定停在这儿」——",
-                            "名字比预留宽度还长时，那张卡会自动往左让，不把内容挤出屏幕。")
-                    .defineInRange("leftEdge", LayoutSettings.AUTO_LEFT_EDGE, -1, 4000);
-
             appearMode = builder
                     .comment("卡片出现时怎么展开。",
                             "  SLIDE = 内容保持原样，从左往右平移到最终位置；先看到最右端，再逐渐看到全部。",
                             "  CLIP  = 内容位置不动，可见范围从左往右慢慢扩大；先看到最左端。")
                     .defineEnum("appearMode", LayoutSettings.Appear.SLIDE);
+
+            anchorX = builder
+                    .comment("卡堆锚点的横坐标（0~1 = 屏幕宽度的比例）：第一张卡的竖条左缘停在这儿。",
+                            "-1（默认）= 自动：让最宽的那张卡右缘正好落在右边距上（跟着画布算），",
+                            "  一摞卡的竖条因此成一条竖线。",
+                            "【推荐改法】配置界面「位置与堆叠」页 → 「拖拽调整位置」，不用手写这个数。",
+                            "旧键 stickTo / leftEdge 已废弃：读进来会被忽略。")
+                    .defineInRange("anchorX", -1.0, -1.0, 1.0);
+
+            anchorY = builder
+                    .comment("卡堆锚点的纵坐标（0~1 = 屏幕高度的比例）：第一张卡（最新）的顶边停在这儿，",
+                            "新卡永远从锚点出现、旧的被挤下去。",
+                            "-1（默认）= 自动：准星下方（约屏幕高 55% 的地方）。",
+                            "锚点太低、连一张卡都放不下时会自动抬到 HUD 带上方。",
+                            "【推荐改法】配置界面「位置与堆叠」页 → 「拖拽调整位置」。")
+                    .defineInRange("anchorY", -1.0, -1.0, 1.0);
 
             separation = builder
                     .comment("两张卡之间的空隙（像素）。它跟卡内间隙（[style] gap）不是一回事：",
