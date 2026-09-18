@@ -46,14 +46,23 @@
 **harness 现在能全自动跑**（`--quickPlaySingleplayer` 自己进世界 → 自己操作 → 自己截图 → 自己退出），
 跑测纪律与踩过的坑写在下面"跑测的纪律"那条里 —— **别再用前台调用跑它**。
 
-✅ **已部署 2026-09-18 11:0x（配置界面重铸 + 标签列漏画修复 + 底部撞字修复 + 过滤页 + 强调色接真源）**：
-`D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar`，
-`sha256 3151b2ee520144e8…`（**含 `dce1afe` 的强调色接真源**；在不在 jar 里是**解包查字节码**验的
-——`StyleModel$Accents.class` 在包里、`assets/.../default.json` 的 `accent` 六个键齐全，
-不是靠时间戳猜；`mods/` 里仍只有这一份；玩家侧 TOML 已删，下次启动重新生成）。
-提交线：`dce1afe`（强调色）→ `32c5731`（过滤页）→ `4eba40f` + `7c9beaa`（底部撞字 + 文档）
-→ `8881c1c`（harness 两个 bug）→ `14b7d4e` + `0b85e1e`（标签列漏画 + 文档）。
-历史 sha：`550c0b7fcdd04d15…`、`951ab7b15017adbc…`、`b260353d9f2bc964…`。
+✅ **已发布 0.2.1（2026-09-18 11:1x）**：`mod_version` 从 `0.2.0` 升到 **`0.2.1`**
+（0.2.0 只在开发中迭代过、从没发布，所以 CHANGELOG / RELEASE_NOTES 里**没有 0.2.0 段**。
+⚠️ **为什么不是从 0.1.x 续**：0.1.0 是**已归档的 AUI 老线**（`archive/aui` tag），
+`docs/design.md:135` 当初就定了"自绘这条线 `mod_version` 起 0.2.0" —— 发 0.1.1 会变成
+"给归档线打补丁"并且是**降级**）。
+产物 `D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.1.jar`，
+`sha256 55c86931730b5487…`。**这份部署验了两件事**：① 解包看 `META-INF/mods.toml` 里
+`version = "0.2.1"`；② **逐字节比对 0.2.0 与 0.2.1 的全部 `.class`，完全相同** ——
+只有 `MANIFEST.MF` / `mods.toml` / `pickupcard-build.properties` 三个版本戳文件不同，
+也就是说**部署的这份代码就是本轮所有跑测验过的那份**，部署本身不可能引入回归。
+旧的 0.2.0 jar 已从 `mods/` 删掉，**又只剩一份**；玩家侧 TOML 已删，下次启动重新生成。
+双语 CHANGELOG 已补（`CHANGELOG.md` 的 0.2.1 段 + `RELEASE_NOTES.md` 的 `## v0.2.1`，
+中文在前、英文块在段尾，商店文案取段尾那块）。
+提交线：`95acc1f`（0.2.1 发版）→ `238c232` + `dce1afe`（强调色接真源）→ `32c5731`（过滤页）
+→ `4eba40f` + `7c9beaa`（底部撞字 + 文档）→ `8881c1c`（harness 两个 bug）→ `14b7d4e`。
+**还没做的**：`v0.2.1` 的 git tag 与 GitHub Release（`RELEASE_NOTES.md` 说段标题要与 tag 一致）——
+那一步要不要做由你定，本地部署已经完成。
 
 - **harness 现在自己会进世界了**（用户报的"每次都要我手动进世界、你没有任何作为"）。
   三个根因一起修：① 注入需要 `mc.level != null`，而**没有任何东西让它进过世界** —— 带
