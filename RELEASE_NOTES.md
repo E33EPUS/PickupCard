@@ -17,6 +17,9 @@
 这一版新增**过滤页**：黑名单 / 白名单 / 静音名单，每条支持物品 `minecraft:cobblestone`、
 标签 `#forge:ores`、整个 mod `@modid`。这三张表此前只能手改配置文件。
 
+**卡片挪到了物品栏右边那条区域**（物品栏与屏幕右缘之间），并一路下到屏幕底、与物品栏同层。
+**同一样东西再次拾起**现在真的会动：整张卡鼓一下、数字从旧值滚上去。
+
 **不需要任何前置模组。**
 
 First self-drawn release: **ApricityUI is no longer required** — zero required
@@ -31,6 +34,11 @@ pack can restyle the whole thing.
 This version adds the **filter page**: a blacklist, a whitelist and a mute list,
 each accepting item ids (`minecraft:cobblestone`), tags (`#forge:ores`) or whole
 mods (`@modid`). Those three lists used to be config-file only.
+
+Cards now sit in the region between the hotbar and the right edge of the screen,
+dropping to the bottom so they share the hotbar's row. Picking the same item up
+again finally animates: the whole card pulses and the count rolls from the old
+value to the new one.
 
 **No dependencies required.**
 
