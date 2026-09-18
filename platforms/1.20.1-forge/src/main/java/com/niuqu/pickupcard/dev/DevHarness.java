@@ -109,7 +109,8 @@ public final class DevHarness {
          * 只剩自然到点这一条路。窗口必须把这 80 tick 那一下包进去，否则「看见退场」永远不成立
          * （第一版就是这么空跑的：日志里 `退场/淡回` 一行都没有）。
          */
-        private static final int QUIT_AFTER_SHOT = 70;
+        private static final int QUIT_AFTER_SHOT =
+                Integer.getInteger("pickupcard.harness.quitAfter", 70);
         /**
          * 退场淡出：稳态那张拍完之后再推一张把最老的挤掉，隔 3 tick（约 150ms）拍中段。
          * <p>
@@ -120,30 +121,38 @@ public final class DevHarness {
         private static final int EXIT_PUSH_AFTER = SHOT_AFTER_OPEN + 2;
         private static final int EXIT_SHOT_AFTER = EXIT_PUSH_AFTER + 3;
         /**
-         * 淡出<b>后段</b>拍一张（退场全长约 29 tick，取第 12 tick ≈ 只剩两成不透明）。
-         * <p>【为什么非要这一帧】"图标到底跟不跟着淡"在前段看不出来：那时卡还有九成亮，
-         * 图标满不透明和跟着淡只差 10%。到了后段，外壳只剩两成 —— 图标要是没跟着淡，
-         * 它会**亮得刺眼**，一眼可辨、也可量。2026-09-18 的根因（`renderItem` 不自己 flush）
-         * 就是靠这一帧定死的。
+         * 退场连拍：从"看见退场"起第 {@value #EXIT_LATE_TICK} tick 开始，每
+         * {@value #EXIT_LATE_EVERY} tick 一张，共 {@value #EXIT_LATE_FRAMES} 张。
+         * <p>【必须先读这条，否则这组截图一定是废的】{@code tickHud} 挂在
+         * {@code TickEvent.ClientTickEvent}（END 相位）上，也就是 <b>20Hz</b>；而退场按毫秒走。
+         * 默认 {@code exitMs=480} 只有约 <b>9.6 tick</b> —— 20Hz 的网格分辨不了它，
+         * 连拍只会拍到"卡已经没了"的空屏（2026-09-18 就这么白做过一次 A/B：抓到的几张
+         * 逐像素相同，其实是空屏相同）。所以这组连拍<b>只在把淡出拉长之后才有意义</b>：
+         * <pre>run/config/pickupcard-client.toml: exitMs = 4800  （96 tick）</pre>
+         * 上面的数字按 4800ms 取的，覆盖 alpha 0.95 → 0.005；同一份配置下
+         * {@code queueSize = 0} 保证没有卡补位，卡堆不动，截图上取的区域才不用跟着走。
+         * <p>【为什么是连拍而不是"就拍淡到一半那一张"】
+         * {@code tick} 与毫秒的换算随帧率变，想精确命中某一档不透明度只能靠猜，猜错过。
+         * 连拍一串之后在图上按"强调条亮度"对齐（它是 alpha 的线性代理），
+         * 就能把三条通道（外壳 / 图标 / 文字）放在同一张图上比 —— 谁没跟着淡，一眼可见。
          */
-        private static final int EXIT_LATE_TICK = 4;
-        /** 连拍间隔（帧）与张数：4/6/8/10/12… 覆盖退场的整个后段。 */
-        private static final int EXIT_LATE_EVERY = 4;
-        private static final int EXIT_LATE_FRAMES = 6;
+        private static final int EXIT_LATE_TICK = 2;
+        private static final int EXIT_LATE_EVERY = 6;
+        private static final int EXIT_LATE_FRAMES = 14;
         /**
-         * 看见第一帧退场之后，再过几帧才算"淡到一半"（那时再捡同一个物品触发淡回）。
-         * <p>【为什么从 3 挪到 15】3 太早：淡回一触发，退场就被撤销，**后段根本不存在**，
-         * 上面那一帧永远拍不到。挪到 15 之后，12 那一帧是干净的退场后段，
-         * 15 再验"救回"，两件事各拍各的。
+         * 看见第一帧退场之后，再过几 tick 就"淡到一半"，那时再捡同一个物品触发淡回。
+         * <p>【为什么要能改】淡回一触发，退场就被撤销，连拍窗口<b>剩下的部分全部作废</b>。
+         * 上面那组数字要 80 tick 才拍完，而默认的 15 会在中途把它掐掉 —— 所以它得让开。
+         * 命令行给 {@code -PharnessReviveAfter=N} 即可（默认 15 是给正常时长用的）。
          */
-        private static final int REVIVE_AFTER_EXIT_SEEN = 15;
+        private static final int REVIVE_AFTER_EXIT_SEEN =
+                Integer.getInteger("pickupcard.harness.reviveAfter", 15);
         /** 淡回开始之后再过几帧拍一张。 */
         private static final int REVIVE_SHOT_AFTER = 2;
 
         /** 探针状态：退场与淡回各只做一次，靠"看见"驱动而不是靠固定 tick。 */
         private static boolean exitSeen;
         private static boolean exitShotDone;
-        
         private static boolean reviveDone;
         private static int ticksSinceExitSeen;
         private static int ticksSinceRevive;
@@ -581,6 +590,26 @@ public final class DevHarness {
          * 共用同一个方法不等于共用同一条路径 —— "调试屏里好好的、玩家那边一张卡都没有"
          * 正好就是这个差别，而上面那些自动截图全都走的调试屏那条路，永远测不到。
          */
+        /**
+         * 开跑前把上一轮的截图删掉。
+         * <p>【为什么非删不可】{@code run/screenshots} 只增不删，而连拍的文件名是按 tick 编号的
+         * （{@code …-late24}）—— 换了 harness 常数之后，同一批编号会被新一轮覆盖一部分、
+         * 又留下一部分旧的，**两轮的帧混在同一个目录里**。分析脚本按文件名收集，于是把上一轮
+         * 的帧当成本轮的帧，得出过一个完全错误的结论：上一轮在 tick 15 触发过"救回"，
+         * 它那张 {@code late24} 本来就是全不透明的，被读成了"淡到一半突然闪回不透明"。
+         * 跨轮混帧是"看不出来的错"里最难查的一种，所以让 harness 自己保证目录是干净的。
+         */
+        private static void clearOldShots(Minecraft mc) {
+            java.io.File dir = new java.io.File(mc.gameDirectory, "screenshots");
+            java.io.File[] old = dir.listFiles((d, n) -> n.startsWith("pickupcard-"));
+            if (old == null || old.length == 0) return;
+            int n = 0;
+            for (java.io.File f : old) {
+                if (f.delete()) n++;
+            }
+            PickupCard.LOGGER.info("[harness-auto] 清掉上一轮的 {} 张截图（跨轮同名会污染分析）", n);
+        }
+
         private static void tickHud(Minecraft mc) {
             if (mc.level == null || mc.getOverlay() != null) {
                 return;         // 同上：世界进来了才开始数 tick
@@ -590,6 +619,7 @@ public final class DevHarness {
             if (!hudInjected) {
                 if (hudTicks < WARMUP_TICKS) return;
                 if (mc.getOverlay() != null || mc.screen != null || mc.level == null) return;
+                clearOldShots(mc);
                 CardFixtures.clear();
                 for (CardFixtures.Fixture fixture : PAGES.get(0)) {
                     CardFixtures.inject(fixture);
@@ -652,10 +682,8 @@ public final class DevHarness {
                 } else if (exitSeen && ticksSinceExitSeen >= EXIT_LATE_TICK
                         && (ticksSinceExitSeen - EXIT_LATE_TICK) % EXIT_LATE_EVERY == 0
                         && ticksSinceExitSeen <= EXIT_LATE_TICK + EXIT_LATE_EVERY * (EXIT_LATE_FRAMES - 1)) {
-                    // 【为什么连拍一串】"tick" 这个计数挂在渲染事件上、按帧走，而退场按毫秒走，
-                    // 两者的换算随帧率变 —— 想精确命中"淡到两成"那一帧就得靠猜，猜错过一次
-                    // （抓到的是一张还没开始退场的卡，A/B 白做）。改成固定间隔连拍，
-                    // 事后在图上挑出真正在淡的那一帧。
+                    // 【连拍见 EXIT_LATE_* 的说明】这组截图只在 exitMs 被拉长之后才有意义；
+                    // 默认 480ms 在 20Hz 的 tick 网格上只有 9.6 格，拍出来是空屏。
                     Screenshot.grab(mc.gameDirectory,
                             "pickupcard-hud-exit-late" + ticksSinceExitSeen, mc.getMainRenderTarget(),
                             m -> PickupCard.LOGGER.info("[harness-auto] 截图: exit-late{} -> {}",

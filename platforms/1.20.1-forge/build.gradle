@@ -45,6 +45,10 @@ minecraft {
             jvmArg "-Dpickupcard.harness.auto=${project.findProperty('harnessAuto') ?: 'off'}"
             // 运行时把 GUI 缩放定死（1..5）："dev 跑不出小画布"靠它解决
             jvmArg "-Dpickupcard.harness.guiScale=${project.findProperty('harnessGuiScale') ?: 'off'}"
+            // 把"救回"推到第几 tick —— 退场连拍要占掉 80 tick，默认的 15 会中途掐断它
+            jvmArg "-Dpickupcard.harness.reviveAfter=${project.findProperty('harnessReviveAfter') ?: '15'}"
+            // 拍完稳态那张之后还活多久 —— 同上，默认的 70 会把退场连拍从中途掐断
+            jvmArg "-Dpickupcard.harness.quitAfter=${project.findProperty('harnessQuitAfter') ?: '70'}"
 
             mods {
                 "${mod_id}" {
