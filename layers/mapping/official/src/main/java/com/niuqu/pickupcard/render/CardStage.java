@@ -333,7 +333,7 @@ public final class CardStage {
         List<StackLayout.Size> sizes = new ArrayList<>(alive.size());
         float widest = 0f;
         for (CardView view : alive) {
-            float width = CardMetrics.width(canvas, mc.font, view.notice().payload(), view.notice().count());
+            float width = CardMetrics.width(canvas, mc.font, view);
             widest = Math.max(widest, width);
             sizes.add(new StackLayout.Size(width, cardHeight));
         }

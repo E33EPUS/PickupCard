@@ -18,6 +18,7 @@ import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
+import com.mojang.blaze3d.vertex.PoseStack;
 import org.joml.Matrix4f;
 import org.joml.Vector3f;
 import org.lwjgl.nanovg.NVGColor;
@@ -159,10 +160,18 @@ public final class NvgCardPainter {
                 // 【缩放落在变换上】外壳一律按"未缩放的卡"画，位置与大小由这两个变换给。
                 // 这样竖条宽、圆角、描边、微光全都一起缩，不会出现"卡小了但边还是粗的"。
                 // NanoVG 的 scissor 也会被当前变换带走，所以 paintShell 里的裁剪框照样对。
+                // 【两个缩放不是一回事，别合并】S 是布局缩放（把"未缩放的卡"换算成屏幕像素），
+                // p 是脉冲倍率（再次拾起时整张卡鼓一下）。外壳按 W0×H0 画，屏幕尺寸 = W0·S·p，
+                // 所以 W0 要除 S 而不是除 S·p —— 合并成一个的话卡会越鼓越小。
+                // 【脉冲为什么以卡心为原点】以左上角为原点时卡片会一边放大一边往右下"长出去"，
+                // 读起来是位移；以卡心为原点才是原地鼓。内容那一路必须用同一个原点，否则错开。
                 float cardScale = canvas.scale();
-                nvgTranslate(vg, slot.x(), slot.y());
-                nvgScale(vg, cardScale, cardScale);
-                paintShell(vg, style, 0f, 0f, slot.width() / cardScale, slot.height() / cardScale,
+                float pulse = canvas.pulseOf(slot.view());
+                float w0 = slot.width() / cardScale;
+                float h0 = slot.height() / cardScale;
+                nvgTranslate(vg, slot.x() + slot.width() / 2f, slot.y() + slot.height() / 2f);
+                nvgScale(vg, cardScale * pulse, cardScale * pulse);
+                paintShell(vg, style, -w0 / 2f, -h0 / 2f, w0, h0,
                         accentOf(card, style.accents()), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise), rise, isHighlighted(card),
                         windowOf(canvas, slot, style, rise));
@@ -320,6 +329,7 @@ public final class NvgCardPainter {
         Inbox.Card card = view.notice().payload();
         // 【内容全部在"未缩放单位"里算】缩放交给 pose；文字因此跟着一起缩，
         // 而字形按 100% 栅格化后重采样 —— 缩小时略有锯齿，但比"卡小了字还在外面"强。
+        // 尺寸按布局缩放换算（见 paint 里那段：S 与脉冲 p 是两回事）
         float cardScale = canvas.scale();
         float h = slot.height() / cardScale;
         float cardW = slot.width() / cardScale;
@@ -336,10 +346,13 @@ public final class NvgCardPainter {
         int accent = accentOf(card, style.accents());
 
         gui.pose().pushPose();
-        gui.pose().translate(slot.x(), slot.y(), 0f);
-        if (cardScale != 1f) {
-            gui.pose().scale(cardScale, cardScale, 1f);
+        // 与外壳同一个变换：以卡心为原点、按 S·p 缩放（脉冲内外一致，见 paint 里那段说明）
+        float effScale = cardScale * canvas.pulseOf(view);
+        gui.pose().translate(slot.x() + slot.width() / 2f, slot.y() + slot.height() / 2f, 0f);
+        if (effScale != 1f) {
+            gui.pose().scale(effScale, effScale, 1f);
         }
+        gui.pose().translate(-cardW / 2f, -h / 2f, 0f);
         boolean revealing = rise < 1f;
         if (revealing) {
             scissor(gui, gui.pose(), win, h);
@@ -380,8 +393,7 @@ public final class NvgCardPainter {
             gui.drawString(font, name, Math.round(nameX + style.paddingH()), Math.round(textY),
                     fade(style.nameColor(), alpha), true);
         }
-        float countX = cardW + shift - style.paddingH() - font.width(count);
-        gui.drawString(font, count, Math.round(countX), Math.round(textY), fade(accent, alpha), true);
+        drawCount(gui, canvas, view, font, cardW + shift - style.paddingH(), textY, accent, alpha);
 
         if (revealing) {
             // 原版内容还在 bufferSource 里排队：不在这里冲掉，它会在裁剪失效之后才画出来
@@ -564,6 +576,55 @@ public final class NvgCardPainter {
         }
         gui.enableScissor((int) Math.floor(minX), (int) Math.floor(minY),
                 (int) Math.ceil(maxX), (int) Math.ceil(maxY));
+    }
+
+    /**
+     * 数量：平时就是一行字；合并那一刻<b>从旧值滚到新值</b>（用户 2026-09-17 选的 C 档）。
+     * <p>【为什么要把两行字裁在一个框里】滚动是"旧的往上走、新的从下面上来"。不裁剪的话
+     * 两行会同时完整地叠在那儿，看着像重影；裁在数字这一行的高度里，才是"卷上去"。
+     * <p>【为什么整串滚，而不是逐位滚】逐位要在等宽数字上做进位对齐，而位数变化（9 → 10）
+     * 根本没有对应关系。整串滚在位数变化时一样成立，读起来也不差。
+     */
+    private static void drawCount(GuiGraphics gui, CardCanvas canvas, CardView view, Font font,
+                                  float right, float textY, int accent, float alpha) {
+        String cur = canvas.countText(view.notice().count());
+        String prev = canvas.prevCountText(view);
+        float roll = canvas.rollOf(view);
+        if (prev == null || roll >= 1f) {
+            gui.drawString(font, cur, Math.round(right - font.width(cur)),
+                    Math.round(textY), fade(accent, alpha), true);
+            return;
+        }
+        float t = Easing.easeOutCubic(roll);
+        float lineH = font.lineHeight;
+        float left = right - Math.max(font.width(cur), font.width(prev));
+        // 【为什么先 flush】裁剪是"画的时候才生效"的，而前面几张卡的文字正排着队还没提交 ——
+        // 不冲掉的话它们会一起被这个框裁掉（同一批 buffer 共用同一个裁剪状态）。
+        gui.flush();
+        // 【坐标必须是屏幕坐标】这里的 left/right/textY 是"卡内未缩放单位"，而
+        // GuiGraphics#enableScissor 吃的是经当前 pose 变换后的屏幕像素 —— 直接把卡内坐标喂进去
+        // 会得到一个贴着画布左上角的小框，等于把这一行字整个裁没（2026-09-18 就这么错过一次：
+        // 合并之后数字从屏幕上彻底消失）。所以跟 scissor() 一样先过一遍矩阵。
+        scissorLocal(gui, gui.pose(), left, textY, right, textY + lineH);
+        gui.drawString(font, prev, Math.round(right - font.width(prev)),
+                Math.round(textY - t * lineH), fade(accent, alpha), true);
+        gui.drawString(font, cur, Math.round(right - font.width(cur)),
+                Math.round(textY + (1f - t) * lineH), fade(accent, alpha), true);
+        gui.flush();
+        gui.disableScissor();
+    }
+
+    /**
+     * 把一个<b>卡内未缩放单位</b>的矩形变成屏幕像素并开启裁剪。
+     * <p>与 {@link #scissor} 同一件事，区别只是它吃的是 {@code RevealWindow}、这里吃四个边。
+     */
+    private static void scissorLocal(GuiGraphics gui, PoseStack pose,
+                                     float x1, float y1, float x2, float y2) {
+        Matrix4f m = pose.last().pose();
+        Vector3f a = m.transformPosition(new Vector3f(x1, y1, 0f));
+        Vector3f b = m.transformPosition(new Vector3f(x2, y2, 0f));
+        gui.enableScissor((int) Math.floor(Math.min(a.x, b.x)), (int) Math.floor(Math.min(a.y, b.y)),
+                (int) Math.ceil(Math.max(a.x, b.x)), (int) Math.ceil(Math.max(a.y, b.y)));
     }
 
     /** 把颜色自带的 alpha 再乘一个系数：{@code fade(0x80FF0000, 0.5f)} → alpha 64。 */

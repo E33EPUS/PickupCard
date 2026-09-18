@@ -39,6 +39,7 @@ import org.jetbrains.annotations.Nullable;
  * @param enterMs        入场动画时长
  * @param bumpMs         数字跳动时长
  * @param reviveMs       淡回时长（退场中被再次拾起时，补回全不透明要多久）
+ * @param bumpPeakPercent 再次拾起时整张卡的脉冲峰值（百分比，100 = 不动）
  * @param enterEnabled   入场动画开关
  * @param bumpEnabled    数字跳动开关
  * @param glowPulseEnabled 稀有度微光呼吸开关
@@ -60,6 +61,7 @@ public record StyleModel(int cornerRadius,
                          long enterMs,
                          long bumpMs,
                          long reviveMs,
+                         int bumpPeakPercent,
                          boolean enterEnabled,
                          boolean bumpEnabled,
                          boolean glowPulseEnabled,
@@ -89,7 +91,7 @@ public record StyleModel(int cornerRadius,
                 0xD1262B38, 0xDB161A22, 0x2EFFFFFF,
                 46,
                 0xF0EBEFF6,
-                560L, 300L, CardTimeline.DEFAULT_REVIVE_MS, true, true, true,
+                560L, 300L, CardTimeline.DEFAULT_REVIVE_MS, 106, true, true, true,
                 Accents.defaults());
     }
 
@@ -110,11 +112,17 @@ public record StyleModel(int cornerRadius,
                 Math.max(0, enterMs),
                 Math.max(0, bumpMs),
                 Math.max(0, reviveMs),
+                Math.max(100, Math.min(150, bumpPeakPercent)),
                 enterEnabled, bumpEnabled, glowPulseEnabled,
                 accents == null ? Accents.defaults() : accents);
     }
 
     // iconSize() 是 record 自带的存取器，不要再定义一遍
+    /** 脉冲峰值倍率（1 = 不动）。 */
+    public float bumpPeak() {
+        return bumpPeakPercent / 100f;
+    }
+
     /** 三个框的统一高度。图标装得下，名字也就装得下。 */
     public float boxHeight() {
         return iconSize() + paddingV * 2f;
@@ -148,6 +156,7 @@ public record StyleModel(int cornerRadius,
                     i(anim, "enterMs", 560),
                     i(anim, "bumpMs", 300),
                     i(anim, "reviveMs", (int) CardTimeline.DEFAULT_REVIVE_MS),
+                    i(anim, "bumpPeakPercent", 106),
                     b(anim, "enterEnabled", true),
                     b(anim, "bumpEnabled", true),
                     b(anim, "glowPulseEnabled", true),

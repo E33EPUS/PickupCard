@@ -6,6 +6,8 @@ import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.Easing;
 import com.niuqu.pickupcard.style.StyleModel;
 
+import javax.annotation.Nullable;
+
 /**
  * 一帧的绘制上下文：这一帧所有卡共用的东西。
  * <p>
@@ -54,6 +56,44 @@ public record CardCanvas(long now,
     /** 数字跳动进度 ∈ [0,1]，1 = 无缩放。 */
     public float bumpOf(CardView view) {
         return timeline.bump(now, view.lastBumpAt());
+    }
+
+    /**
+     * 整张卡的脉冲倍率（1 = 不缩）。合并那一刻整张卡"鼓"一下，峰值见
+     * {@code --pc-bump-peak}。
+     * <p>【为什么整张卡都要动，而不是只动数字】用户 2026-09-17 的原话是
+     * "相同物品，再次拾起后却没有更显眼的动画"。数字那一小块本来就只有几个像素高，
+     * 它自己弹一下在余光里几乎看不见；<b>整张卡的轮廓</b>才是余光能认出来的东西。
+     * <p>【和入场缩放的区别】入场是"从竖条后面滑出来"（位移 + 淡入），脉冲是原地放大再回来，
+     * 两者的形状完全不同，所以同一个物品第二次被捡到时不会被误认成新卡。
+     */
+    public float pulseOf(CardView view) {
+        return Easing.pulse(bumpOf(view), style.bumpPeak());
+    }
+
+    /** 数字滚动进度 ∈ [0,1]；1 = 已经滚到新值（或根本没滚动）。 */
+    public float rollOf(CardView view) {
+        return bumpOf(view);
+    }
+
+    /** 滚动中要画的那个"旧数字"；没在滚动时返回 null。 */
+    @Nullable
+    public String prevCountText(CardView view) {
+        if (view.prevCount() == view.notice().count()) {
+            return null;
+        }
+        return countText(view.prevCount());
+    }
+
+    /**
+     * 这一帧数字要占多宽：滚动中取旧值/新值里宽的那个。
+     * <p>【为什么不能只看新值】宽度是排布算出来的，而排布在动画之前 —— 只按新值算的话，
+     * 1 → 10 这一下会在滚到一半时把卡整个撑宽，看着像卡在抖。
+     */
+    public int countWidth(CardView view, net.minecraft.client.gui.Font font) {
+        String prev = prevCountText(view);
+        int w = font.width(countText(view.notice().count()));
+        return prev == null ? w : Math.max(w, font.width(prev));
     }
 
     /** 退场进度 ∈ [0,1]，0 = 还没退场。 */

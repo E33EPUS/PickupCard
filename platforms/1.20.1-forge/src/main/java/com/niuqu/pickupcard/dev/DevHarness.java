@@ -150,7 +150,23 @@ public final class DevHarness {
         /** 淡回开始之后再过几帧拍一张。 */
         private static final int REVIVE_SHOT_AFTER = 2;
 
-        /** 探针状态：退场与淡回各只做一次，靠"看见"驱动而不是靠固定 tick。 */
+        /**
+         * 「同一样东西又捡到了」的探针：在这一 tick 把<b>最新那张卡</b>的物品再捡一次。
+         * <p>【为什么这个探针必须有】{@code bumpMs} / {@code bumpEnabled} 从第一版起就是
+         * 主题与配置里的正式项，而直到 2026-09-18 才发现 {@code CardCanvas#bumpOf} <b>一次都
+         * 没有被调用过</b> —— 整个"数字跳动"是死参数，配置里那一格调了没有任何反应。
+         * 没有探针的东西就会这样：编译过、单测绿、真机上什么都不发生。
+         * <p>取 {@code SHOT_AFTER_OPEN + 3}：那时样例卡都还在、且都还没开始退场，
+         * 于是这次再捡是纯粹的"合并"，不会跟救回混在一起。
+         */
+        private static final int MERGE_BUMP_AFTER = SHOT_AFTER_OPEN + 3;
+        /** 合并连拍：从再捡那一刻起每 {@value #MERGE_EVERY} tick 一张，共 {@value #MERGE_FRAMES} 张。 */
+        private static final int MERGE_EVERY = 3;
+        private static final int MERGE_FRAMES = 9;
+
+        /** 探针状态：退场、淡回、合并各只做一次。 */
+        private static boolean mergeBumpDone;
+
         private static boolean exitSeen;
         private static boolean exitShotDone;
         private static boolean reviveDone;
@@ -600,6 +616,12 @@ public final class DevHarness {
          * 跨轮混帧是"看不出来的错"里最难查的一种，所以让 harness 自己保证目录是干净的。
          */
         private static void clearOldShots(Minecraft mc) {
+            // 【顺带记一句】截图的像素尺寸就是窗口尺寸，而窗口尺寸并非每次都是命令行给的
+            // 1280x720 —— 2026-09-18 有一轮拍出来是 848x467，于是所有按 1280x720 写死的
+            // 取样区域全部落空（表现是"数字不见了"，其实是找错了地方）。分析脚本要么先断言
+            // 尺寸，要么从日志里的画布尺寸反推比例，别假设。
+            PickupCard.LOGGER.info("[harness-auto] 截图尺寸：{}x{}（分析脚本别假设 1280x720）",
+                    mc.getMainRenderTarget().width, mc.getMainRenderTarget().height);
             java.io.File dir = new java.io.File(mc.gameDirectory, "screenshots");
             java.io.File[] old = dir.listFiles((d, n) -> n.startsWith("pickupcard-"));
             if (old == null || old.length == 0) return;
@@ -655,6 +677,24 @@ public final class DevHarness {
                 Screenshot.grab(mc.gameDirectory, "pickupcard-hud", mc.getMainRenderTarget(),
                         m -> PickupCard.LOGGER.info("[harness-auto] 截图: pickupcard-hud -> {}",
                                 m.getString()));
+            } else if (age == MERGE_BUMP_AFTER) {
+                // 最新那张（= 注入顺序里最后一个）再捡一次：这一次既没退场也没淡回，
+                // 屏幕上该出现的是"整张卡鼓一下 + 数字从旧值滚到新值"。
+                CardFixtures.Fixture newest = PAGES.get(0).get(PAGES.get(0).size() - 1);
+                CardFixtures.inject(newest);
+                mergeBumpDone = true;
+                PickupCard.LOGGER.info("[harness-auto] 合并探针：再捡一次「{}」（应该鼓一下 + 数字滚动）",
+                        newest.label());
+            } else if (mergeBumpDone && age > MERGE_BUMP_AFTER
+                    && (age - MERGE_BUMP_AFTER - 1) % MERGE_EVERY == 0
+                    && (age - MERGE_BUMP_AFTER - 1) / MERGE_EVERY < MERGE_FRAMES) {
+                // 合并动画同样按毫秒走，默认 bumpMs=300 只有 6 tick —— 要量就得先把 bumpMs
+                // 拉长（跟 exitMs 一个道理，见 EXIT_LATE_* 那段）。
+                Screenshot.grab(mc.gameDirectory,
+                        "pickupcard-hud-merge" + (age - MERGE_BUMP_AFTER),
+                        mc.getMainRenderTarget(),
+                        m -> PickupCard.LOGGER.info("[harness-auto] 截图: merge{} -> {}",
+                                age - MERGE_BUMP_AFTER, m.getString()));
             } else if (age == EXIT_PUSH_AFTER) {
                 // 再推一张（钻石，跟这一页那五件都不是同一样东西）：③a 之后屏满**不再顶掉旧卡**
                 // 而是排队 —— 这一步因此从"触发淘汰"变成了"验证排队"。

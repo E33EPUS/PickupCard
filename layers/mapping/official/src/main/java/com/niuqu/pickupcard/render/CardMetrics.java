@@ -57,10 +57,13 @@ public final class CardMetrics {
      * 【信息框里有什么，由"显示物品名"决定】开着是「名字 + 间隙 + 数量」，关掉就只剩数量
      * —— 卡会明显变窄，而"竖条 + 图标 + 数量"这个最小组合仍然一眼能读。
      */
-    public static float width(CardCanvas canvas, Font font, Inbox.Card card, int count) {
+    public static float width(CardCanvas canvas, Font font, CardView view) {
+        Inbox.Card card = view.notice().payload();
+        int count = view.notice().count();
         var style = canvas.style();
         float gap = style.gap();
-        float infoBox = style.paddingH() * 2f + font.width(canvas.countText(count));
+        // 数字滚动中按"旧值/新值里宽的那个"占位，否则 1 → 10 会在滚到一半时把卡撑宽
+        float infoBox = style.paddingH() * 2f + canvas.countWidth(view, font);
         if (canvas.settings().showItemName()) {
             infoBox += gap + font.width(fittedName(canvas, font, card, count));
         }

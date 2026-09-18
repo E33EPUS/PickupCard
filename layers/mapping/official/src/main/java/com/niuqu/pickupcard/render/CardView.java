@@ -19,12 +19,19 @@ public final class CardView {
 
     private Notice<Inbox.Card> notice;
     private long lastBumpAt = -1L;
+    /**
+     * 上一次合并之前的数量（没有合并过时 = 当前数量）。
+     * <p>【为什么要留着旧值】数字滚动要"从旧值滚到新值"，而账本只给得出新值 ——
+     * 旧值不在这里记下来就永远拿不到了。它纯属"屏幕上的这一次表演"，所以归 CardView。
+     */
+    private int prevCount;
     private long exitStartAt = NO_EXIT;
     /** 淡回的起点（被救回时记）；{@code NO_EXIT} = 没在淡回。 */
     private long reviveAt = NO_EXIT;
 
     public CardView(Notice<Inbox.Card> notice) {
         this.notice = notice;
+        this.prevCount = notice.count();
     }
 
     public Notice<Inbox.Card> notice() {
@@ -37,6 +44,11 @@ public final class CardView {
 
     public long lastBumpAt() {
         return lastBumpAt;
+    }
+
+    /** 上一次合并之前的数量（没合并过就是当前数量）。 */
+    public int prevCount() {
+        return prevCount;
     }
 
     public long exitStartAt() {
@@ -78,6 +90,7 @@ public final class CardView {
 
     /** 合并：换掉账本快照，顺便让数字跳一下。正在退场的那张改播「淡回」。 */
     public void absorbMerge(Notice<Inbox.Card> merged, long now) {
+        this.prevCount = this.notice.count();
         this.notice = merged;
         this.lastBumpAt = now;
         if (exitStartAt != NO_EXIT) {
