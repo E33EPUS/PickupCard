@@ -119,15 +119,18 @@ repositories {
     }
 }
 
-// 【打包方式：自包含（把 NanoVG 摊进本 jar），不用 JarJar】
-// 试过 JarJar：它要求依赖写 Maven 风格的版本区间，直接写 3.3.1 会让 :jarJar 在配置期就失败
-// （"The given version specification is invalid: 3.3.1"），得额外调 pin/ranged；
-// 而且"塞进 META-INF/jarjar 之后玩家侧能不能加载"在本机验不了 —— 一个 HUD mod 的 native
-// 加载失败 = HUD 整个不画，不敢用没验过的路。
-// 改成把绑定和四平台 native 直接摊进本 jar：这条路已经在开发环境验过（类加载器从自己的
-// classes 根加载绑定、LWJGL 的 SharedLibraryLoader 从同类路径找 dll），而 jar 里的类
-// 对类加载器来说和 classes 目录是一回事。
-// 【代价】jar 大 ~1 MB；第三方代码进了我们的 jar，所以必须附许可声明（THIRD_PARTY_NOTICES.md）。
+// 【打包方式：dev 摊平 + prod 以 JarJar 嵌套】
+// v0.2.2（含）以前是"自包含"：绑定与 native 直接摊进本 jar。2026-09-19 实测它与 UI Deck
+// 同装时 JPMS 直接炸（两个 mod 都导出 org.lwjgl.nanovg 包 —— 摊平副本各自成包导出，
+// 模块系统不允许），见仓库根/docs 的 nanovg-jarjar-hotfix 交接。
+// 现在的分工：开发期照旧摊进 classes 目录（dev 类加载器只认自己的 classes 根，见下）；
+// 发布产物里**类**由 JarJar 嵌套的 lwjgl-nanovg 供应（嵌套 jar 自成模块，多 mod 同库
+// 按版本去重，不再导出同名包）；**native 资源目录仍摊进主 jar**（windows/x64/... 是
+// 资源不是类，不产生 JPMS 包导出，LWJGL 的 SharedLibraryLoader 按资源路径自取 ——
+// 实例里 UI Deck 的 dll 就是这么从本 mod 的资源里拿的，两边都必须有人带 native）。
+// 【为什么当年放弃 JarJar】注释里记的是"直接写 3.3.1 会让 :jarJar 配置期失败" ——
+// 正确写法是单元素区间 [3.3.1]（钉死单一版本），写裸 3.3.1 才失败；UI Deck 0.1.1
+// 已在真实 148-mod 实例验证整条链，本文件照抄那套配方。
 
 dependencies {
     minecraft "net.minecraftforge:forge:${minecraft_version}-${forge_version}"
@@ -191,8 +194,9 @@ dependencies {
 // 【所以走这条】我们的 classes 目录本身就是类加载器的一个根，摊进去就一定能看见 ——
 // 效果等同于 shade，但只在开发期做（发布走 jarJar，不污染 jar）。
 // 【失败要响】找不到 jar 直接抛，不留下一个"能跑但没引擎"的静默状态。
-// 摊平：开发期要它（类加载器只认自己的 classes 根），发布也要它（jar 里自带绑定与 native）。
-// 两个消费者同一个动作，所以只有一个家 —— 名字里不带 "ForDev" 就是为这个。
+// 摊平：开发期要它（类加载器只认自己的 classes 根）。
+// 发布产物里**类不再要**（JarJar 嵌套供应，见下面的 jarJar 段），但 **native 资源仍要**
+// —— 所以 jar/jarJar 还得消费这个写进 classes 目录的动作（Gradle 校验要求显式声明）。
 tasks.register('unpackNvg', Copy) {
     dependsOn 'compileJava'
     def jars = configurations.nvgDev
@@ -211,9 +215,76 @@ tasks.register('unpackNvg', Copy) {
     doLast { logger.lifecycle("NanoVG 摊平完成（绑定 + ${natives.size()} 个平台 native）-> build/classes/java/main") }
 }
 
-// runClient 要它（不然 NoClassDefFoundError），jar 也要它（不然玩家侧 UnsatisfiedLinkError）
-tasks.matching { it.name == 'runClient' || it.name == 'jar' || it.name == 'reobfJar' }.configureEach {
+tasks.matching { it.name == 'runClient' }.configureEach {
     dependsOn 'unpackNvg'
+}
+
+// ---------------------------------------------------------------------------
+// prod：nanovg 以 JarJar 嵌套（嵌套 jar 自成模块，多 mod 同库按版本去重）。
+// 摊平副本进 jar 与 UI Deck 同装 = JPMS ResolutionException 启动即炸（2026-09-19 实测）。
+// ---------------------------------------------------------------------------
+jarJar.enable()
+dependencies {
+    // 钉死 3.3.1：与 MC 运行时 LWJGL 同版（绑定/native/核心三者错版本 = UnsatisfiedLinkError）。
+    // 区间开放 [3.3.1,3.4) 会解析到 3.3.6 且连带嵌套第二份 LWJGL 核心（实测）。
+    jarJar(implementation("org.lwjgl:lwjgl-nanovg:[3.3.1]"))
+}
+tasks.named('jarJar', Jar).configure {
+    // 主产物名归它（jar 让位成 -slim，见下）—— 部署与 CI 认的还是 pickupcard-Forge-1.20.1-<ver>.jar
+    archiveClassifier = ''
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+    // 摊平副本的类文件不进嵌套产物（prod 的类由嵌套 jar 供应）；
+    // native 资源目录（windows/x64/...）无类文件、无 JPMS 包导出，保留在主 jar
+    exclude 'org/lwjgl/nanovg/**'
+    // unpackNvg 写 classes 目录，Gradle 校验要求显式声明消费关系
+    dependsOn 'unpackNvg'
+    dependsOn 'verifyRefmap'
+    // 最终产物是它：manifest 必须整份搬过来 —— 尤其是 MixinConfigs，缺了 mixin 不加载、
+    // 拾取事件整个哑掉（UI Deck 没有 mixin，它的参考实现只有 4 个属性，别照抄这点）
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : mod_version,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'pickupcard.mixins.json'
+        ])
+    }
+
+    // 1.20.1 生产环境跑 SRG 名：jarJar 产物也必须过 reobf（FG6 造了 reobfJarJar 任务但
+    // 不自动挂链 —— 漏了它的 jar 编译照过、测试照绿，上线第一次渲染前全是 NoSuchMethodError）。
+    // 实证：漏挂时主产物 SRG 引用=0，挂上后与 reobfJar 处理过的产物一致。
+    finalizedBy 'reobfJarJar'
+}
+
+tasks.named('jar', Jar).configure {
+    archiveClassifier = 'slim'      // 主产物名让位给 jarJar
+    // refmap 会同时出现在 build/resources/main（copyRefmap 放的）与加工输出里；
+    // 不设策略 Gradle 8 会直接以 "duplicate entry" 失败。两份内容一致，留一份即可。
+    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
+
+    // 摊平副本的类不进 slim jar（prod 类由 jarJar 的嵌套 jar 供应）
+    exclude 'org/lwjgl/nanovg/**'
+    // 消费 classes 目录（unpackNvg 会写它），Gradle 校验要求显式声明
+    dependsOn 'unpackNvg'
+
+    manifest {
+        attributes([
+                'Specification-Title'     : mod_id,
+                'Specification-Vendor'    : mod_authors,
+                'Specification-Version'   : '1',
+                'Implementation-Title'    : project.name,
+                'Implementation-Version'  : project.jar.archiveVersion,
+                'Implementation-Vendor'   : mod_authors,
+                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
+                'MixinConfigs'            : 'pickupcard.mixins.json'
+        ])
+    }
+
+    finalizedBy 'reobfJar'
 }
 
 // 【为什么这条必须写】摊平是往 compileJava 的输出目录里放文件 —— 这是开发期类加载器逼出来的
@@ -237,27 +308,6 @@ tasks.named('processResources', ProcessResources).configure {
     filesMatching(['META-INF/mods.toml', 'pack.mcmeta']) {
         expand replaceProperties + [project: project]
     }
-}
-
-tasks.named('jar', Jar).configure {
-    // refmap 会同时出现在 build/resources/main（copyRefmap 放的）与加工输出里；
-    // 不设策略 Gradle 8 会直接以 "duplicate entry" 失败。两份内容一致，留一份即可。
-    duplicatesStrategy = DuplicatesStrategy.EXCLUDE
-
-    manifest {
-        attributes([
-                'Specification-Title'     : mod_id,
-                'Specification-Vendor'    : mod_authors,
-                'Specification-Version'   : '1',
-                'Implementation-Title'    : project.name,
-                'Implementation-Version'  : project.jar.archiveVersion,
-                'Implementation-Vendor'   : mod_authors,
-                'Implementation-Timestamp': new Date().format("yyyy-MM-dd'T'HH:mm:ssZ"),
-                'MixinConfigs'            : 'pickupcard.mixins.json'
-        ])
-    }
-
-    finalizedBy 'reobfJar'
 }
 
 tasks.withType(JavaCompile).configureEach {
@@ -363,7 +413,7 @@ modrinth {
     projectId = (project.findProperty('modrinth_project_id') ?: '').toString()
     versionNumber = storeVersion
     versionType = "release"
-    uploadFile = tasks.named('jar').get()
+    uploadFile = tasks.named('jarJar').get()
     gameVersions = [project.minecraft_version]
     loaders = ["forge"]
     changelog = changelogFor(project.version)
@@ -382,7 +432,7 @@ tasks.register('curseforge', net.darkhax.curseforgegradle.TaskPublishCurseForge)
     onlyIf { cfConfigured && System.getenv("CURSEFORGE_TOKEN") }
 
     if (cfConfigured) {
-        def main = upload(cfProjectId as int, tasks.named('jar').get())
+        def main = upload(cfProjectId as int, tasks.named('jarJar').get())
         main.changelogType = 'markdown'
         main.changelog = changelogFor(project.version)
         main.releaseType = 'release'

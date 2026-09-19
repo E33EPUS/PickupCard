@@ -363,7 +363,7 @@ sand / red_sand / netherrack / wheat_seeds），默认开启、命中即丢弃�
 | 5 | 动画生硬 | 去掉整卡缩放与 `easeOutBack` 过冲（草稿里新卡是**原地出现**）；补 340ms 换位过渡；曲线用草稿那条 `cubic-bezier(.22,.9,.28,1)`（`CubicBezier` 真解，不是近似） | 时长 620 → 560ms，正好让 30%/18% 两个分段还原草稿的 180/100/460 |
 | 6 | 阴影廉价 | 改成**按轮廓逐元素投**（竖条 + 图标格 + 名字框），不再用一个包住整卡的大矩形 | 软边仍是 SDF smoothstep 近似，**不是**高斯；且测量页纯黑底 → 阴影从来没被量过（见 handoff 盲点一节） |
 | 7 | 配置界面 | 键位 **K** 打开，两列 16 项 + 实时预览；存储是 TOML `[style]` 段，每项可 **-1 = 跟随主题** | 主题给默认值、配置只覆盖改过的项 → 不产生第二真源。预览走真卡绘制代码 |
-| 8 | 打包 | **自包含**：绑定 + 四平台 native 直接摊进 jar（附 `THIRD_PARTY_NOTICES.md`） | JarJar 要 Maven 风格版本区间（写 `3.3.1` 配置期就失败），且玩家侧能否加载在本机验不了 |
+| 8 | 打包 | ~~自包含：绑定 + 四平台 native 摊进 jar~~ **2026-09-19 已切 JarJar 嵌套**（与 UI Deck 同装 JPMS 炸；dev 照旧摊平，prod 类由 `[3.3.1]` 嵌套供应、native 资源留在主 jar。正本 `docs/nanovg-jarjar-hotfix.md`） | 当年否掉 JarJar 的两条理由都站不住了：单元素区间 `[3.3.1]` 就是钉死写法；UI Deck 0.1.1 已在真实 148-mod 实例验通 |
 | 9 | 部署 | 覆盖 `D:\Myworld\.minecraft\versions\1.20.1-main\mods\pickupcard-Forge-1.20.1-0.2.0.jar` | 运行中的实例不会热加载，改完必须重新 build 覆盖 |
 
 ### 为什么第 3、4 条值得单独记一笔

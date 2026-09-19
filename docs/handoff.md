@@ -3,6 +3,21 @@
 > 给"压缩上下文之后重开的我"看。读完这份 + `docs/plan-ui.md` + `docs/decision-rendering.md`，
 > 就能接着做，不需要重读历史对话。
 
+## 打包切换 JarJar（2026-09-19 深夜，与架构重构同批部署；细节正本 `docs/nanovg-jarjar-hotfix.md`）
+
+UI Deck 会话留下紧急交接：两个 mod 都把 `org.lwjgl.nanovg` 摊平进 jar 根，同装 =
+JPMS `ResolutionException`（都导出同一个包）启动即炸 —— 148-mod 实例 15:20 实测。
+PickupCard 侧照 `D:\UIDeck\platforms\1.20.1-forge\build.gradle` 配方切换：dev 照旧摊平
+（`unpackNvg` 只挂 runClient），prod 类由 JarJar 嵌套供应（`[3.3.1]` 钉死单版本）、
+**native 资源目录仍摊进主 jar**（.dll 是资源不是类，无 JPMS 包导出；实例里 UI Deck 的
+native 就是这么从本 mod 资源里取的 —— 两边都得有人带）。**两处参考实现没覆盖的差异**：
+① jarJar 必须接 `finalizedBy 'reobfJarJar'`（FG6 造了任务不挂链；漏挂=SRG 引用 0，
+编译测试全绿、上线第一次画卡 NoSuchMethodError）；② 最终产物 manifest 整份搬
+（含 MixinConfigs，UI Deck 没 mixin 所以它的只有 4 个属性）。四条产物核验全过
+（无类残留 / 嵌套成对同版 / native 在主 jar / SRG=160）。发布任务（modrinth/curseforge）
+的 uploadFile 从 jar 改指 jarJar。构建脚本里"不用 JarJar"的旧结论注释（"写 3.3.1
+配置期失败"——正确写法是 `[3.3.1]`）已更正。
+
 ## 第五批定案 + 架构重构（2026-09-19 深夜，就地替换 0.2.2 的第二次；**下文凡与本节冲突的，以本节为准**）
 
 > 用户复核前一轮修复时又报四问：①入场动画设置不在动画页 ②预览卡片重叠、退场不播
