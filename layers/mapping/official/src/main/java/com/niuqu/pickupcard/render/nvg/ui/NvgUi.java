@@ -203,6 +203,25 @@ public final class NvgUi implements AutoCloseable {
     }
 
     /** 居中写一行（x 给中心）。 */
+    /** 左对齐写一行，超过 maxW 就整体缩小到装得下（左缘与文字垂直中心为锚）——见 textCenteredFitted。 */
+    public void textFitted(String s, float x, float y, int argb, float maxW) {
+        register(() -> {
+            float tw = font.width(s);
+            int color = fade(argb, alpha);
+            if (tw <= maxW || tw <= 0f) {
+                gui.drawString(font, s, Math.round(x), Math.round(y), color, true);
+                return;
+            }
+            float k = maxW / tw;
+            var pose = gui.pose();
+            pose.pushPose();
+            pose.translate(x, y + font.lineHeight / 2f, 0f);
+            pose.scale(k, k, 1f);
+            gui.drawString(font, s, 0, Math.round(-font.lineHeight / 2f), color, true);
+            pose.popPose();
+        });
+    }
+
     public void textCentered(String s, float centerX, float y, int argb) {
         register(() -> gui.drawString(font, s, Math.round(centerX - font.width(s) / 2f),
                 Math.round(y), fade(argb, alpha), true));

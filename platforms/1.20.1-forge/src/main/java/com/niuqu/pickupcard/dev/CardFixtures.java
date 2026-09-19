@@ -6,6 +6,7 @@ import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.world.item.enchantment.Enchantments;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -69,8 +70,13 @@ public final class CardFixtures {
         }
 
         list.add(new Fixture("xp", ItemStack.EMPTY, 137));
-        list.add(new Fixture("long-name",
-                named(Items.DIAMOND_SWORD, "被铁砧改了名字的附魔钻石剑（超长名字边界测试）"), 1));
+        // 【为什么真附魔】"附魔"不能只写在名字里：2026-09-19 起图标每帧原版现渲，
+        // 退场连拍要验的就是 glint 条纹在淡出中仍在滚动（烘焙快照时代它被冻住）——
+        // 没有真附魔组件就没有 glint，这条验收是空的。
+        ItemStack enchantedSword =
+                named(Items.DIAMOND_SWORD, "被铁砧改了名字的附魔钻石剑（超长名字边界测试）");
+        enchantedSword.enchant(Enchantments.SHARPNESS, 1);
+        list.add(new Fixture("long-name", enchantedSword, 1));
         // 【为什么用钻石而不是圆石】内置忽略表已经删掉了，现在圆石也会弹卡。
         // 留着钻石是因为它认得出、数量大、而且不会被任何默认规则牵动 ——
         // 样例集最怕的就是"悄悄变了"，所以宁可挑一件绝不会有歧义的物品。

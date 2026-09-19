@@ -119,8 +119,10 @@ public final class PreviewStage {
             this.hintKey = hintKey;
             this.icon = new ItemStack(item);
             if (customName != null) {
-                // 玩家自己改过名的物品就长这样：名字长、还带符号
-                this.icon.setHoverName(Component.literal(customName));
+                // 玩家自己改过名的物品就长这样：名字长、还带符号。
+                // customName 是 lang key（枚举初始化早于语言加载，只能存 key 现解析）——
+                // literal 会把 key 原文当卡名（2026-09-19 英文截图 "pickupcard.config.sample.l…"的真身）。
+                this.icon.setHoverName(Component.translatable(customName));
             }
         }
 

@@ -113,6 +113,8 @@
   "pickupcard.config.value.merge.sameItem": "Same name",
   "pickupcard.config.value.merge.keepNamed": "Renamed splits",
   "pickupcard.config.value.merge.never": "Never merge",
+  "pickupcard.config.value.color.theme": "Theme",
+  "pickupcard.config.value.color.invalid": "Invalid",
   "pickupcard.config.value.auto": "Auto",
   "pickupcard.config.unit.cards": " cards",
   "pickupcard.config.toggle.on": "On",

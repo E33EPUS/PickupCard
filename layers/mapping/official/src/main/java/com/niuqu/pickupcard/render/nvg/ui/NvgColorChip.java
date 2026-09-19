@@ -1,5 +1,7 @@
 package com.niuqu.pickupcard.render.nvg.ui;
 
+import net.minecraft.network.chat.Component;
+
 import java.util.Locale;
 import java.util.function.Consumer;
 import java.util.function.Supplier;
@@ -44,12 +46,23 @@ public final class NvgColorChip extends NvgWidget {
 
     @Override
     public String value() {
+        // 【文案走语言文件，与 NvgToggle 同款】上一版硬编码中文"主题/无效"，
+        // 英文客户端直接漏原文 —— 2026-09-19 用户报"英文语言 key 遗漏了主题"的真身。
+        if (invalid()) {
+            return Component.translatable("pickupcard.config.value.color.invalid").getString();
+        }
         String current = raw.get();
         if (current == null || current.isBlank()) {
-            return "主题";
+            return Component.translatable("pickupcard.config.value.color.theme").getString();
         }
-        return com.niuqu.pickupcard.style.StyleOverrides.parseArgb(current).isPresent()
-                ? normalize(current) : "无效";
+        return normalize(current);
+    }
+
+    /** 配置原文存在但解析不动 = 这项没生效。用状态判断而不是拿文案比对。 */
+    private boolean invalid() {
+        String current = raw.get();
+        return current != null && !current.isBlank()
+                && com.niuqu.pickupcard.style.StyleOverrides.parseArgb(current).isEmpty();
     }
 
     private static String normalize(String hex) {
@@ -80,7 +93,7 @@ public final class NvgColorChip extends NvgWidget {
     protected void paint(NvgUi ui) {
         NvgPalette p = ui.palette;
         String label = value();
-        boolean invalid = label.equals("无效");
+        boolean invalid = invalid();
 
         // 色块画生效色：无论配置里写没写，玩家看到的就是卡上现在的颜色
         float swatch = h - 6f;

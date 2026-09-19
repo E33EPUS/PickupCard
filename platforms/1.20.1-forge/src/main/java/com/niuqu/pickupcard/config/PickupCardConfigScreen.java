@@ -298,7 +298,9 @@ public final class PickupCardConfigScreen extends Screen {
             float ty = y + (h - ui.font().lineHeight) / 2f;
             int color = on ? p.text : p.textDim;
             if (leftAligned) {
-                ui.text(text.get(), x + 4f, ty, color);
+                // 【缩字不穿列】页签标签左对齐，英文页名（"Placement & stacking"）比中文
+                // 宽一截，直画会穿出胶囊叠到配置列小节头上（2026-09-19 英文截图抓到）
+                ui.textFitted(text.get(), x + 4f, ty, color, w - 8f);
             } else {
                 // 【缩字不换行】整行装不下被挤压时，芯片里的文字跟着缩（英文样例名
                 // "Long name" 在窄窗口必然超宽），不叠到邻居头上
@@ -738,15 +740,18 @@ public final class PickupCardConfigScreen extends Screen {
                 // "没接控件的标签"混成一团（2026-09-19 真机截图抓过）。
                 ui.fillRoundRect(labelX() - 3f, row.yAt + 5f, 2f, 8f, 1f,
                         NvgUi.fade(ui.palette.accent, 0.45f));
-                ui.text(row.label(), labelX() + 3f, row.yAt + 5f, ui.palette.textDim);
+                // 小节头独占一行：可用宽到配置列右缘为止，英文小节名也不裁尾
+                ui.textFitted(row.label(), labelX() + 3f, row.yAt + 5f, ui.palette.textDim,
+                        layout().items().right() - labelX() - 6f);
                 continue;
             }
             NvgWidget w = row.widget();
-            String text = ui.font().plainSubstrByWidth(row.label(), labelW());
-            // 悬停时标签由暗到亮：它、那条高亮带、底部那句说明指的是同一行。
-            // 标签/按钮/带三处必须共用同一条 9px 中心线。
-            ui.text(text, labelX(), w.y() + (w.height() - 8) / 2f,
-                    NvgUi.mix(ui.palette.textDim, ui.palette.text, row.hover.at(now)));
+            // 【缩字不裁字】英文行标签（"Reset this page"）比 labelW 宽一截时
+            // plainSubstrByWidth 会把尾巴裁掉（2026-09-19 英文截图 "Reset this pag"）——
+            // 缩字保完整。悬停时标签由暗到亮：它、那条高亮带、底部那句说明指的是同一行。
+            // 标签/按钮/带三处必须共用同一条 9px 中心线（缩放以文字垂直中心为锚，不破线）。
+            ui.textFitted(row.label(), labelX(), w.y() + (w.height() - 8) / 2f,
+                    NvgUi.mix(ui.palette.textDim, ui.palette.text, row.hover.at(now)), labelW());
         }
     }
 

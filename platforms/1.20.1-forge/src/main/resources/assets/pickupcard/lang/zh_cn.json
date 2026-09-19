@@ -113,6 +113,8 @@
   "pickupcard.config.value.merge.sameItem": "同名就并",
   "pickupcard.config.value.merge.keepNamed": "改名不并",
   "pickupcard.config.value.merge.never": "从不合并",
+  "pickupcard.config.value.color.theme": "主题",
+  "pickupcard.config.value.color.invalid": "无效",
   "pickupcard.config.value.auto": "自动",
   "pickupcard.config.unit.cards": " 张",
   "pickupcard.config.toggle.on": "开",

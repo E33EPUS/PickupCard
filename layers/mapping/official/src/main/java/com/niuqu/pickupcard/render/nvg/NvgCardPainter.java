@@ -6,10 +6,10 @@ import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.rarity.RarityAccent;
 import com.niuqu.pickupcard.render.CardCanvas;
-import com.niuqu.pickupcard.render.ItemIconCache;
 import com.niuqu.pickupcard.render.CardMetrics;
 import com.niuqu.pickupcard.render.CardSlot;
 import com.niuqu.pickupcard.render.CardView;
+import com.niuqu.pickupcard.render.FadingItemBuffers;
 import com.niuqu.pickupcard.style.Easing;
 import com.niuqu.pickupcard.style.RevealWindow;
 import com.niuqu.pickupcard.style.StyleModel;
@@ -33,7 +33,6 @@ import static org.lwjgl.nanovg.NanoVG.nvgFill;
 import static org.lwjgl.nanovg.NanoVG.nvgFillColor;
 import static org.lwjgl.nanovg.NanoVG.nvgFillPaint;
 import static org.lwjgl.nanovg.NanoVG.nvgGlobalAlpha;
-import static org.lwjgl.nanovg.NanoVG.nvgImagePattern;
 import static org.lwjgl.nanovg.NanoVG.nvgLinearGradient;
 import static org.lwjgl.nanovg.NanoVG.nvgRGBA;
 import static org.lwjgl.nanovg.NanoVG.nvgRect;
@@ -66,10 +65,12 @@ import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
  * 参数一起从主题里拿掉，理由见 {@link StyleModel} 的类注释。
  *
  * <h2>为什么物品图标与文字还在原版</h2>
- * 它们不是"第二种画法"，而是 MC 自己拥有的两样东西：物品图标是 3D 模型 + 附魔光效 +
- * 耐久条的渲染结果，文字是 MC 的字形图集（含中文）。这两样搬进 NanoVG 只有两条路 ——
- * 把物品塞进字体，或者把字形图集当贴图 —— 前者不可能，后者是把"文字"降级成位图。
- * 所以它们照旧走原版批次，只是排在 NanoVG 那一帧<b>之后</b>，画在卡面之上。
+ * 它们是 MC 自己拥有的两样东西：物品图标是 3D 模型 + 附魔光效 + 耐久条的渲染结果，
+ * 文字是 MC 的字形图集（含中文）。2026-09-19 之前图标曾经被烘成离屏贴图（ItemIconCache，
+ * 已删）以换取真 alpha 淡出，但快照冻住了活的东西 —— 附魔光不再滚动、分辨率钉死在贴图、
+ * glint 亮条纹烘丢（用户报的"动效丢失/变暗/锯齿/颠倒"四连）。现在的答案：
+ * 图标<b>永远每帧原版现渲</b>，退场淡出由 {@link FadingItemBuffers} 换渲染层拿到 ——
+ * 病根是那几层不开混合，不是图标不该现渲。
  *
  * <h2>入场动画：竖条先开，内容再出来</h2>
  * <ol>
@@ -78,10 +79,10 @@ import static org.lwjgl.nanovg.NanoVG.nvgStrokeWidth;
  * </ol>
  * 关键不是"滑"这个动作，而是<b>卡片自身尺寸全程不变</b>——是位移，不是把内容拉长。
  *
- * <h2>退场淡出为什么用 nvgGlobalAlpha</h2>
- * 外壳是矢量、图标走原版的全局色调制向量、文字走颜色里的 alpha —— 三条通道三个 API，
- * 但必须是同一个数（{@link #exitAlphaOf}）。NanoVG 这一路正好有全局 alpha，
- * 放在 save/restore 之间，等于"整张卡一起淡"，不用自己给每个颜色乘系数。
+ * <h2>退场淡出：三条通道一个数</h2>
+ * 外壳是矢量（{@code nvgGlobalAlpha}）、图标走换层后的全局色调制（{@code setShaderColor}，
+ * 见 {@link FadingItemBuffers}）、文字走颜色里的 alpha —— 三条通道三个 API，
+ * 但必须是同一个数（{@link #exitAlphaOf}）。
  */
 public final class NvgCardPainter {
 
@@ -124,14 +125,6 @@ public final class NvgCardPainter {
     public void paint(GuiGraphics gui, CardCanvas canvas, List<CardSlot> slots) {
         Font font = Minecraft.getInstance().font;
 
-        // 【图标贴图缓存】图标已并入 NanoVG 帧（见 paintShell 的 iconImage）——先在帧外
-        // 确保本帧要画的物品都渲好了离屏贴图（ensure 要切 FBO，不能发生在帧内）。
-        int iconCenterX = canvas.guiWidth() / 2;
-        int iconCenterY = canvas.guiHeight() / 2;
-        for (CardSlot slot : slots) {
-            ItemIconCache.ensure(iconStackOf(canvas, slot), iconCenterX, iconCenterY);
-        }
-
         gui.flush();
 
         NvgCanvas nvg = NvgCanvas.shared();
@@ -164,10 +157,9 @@ public final class NvgCardPainter {
                             String.format(java.util.Locale.ROOT, "%.2f", exitAlphaOf(canvas, slot)));
                 }
                 nvgSave(vg);
-                // 退场：整张卡（外壳 + 竖条 + 微光 + 图标）一起淡，见类注释。
-                // 【图标吃同一个 alpha】图标是 NanoVG 图像贴图（ItemIconCache 离屏渲的
-                // 带 alpha 贴图），和外壳同帧同变换同 scissor —— 一次 nvgGlobalAlpha
-                // 同时管壳和图标，这就是"图标跟随淡出"的兑现处。
+                // 退场：整张卡的外壳（竖条 + 两个框 + 微光）一起淡，见类注释。
+                // 【图标不在这里淡】图标每帧原版现渲（FadingItemBuffers），它的 alpha 走
+                // setShaderColor —— 三条通道同一个数（exitAlphaOf），API 各归各。
                 nvgGlobalAlpha(vg, exitAlphaOf(canvas, slot));
                 // 【缩放落在变换上】外壳一律按"未缩放的卡"画，位置与大小由这两个变换给。
                 // 这样竖条宽、圆角、描边、微光全都一起缩，不会出现"卡小了但边还是粗的"。
@@ -186,8 +178,7 @@ public final class NvgCardPainter {
                 paintShell(vg, style, -w0 / 2f, -h0 / 2f, w0, h0,
                         accentOf(card, style.accents()), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise), rise, isHighlighted(card),
-                        glowScaleOf(canvas, slot), windowOf(canvas, slot, style, rise),
-                        ItemIconCache.image(vg, iconStackOf(canvas, slot)), style.iconSize());
+                        glowScaleOf(canvas, slot), windowOf(canvas, slot, style, rise));
                 nvgRestore(vg);
             }
         } finally {
@@ -195,8 +186,7 @@ public final class NvgCardPainter {
         }
 
         // 内容排在 NanoVG 之后：它画在卡面之上（用的是同一批屏幕坐标）。
-        // 图标已不在这一路 —— 它进了上面的 NanoVG 帧（NO_BLEND 物品无法淡出的根治，
-        // 见 ItemIconCache 类注释）；这里只剩文字（原版字形，alpha 走颜色本身，本来就有效）。
+        // 图标与文字都在这一路 —— 图标每帧原版现渲（见 content 里的说明），文字走原版字形。
         for (CardSlot slot : slots) {
             content(gui, canvas, slot, font);
         }
@@ -236,8 +226,7 @@ public final class NvgCardPainter {
      */
     public static void paintShell(long vg, StyleModel style, float x, float y, float cardW, float cardH,
                                   int accent, float barFill, float bodyShift, float rise,
-                                  boolean highlighted, float glowScale, RevealWindow window,
-                                  long iconImage, float iconSize) {
+                                  boolean highlighted, float glowScale, RevealWindow window) {
         float gap = style.gap();
         float barW = style.barWidth();
         float bodyX = barW + gap;
@@ -255,23 +244,6 @@ public final class NvgCardPainter {
             nvgScissor(vg, x + window.left(), y, window.width(), cardH);
             if (window.width() > 0.01f) {
                 box(vg, stack, style, x + bodyX + bodyShift, y, cardH, cardH, radius);
-                // 【图标是 NanoVG 图像贴图】与框同吃窗口裁剪和全局 alpha —— 入场从竖条后
-                // 滑出来时被同一扇"隧道口"裁着，退场跟着同一个 nvgGlobalAlpha 淡掉。
-                // 图像 64×64、物品占中央 32×32（整图一半）：pattern 把整图映到 2×iconSize，
-                // 填充矩形（边长 iconSize 居中）采样的 0.25~0.75 区正好压在物品上。
-                // 【别回到 32×32/±12】那是非整数映射（1.33px/格），矩形只采到物品的中段 ——
-                // 图标放大 1/3、四周切边，用户报的"图标错乱"就是它（ItemIconCache 类注释有全账）。
-                if (iconImage != 0) {
-                    float cx = x + bodyX + bodyShift + cardH / 2f;
-                    float cy = y + cardH / 2f;
-                    NVGPaint iconPaint = NVGPaint.mallocStack(stack);
-                    nvgImagePattern(vg, cx - iconSize, cy - iconSize,
-                            iconSize * 2f, iconSize * 2f, 0f, (int) iconImage, 1f, iconPaint);
-                    nvgBeginPath(vg);
-                    nvgRect(vg, cx - iconSize / 2f, cy - iconSize / 2f, iconSize, iconSize);
-                    nvgFillPaint(vg, iconPaint);
-                    nvgFill(vg);
-                }
                 float infoX = x + bodyX + cardH + gap;
                 float infoW = Math.max(0f, x + cardW - infoX);
                 if (infoW > 0f) {
@@ -407,16 +379,22 @@ public final class NvgCardPainter {
             scissor(gui, gui.pose(), win, h);
         }
 
-        // 【图标不在这里了】图标已并入 NanoVG 帧（paintShell 的 iconImage）—— 2026-09-19
-        // hunt 根因：原版 renderItem 走 NO_BLEND 渲染层（方块/mod 物品），alpha 分量无效，
-        // 数学上不存在淡出，怎么调曲线都是"变黑然后消失"。离屏渲成带 alpha 的贴图后
-        // （ItemIconCache），图标与卡壳同吃一个 nvgGlobalAlpha，三档退场都是真淡出。
+        // 【图标：每帧原版现渲 + 退场换层淡出（2026-09-19 治本定案）】烘焙快照路线
+        // （ItemIconCache，本版已删）拿到过真 alpha 淡出，但快照冻住了活的东西：附魔光
+        // 不再滚动（动效丢失）、分辨率钉死在离屏贴图（锯齿）、glint 亮条纹烘丢（变暗）、
+        // 读回行翻转账（颠倒）。根治 = 不再快照：图标永远原版 renderItem，只在退场
+        // alpha<1 的帧里由 FadingItemBuffers 把 NO_BLEND 实体层换到开混合的等价层提交 ——
+        // setShaderColor 的 alpha 从此数学上有效。几何（窗口/位移/缩放/裁剪）与外壳同源，
+        // 三档退场都跟着卡走。
+        ItemStack iconStack = iconStackOf(canvas, slot);
+        if (!iconStack.isEmpty()) {
+            FadingItemBuffers.drawIcon(gui, iconStack, x + h / 2f, h / 2f, style.iconSize(), alpha);
+        }
 
         // 文字：alpha 直接乘进颜色里（原版字形用的就是这个色的 alpha），不走全局色。
         // 【alpha 字节掉到 4 以下就整段不画】原版 Font.adjustColor（1.20.1 Font.java:109）
         // 会把 alpha 字节 0~3 的颜色强制改成完全 opaque —— 退场末尾 alpha 单调下穿这个区间，
         // 那几帧文字会「闪回不透明」，一帧后整卡才被摘掉（用户连报两次的末帧闪就是它）。
-        // 图标走 setShaderColor，是连续调制，没有这个坑。
         String count = canvas.countText(view.notice().count());
         float textY = (h - font.lineHeight) / 2f;
         if (canvas.settings().showItemName() && textVisible(style.nameColor(), alpha)) {

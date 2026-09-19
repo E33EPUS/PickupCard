@@ -230,10 +230,10 @@ public final class AnchorEditScreen extends Screen {
         try (NvgUi ui = NvgUi.begin(gui, palette, mouseX, mouseY, now)) {
             if (ui != null) {
                 ui.text(this.title.getString(), 8f, 6f, 0xFFFFFFFF);
-                ui.text(isAuto() ? I18n.get("pickupcard.anchor.autoHint")
+                ui.textFitted(isAuto() ? I18n.get("pickupcard.anchor.autoHint")
                                 : String.format(java.util.Locale.ROOT, I18n.get("pickupcard.anchor.customHint"),
                                 anchorX, anchorY),
-                        8f, 17f, palette.textDim);
+                        8f, 17f, palette.textDim, this.width - 16f);
                 drawBrackets(ui, b);
                 for (NvgWidget w : buttons) {
                     w.mouseMoved(mouseX, mouseY);
@@ -270,7 +270,8 @@ public final class AnchorEditScreen extends Screen {
         ui.fillRoundRect(line - 0.75f, y - 8f, 1.5f, (y2 + 8f) - (y - 8f), 0.75f,
                 NvgUi.fade(color, 0.45f));
         if (b.clamped()) {
-            ui.text(I18n.get("pickupcard.anchor.clamped"), x, y2 + 4f, ui.palette.textDim);
+            ui.textFitted(I18n.get("pickupcard.anchor.clamped"), x, y2 + 4f, ui.palette.textDim,
+                    this.width - x - 8f);
         }
     }
 
