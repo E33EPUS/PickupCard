@@ -106,9 +106,10 @@ public final class AnchorEditScreen extends Screen {
     // 几何：编辑中的锚点（与游戏里同一套公式）
     // ------------------------------------------------------------------
 
-    /** 编辑中的布局快照：展开方式/间距/缩放照当前配置，锚点用编辑中的值。 */
+    /** 编辑中的布局快照：展开/消失/对齐/间距/缩放照当前配置，锚点用编辑中的值。 */
     private LayoutSettings editing() {
-        return new LayoutSettings(PickupCardConfig.layoutSnapshot().appearMode(),
+        LayoutSettings live = PickupCardConfig.layoutSnapshot();
+        return new LayoutSettings(live.appearMode(), live.exitMode(), live.align(),
                 v.separation.get().floatValue(), v.scalePercent.get(), anchorX, anchorY).sanitized();
     }
 

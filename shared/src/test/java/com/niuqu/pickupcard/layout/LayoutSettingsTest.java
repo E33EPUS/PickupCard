@@ -17,6 +17,8 @@ class LayoutSettingsTest {
         LayoutSettings d = LayoutSettings.defaults();
         assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorX(), "横向自动 = 竖条成线的老公式");
         assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorY(), "纵向自动 = 准星下方");
+        assertEquals(LayoutSettings.Exit.FADE, d.exitMode(), "消失方式默认淡出");
+        assertEquals(LayoutSettings.Side.LEFT, d.align(), "对齐默认竖条左缘锚定");
         assertEquals(LayoutSettings.Appear.SLIDE, d.appearMode());
         assertEquals(4f, d.separation(), 1e-6);
         assertEquals(LayoutSettings.AUTO_SCALE, d.scalePercent(), "默认是自动缩放");
@@ -30,7 +32,7 @@ class LayoutSettingsTest {
     }
 
     private static LayoutSettings sepSanitized(float separation) {
-        return new LayoutSettings(LayoutSettings.Appear.SLIDE, separation,
+        return new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, separation,
                 LayoutSettings.AUTO_SCALE, LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR)
                 .sanitized();
     }
@@ -47,7 +49,7 @@ class LayoutSettingsTest {
     }
 
     private static LayoutSettings sanitized(float x, float y) {
-        return new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f,
+        return new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, x, y).sanitized();
     }
 
@@ -59,7 +61,7 @@ class LayoutSettingsTest {
         assertEquals(240f * LayoutSettings.DEFAULT_ANCHOR_Y, auto.anchorTop(240f), 1e-6,
                 "自动纵向 = 准星下方 55%");
 
-        LayoutSettings dragged = new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f,
+        LayoutSettings dragged = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, 0.75f, 0.6f);
         assertEquals(426f * 0.75f, dragged.anchorLeft(426f), 1e-6);
         assertEquals(240f * 0.6f, dragged.anchorTop(240f), 1e-6);
@@ -68,12 +70,12 @@ class LayoutSettingsTest {
     @Test
     @DisplayName("锚点夹取：拖得太低时第一张卡自动抬到 HUD 带上方")
     void anchorTopClampsAboveTheHudBand() {
-        LayoutSettings low = new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f,
+        LayoutSettings low = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, 0.7f, 0.98f);
         // 240 高、留白 75、卡高 20 → 第一张卡的顶边最高只能到 240-75-20 = 145
         assertEquals(145f, low.anchorTop(240f, 20f, 75), 1e-6);
         // 正常锚点不受夹取影响
-        LayoutSettings mid = new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f,
+        LayoutSettings mid = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR);
         assertEquals(240f * LayoutSettings.DEFAULT_ANCHOR_Y, mid.anchorTop(240f, 20f, 75), 1e-6);
     }
@@ -93,13 +95,13 @@ class LayoutSettingsTest {
     @Test
     @DisplayName("手动档：用玩家给的数、不看装不装得下，且被夹进 50..200")
     void manualScale() {
-        LayoutSettings half = new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f, 50, -1f, -1f);
+        LayoutSettings half = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f, 50, -1f, -1f);
         assertEquals(0.5f, half.scale(10_000f, 20f, 5, 4f), 0.001f, "手动档与可用高度无关");
         assertEquals(LayoutSettings.MAX_SCALE_PERCENT,
-                new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f, 9_999, -1f, -1f)
+                new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f, 9_999, -1f, -1f)
                         .sanitized().scalePercent());
         assertEquals(LayoutSettings.MIN_SCALE_PERCENT,
-                new LayoutSettings(LayoutSettings.Appear.SLIDE, 4f, 10, -1f, -1f)
+                new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f, 10, -1f, -1f)
                         .sanitized().scalePercent());
         assertTrue(half.anchorTop(240f) > 0f, "顺带守一下：构造不再需要已删除的 Side/leftEdge");
     }

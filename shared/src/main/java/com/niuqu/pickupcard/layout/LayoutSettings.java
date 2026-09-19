@@ -5,14 +5,21 @@ package com.niuqu.pickupcard.layout;
  * 不进主题 JSON —— 判据是"换一套主题时，应不应该把它一起换掉"：换主题该换的是配色和
  * 质感，不该让卡片突然跳到屏幕另一边（那会被当成 bug）。
  *
- * @param appearMode   卡片出现时怎么展开。{@link Appear#SLIDE} = 内容保持原样从左边平移出来；
- *                     {@link Appear#CLIP} = 内容不动、可见范围从左往右扩大。
+ * @param appearMode   卡片出现时怎么展开。{@link Appear#SLIDE} = 内容保持原样从竖条后面平移出来；
+ *                     {@link Appear#CLIP} = 内容不动、可见范围从左往右展开。
+ * @param exitMode     卡片怎么消失。{@link Exit#FADE} = 原地淡出；{@link Exit#TRAIN} = 内容整块
+ *                     平移回竖条后面（与火车入场的逆放）；{@link Exit#WIPE} = 可见范围从右往左
+ *                     收拢（与拉幕入场的逆放）。三种都叠加透明度下降。
+ * @param align        水平对齐基准。{@link Side#LEFT} = 竖条左缘贴锚线（一摞卡的竖条成一条线）；
+ *                     {@link Side#RIGHT} = 卡片右缘贴锚线（HTML 草稿的「右边缘对齐」预设，
+ *                     卡宽不齐时左缘参差、右缘齐）。
  * @param separation   两张卡之间的空隙（像素）。它跟卡内间隙（{@code style.gap}）不是一回事，
  *                     刻意分成两个键：一个是"卡与卡"，一个是"框与框"。
  * @param scalePercent 卡片缩放百分比（100 = 原样）。{@link #AUTO_SCALE} = 自动：放不下就缩小
  *                     （见 {@link #scale}）。它<b>不</b>属于主题：主题管长相，缩放管"塞不塞得下"。
- * @param anchorX      卡堆锚点的横坐标（<b>画布宽度的比例</b> 0~1）＝ 第一张卡<b>竖条左缘</b>的位置。
- *                     {@link #AUTO_ANCHOR} = 自动：让最宽的那张卡右缘正好落在右边距上（竖条成线那条老公式）。
+ * @param anchorX      锚线的横坐标（<b>画布宽度的比例</b> 0~1）。左缘锚定时＝竖条左缘的位置；
+ *                     右缘对齐时＝卡片右缘的位置。{@link #AUTO_ANCHOR} = 自动：左缘档让最宽的卡
+ *                     右缘正好落在右边距上（竖条成线那条老公式）。
  * @param anchorY      卡堆锚点的纵坐标（<b>画布高度的比例</b> 0~1）＝ 第一张卡（最新）<b>顶边</b>的位置，
  *                     新卡永远出现在这里、旧的被挤下去。{@link #AUTO_ANCHOR} = 自动：准星下方（55% 高）。
  *
@@ -22,12 +29,12 @@ package com.niuqu.pickupcard.layout;
  * 而且配置界面里的拖拽编辑天然算出来的就是分数。
  *
  * <p>【2026-09-18 删掉的两组键】{@code stickTo}（贴左/贴右）与 {@code leftEdge}（绝对像素）——
- * 它们管的事现在全部由 {@code anchorX}/{@code anchorY} 表达：旧 TOML 里的键读进来会被忽略。
- * 同时删掉的还有"快捷栏右侧条带"落点档：卡堆从 2026-09-18 晚起锚在准星下方、向下生长，
- * 不再贴着快捷栏，条带几何（stripLeft/hotbarRightHalf/STRIP_BOTTOM）随之失去意义。
+ * 它们管的事现在全部由 {@code anchorX}/{@code anchorY} 表达。晚上又按用户反馈把「右缘对齐」
+ * 以 {@link #align} 的形式请了回来：它是 HTML 草稿（{@code design/animation.html}）里就有的预设。
+ * 同时删掉的还有"快捷栏右侧条带"落点档：卡堆锚在准星下方、向下生长，不再贴着快捷栏。
  */
-public record LayoutSettings(Appear appearMode, float separation, int scalePercent,
-                             float anchorX, float anchorY) {
+public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float separation,
+                             int scalePercent, float anchorX, float anchorY) {
 
     /** 卡片间距的默认值（像素）。 */
     public static final float DEFAULT_SEPARATION = 4f;
@@ -55,10 +62,28 @@ public record LayoutSettings(Appear appearMode, float separation, int scalePerce
 
     /** 卡片出现时的展开方式。 */
     public enum Appear {
-        /** 内容保持原样，从左往右平移到最终位置：先看到最右端，再逐渐看到全部。 */
+        /** 内容保持原样，从竖条后面平移到最终位置（草稿的「火车」档）。 */
         SLIDE,
-        /** 内容位置不动，可见范围从左往右慢慢扩大：先看到最左端。 */
+        /** 内容位置不动，可见范围从左往右慢慢展开（草稿的「拉幕」档）。 */
         CLIP
+    }
+
+    /** 卡片的消失方式：和入场对称的那一半。三种都叠加透明度下降，不会硬切。 */
+    public enum Exit {
+        /** 原地淡出（默认）。 */
+        FADE,
+        /** 内容整块平移回竖条后面 —— 火车入场的逆放。 */
+        TRAIN,
+        /** 可见范围从右往左收拢 —— 拉幕入场的逆放。 */
+        WIPE
+    }
+
+    /** 水平对齐基准：锚线管的是卡的哪一条边。 */
+    public enum Side {
+        /** 竖条左缘贴锚线：一摞卡的竖条成一条竖线（默认）。 */
+        LEFT,
+        /** 卡片右缘贴锚线：右缘齐、左缘随卡宽参差（HTML 草稿的「右边缘对齐」）。 */
+        RIGHT
     }
 
     /** 默认情况下卡片离屏幕左/右边的距离（自动锚点用它推"最宽卡右缘贴右边距"）。 */
@@ -67,35 +92,29 @@ public record LayoutSettings(Appear appearMode, float separation, int scalePerce
     /**
      * 卡片内容允许占屏宽的比例 —— 卡宽上限（{@code CardMetrics.maxWidth}）与自动锚点
      * 要预留多少右边空间共用它。两个地方各写一份的话，调了一处另一处就不对。
-     * {@code CardMetrics.MAX_WIDTH_RATIO} 现在直接引用这里，不许再有第二份。
      */
     public static final float CONTENT_WIDTH_RATIO = 0.45f;
 
     /**
      * anchorX 自动档：让**最宽的那张卡**右缘正好落在右边距上。
      * <p>【为什么默认是"自动"而不是一个好看的绝对数】它要跨所有缩放档成立（见类注释），
-     * 而这个公式就是原来「竖条左缘锚定」那条老路 —— 一摞卡的竖条因此成一条竖线。
+     * 而这个公式就是原来「竖条左缘锚定」那条老路。
      */
     public static float autoLeftEdge(float guiWidth) {
         float budget = guiWidth * CONTENT_WIDTH_RATIO;
         return Math.max(0f, guiWidth - MARGIN_X - budget);
     }
 
-    /** 默认：锚点自动（准星右下），内容从锚点向右、向下伸。 */
+    /** 默认：火车入场、原地淡出、左缘锚定、锚点自动（准星右下）。 */
     public static LayoutSettings defaults() {
-        return new LayoutSettings(Appear.SLIDE, DEFAULT_SEPARATION, AUTO_SCALE,
-                AUTO_ANCHOR, AUTO_ANCHOR);
+        return new LayoutSettings(Appear.SLIDE, Exit.FADE, Side.LEFT, DEFAULT_SEPARATION,
+                AUTO_SCALE, AUTO_ANCHOR, AUTO_ANCHOR);
     }
 
     /**
      * 这一帧该用多大的缩放（1.0 = 100%）。
      * <p>【自动档怎么算】需要的高度 = 张数 × 卡高 + 间距（全按 100% 算），锚点以下放不下时按比例缩，
      * 下限 {@link #MIN_AUTO_PERCENT}%；装得下就恒为 100% —— <b>空着的屏幕不该把卡撑大</b>。
-     *
-     * @param available  卡堆可用的高度（锚点以下、HUD 带以上）
-     * @param cardHeight 100% 时一张卡的高
-     * @param cards      这一帧想放几张
-     * @param gap        卡与卡之间的间距（100% 时）
      */
     public float scale(float available, float cardHeight, int cards, float gap) {
         if (scalePercent > 0) {
@@ -116,6 +135,8 @@ public record LayoutSettings(Appear appearMode, float separation, int scalePerce
     public LayoutSettings sanitized() {
         return new LayoutSettings(
                 appearMode == null ? Appear.SLIDE : appearMode,
+                exitMode == null ? Exit.FADE : exitMode,
+                align == null ? Side.LEFT : align,
                 Math.max(0f, Math.min(32f, separation)),
                 // 0 = 自动；给了数值就夹进 50..200 —— 300% 会把卡顶出屏幕，10% 没人看得见
                 scalePercent == AUTO_SCALE ? AUTO_SCALE
@@ -132,7 +153,10 @@ public record LayoutSettings(Appear appearMode, float separation, int scalePerce
         return (v < 0f || v > 1f) ? AUTO_ANCHOR : v;
     }
 
-    /** 这一帧锚点的横坐标（屏幕逻辑 px）＝ 第一张卡竖条左缘的位置。 */
+    /**
+     * 这一帧锚线的横坐标（屏幕逻辑 px）。
+     * 左缘锚定时＝竖条左缘该在的位置；右缘对齐时＝卡片右缘该在的位置。
+     */
     public float anchorLeft(float guiWidth) {
         return anchorX < 0f ? autoLeftEdge(guiWidth) : anchorX * guiWidth;
     }

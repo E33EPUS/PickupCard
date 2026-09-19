@@ -69,6 +69,8 @@ public final class PickupCardConfig {
     public static LayoutSettings layoutSnapshot() {
         return new LayoutSettings(
                 VALUES.appearMode.get(),
+                VALUES.exitMode.get(),
+                VALUES.align.get(),
                 VALUES.separation.get().floatValue(),
                 VALUES.scalePercent.get(),
                 VALUES.anchorX.get().floatValue(),
@@ -208,6 +210,8 @@ public final class PickupCardConfig {
         final ForgeConfigSpec.ConfigValue<List<? extends String>> whitelist;
         final ForgeConfigSpec.ConfigValue<List<? extends String>> muteList;
         final ForgeConfigSpec.EnumValue<LayoutSettings.Appear> appearMode;
+        final ForgeConfigSpec.EnumValue<LayoutSettings.Exit> exitMode;
+        final ForgeConfigSpec.EnumValue<LayoutSettings.Side> align;
         final ForgeConfigSpec.DoubleValue separation;
         final ForgeConfigSpec.IntValue scalePercent;
         final ForgeConfigSpec.DoubleValue anchorX;
@@ -294,10 +298,24 @@ public final class PickupCardConfig {
                             LayoutSettings.AUTO_SCALE, LayoutSettings.MAX_SCALE_PERCENT);
 
             appearMode = builder
-                    .comment("卡片出现时怎么展开。",
-                            "  SLIDE = 内容保持原样，从左往右平移到最终位置；先看到最右端，再逐渐看到全部。",
-                            "  CLIP  = 内容位置不动，可见范围从左往右慢慢扩大；先看到最左端。")
+                    .comment("卡片出现时怎么展开（内容从竖条右侧出现的那一下）。",
+                            "  SLIDE = 火车：内容保持原样，从竖条后面平移出来；数字端先进视野。",
+                            "  CLIP  = 拉幕：内容不动，可见范围从左往右展开；图标端先露。")
                     .defineEnum("appearMode", LayoutSettings.Appear.SLIDE);
+
+            exitMode = builder
+                    .comment("卡片怎么消失。三种都叠加透明度下降，不会硬切。",
+                            "  FADE  = 淡出：原地变透明（默认）。",
+                            "  TRAIN = 火车退回：内容整块平移回竖条后面，与火车入场对称。",
+                            "  WIPE  = 拉幕收拢：可见范围从右往左收窄，与拉幕入场对称。")
+                    .defineEnum("exitMode", LayoutSettings.Exit.FADE);
+
+            align = builder
+                    .comment("水平对齐：锚线（anchorX）管的是卡的哪一条边。",
+                            "  LEFT  = 竖条左缘贴锚线：一摞卡的竖条成一条竖线（默认）。",
+                            "  RIGHT = 卡片右缘贴锚线：右缘齐、左缘随卡宽参差。",
+                            "    —— 对应 HTML 草稿里的「右边缘对齐」预设。")
+                    .defineEnum("align", LayoutSettings.Side.LEFT);
 
             anchorX = builder
                     .comment("卡堆锚点的横坐标（0~1 = 屏幕宽度的比例）：第一张卡的竖条左缘停在这儿。",

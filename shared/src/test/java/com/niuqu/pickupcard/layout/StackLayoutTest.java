@@ -27,7 +27,7 @@ class StackLayoutTest {
     private static final float ANCHOR_Y = GUI_H * LayoutSettings.DEFAULT_ANCHOR_Y;
 
     private static LayoutSettings anchored(Float x, Float y) {
-        return new LayoutSettings(Appear.SLIDE, LayoutSettings.DEFAULT_SEPARATION,
+        return new LayoutSettings(Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, LayoutSettings.DEFAULT_SEPARATION,
                 LayoutSettings.AUTO_SCALE,
                 x == null ? LayoutSettings.AUTO_ANCHOR : x,
                 y == null ? LayoutSettings.AUTO_ANCHOR : y);
@@ -106,6 +106,20 @@ class StackLayoutTest {
         float maxLeft = GUI_W - MARGIN - 200;
         assertEquals(maxLeft, wide.get(0).x(), EPS, "放不下时往左让，绝不把内容挤出屏幕");
         assertTrue(wide.get(0).x() >= 0f);
+    }
+
+    @Test
+    @DisplayName("右缘对齐：卡右缘贴锚线（HTML 的 rightalign 预设），宽卡被右边距拦住")
+    void rightAlignPinsTheRightEdge() {
+        LayoutSettings right = new LayoutSettings(Appear.SLIDE, LayoutSettings.Exit.FADE,
+                LayoutSettings.Side.RIGHT, LayoutSettings.DEFAULT_SEPARATION,
+                LayoutSettings.AUTO_SCALE, 300f / GUI_W, LayoutSettings.AUTO_ANCHOR);
+        var s = stack(right, new StackLayout.Size(120, 30), new StackLayout.Size(150, 30));
+        assertEquals(300f, s.get(0).x() + 120f, EPS, "窄卡右缘贴锚线");
+        assertEquals(300f, s.get(1).x() + 150f, EPS, "宽卡右缘也贴锚线 —— 左缘参差、右缘齐");
+        var wide = stack(right, new StackLayout.Size(200, 30));
+        assertTrue(wide.get(0).x() + 200f <= GUI_W - MARGIN + EPS,
+                "锚线太靠右时右缘被右边距拦住，不许出屏");
     }
 
     @Test
