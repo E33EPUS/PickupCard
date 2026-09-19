@@ -1,5 +1,7 @@
 package com.niuqu.pickupcard.notice;
 
+import java.util.List;
+
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 
@@ -315,5 +317,37 @@ class NoticeQueueTest {
         assertEquals(1, again.notice().generation());
         assertEquals(1, q.size());
         assertEquals("second", again.notice().payload(), "载荷换成调用方并好的新列表");
+    }
+
+    @Test
+    @DisplayName("退回排队：从队头回、活表同步摘掉，位子空出后先回先上")
+    void requeueFrontPutsCardsBackAtTheHeadAndOffTheAliveList() {
+        NoticeQueue<String> q = queue();
+        add(q, "a", 1, 0L);
+        add(q, "b", 1, 1L);
+        add(q, "c", 1, 2L);
+        assertEquals(3, q.size());
+
+        // 几何放不下：最老的两张（a、b）退回 —— 队头顺序保持 a 在 b 前（先回先上）
+        var a = q.find("a").orElseThrow();
+        var b = q.find("b").orElseThrow();
+        q.requeueFront(List.of(a, b));
+
+        assertEquals(1, q.size(), "活表只剩 c —— realSize 降下来，位子才算真的空出");
+        assertEquals(2, q.pendingSize());
+
+        // 退回的卡不再在活表里：同名新拾取按"排队那张"并进去（与老排队合并同一条路），
+        // 而不是在屏幕上凭空表示同一件东西两张卡
+        var fresh = add(q, "a", 1, 3L, 1, 9);
+        assertEquals(NoticeQueue.Change.MERGED, fresh.change(),
+                "a 的同名拾取并进排队里那张，数量累加");
+        assertEquals(2, fresh.notice().count());
+
+        // 位子空出来：先回先上 —— a 第一个回来（reborn：重新起算停留期）
+        assertEquals(1, q.sweep(1_000L, 500L).size(), "c 到点退场");
+        var promoted = q.promote(1_000L, 1);
+        assertEquals(1, promoted.size());
+        assertEquals("a", promoted.get(0).key(), "退回时排在队头的 a 先补位");
+        assertEquals(1_000L, promoted.get(0).bornAt(), "补位那张从此刻重新出生（bornAt = 补位时刻）");
     }
 }

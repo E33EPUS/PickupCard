@@ -831,13 +831,11 @@ public final class DevHarness {
                     mc.getWindow().getGuiScaledWidth(), mc.getWindow().getGuiScaledHeight(),
                     highestCard == Float.MAX_VALUE ? "-" : Math.round(highestCard),
                     com.niuqu.pickupcard.layout.StackLayout.fittingCount(
-                            // 锚点化之后"放几张"从锚点起算：夹取后的锚点顶 + HUD 带定可用高
+                            // 底锚之后"放几张"从锚线<b>向上</b>数：锚线就是可用高的全部
                             PickupCardConfig.layoutSnapshot().anchorTop(
                                     mc.getWindow().getGuiScaledHeight(),
                                     CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
                                     com.niuqu.pickupcard.layout.HudSafeZone.bottomInset()),
-                            mc.getWindow().getGuiScaledHeight(),
-                            com.niuqu.pickupcard.layout.HudSafeZone.bottomInset(),
                             // 用**本帧生效的**卡高与间距算（乘上当前缩放），否则这行日志会
                             // 在缩放档下说"放得下 7 张"而排布实际只放得下 5 张
                             CardStage.INSTANCE.previewStyle().boxHeight() * effectiveScale(mc),
@@ -855,15 +853,15 @@ public final class DevHarness {
                     .anyMatch(slot -> slot.view().exiting() || slot.view().reviving());
         }
 
-        /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式：锚点以下可用高）。 */
+        /** 这一帧生效的卡片缩放（跟 {@code CardStage#renderInto} 同一个公式：锚线以上可用高）。 */
         private static float effectiveScale(Minecraft mc) {
             LayoutSettings layout = PickupCardConfig.layoutSnapshot();
             float cardH = CardStage.INSTANCE.previewStyle().boxHeight();
             float anchorTop = layout.anchorTop(mc.getWindow().getGuiScaledHeight(), cardH,
                     com.niuqu.pickupcard.layout.HudSafeZone.bottomInset());
             return layout.scale(
-                    mc.getWindow().getGuiScaledHeight()
-                            - com.niuqu.pickupcard.layout.HudSafeZone.bottomInset() - anchorTop,
+                    // 底锚：卡堆向上长，可用高就是锚线到屏幕顶那一段
+                    anchorTop,
                     cardH,
                     Math.max(1, CardStage.INSTANCE.stats().live()),
                     layout.separation());

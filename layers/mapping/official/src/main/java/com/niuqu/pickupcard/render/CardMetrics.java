@@ -86,6 +86,20 @@ public final class CardMetrics {
         return style.barWidth() + gap + style.boxHeight() + gap + infoBox;
     }
 
+
+    /**
+     * 一张卡里<b>名字以外</b>固定要占的宽：竖条 + 间隙 + 图标格 + 间隙 + 左右内边距 + 数量。
+     * <p>【为什么要单独成函数】名字的截断预算（这里）与配置预览面板的截断预算
+     * （{@code PickupCardConfigScreen}，卡壳被面板夹窄时）要用<b>同一把尺</b>——
+     * 各写一份的话"预览的名字溢出卡壳"那种错就会回来（2026-09-19 真踩过）。
+     */
+    public static float namelessWidth(CardCanvas canvas, Font font, int count) {
+        var style = canvas.style();
+        float gap = style.gap();
+        return style.barWidth() + gap + style.boxHeight() + gap
+                + style.paddingH() * 2f + gap + font.width(canvas.countText(count));
+}
+
     /**
      * 卡上**实际画出来**的那个名字：太长就按像素宽度截断并补省略号。
      * <p>
@@ -100,8 +114,7 @@ public final class CardMetrics {
         var style = canvas.style();
         float gap = style.gap();
         // 先算"除了名字之外固定要占的宽度"，剩下的才是名字能用的
-        float fixed = style.barWidth() + gap + style.boxHeight() + gap
-                + style.paddingH() * 2f + gap + font.width(canvas.countText(count));
+        float fixed = namelessWidth(canvas, font, count);
         // 【全部在"未缩放单位"里算】文字是 pose 缩放后画的，字形本身按 100% 栅格化；
         // 屏宽上限与玩家设的名字宽度都是<b>屏幕像素</b>，所以除回缩放才是这里的可用宽度。
         float scale = canvas.scale();

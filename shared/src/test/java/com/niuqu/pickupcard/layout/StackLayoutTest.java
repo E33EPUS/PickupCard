@@ -10,11 +10,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 排布这件事的"已知答案"（2026-09-18 起为<b>顶锚</b>语义）。
+ * 排布这件事的"已知答案"（2026-09-19 起为<b>底锚、向上生长</b>语义）。
  * <p>
  * 【为什么专钉锚点】handoff 里记着那次翻车：游戏与草稿锚点方向相反，像素门禁只逐张比
  * 卡的结构（竖条宽、间距…），不比对锚点，于是一路绿灯。所以这里专钉两件事：
- * <b>锚在哪</b>、<b>谁在哪一位</b>。顶锚 = 最新那张贴着锚点、旧的被挤下去（用户 2026-09-18 定案）。
+ * <b>锚在哪</b>、<b>谁在哪一位</b>。底锚 = 最新那张贴着锚线（HUD 带上方那条固定底线）、
+ * 旧的被顶上去（2026-09-19 定案：数量优先 —— 427×240 锚点以上 145px 真放得下同屏 5 张）。
  */
 class StackLayoutTest {
 
@@ -23,18 +24,18 @@ class StackLayoutTest {
     /** 逻辑画布：1280x720 @ guiScale 3 → 427x240。 */
     private static final float GUI_W = 427f;
     private static final float GUI_H = 240f;
-    /** 准星下方那条默认锚线（55% 高）。 */
-    private static final float ANCHOR_Y = GUI_H * LayoutSettings.DEFAULT_ANCHOR_Y;
+    /** HUD 带留白（HudSafeZone.bottomInset()）。 */
+    private static final int MARGIN_Y = 75;
 
     private static LayoutSettings anchored(Float x, Float y) {
-        return new LayoutSettings(Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, LayoutSettings.DEFAULT_SEPARATION,
-                LayoutSettings.AUTO_SCALE,
+        return new LayoutSettings(Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT,
+                LayoutSettings.DEFAULT_SEPARATION, LayoutSettings.AUTO_SCALE,
                 x == null ? LayoutSettings.AUTO_ANCHOR : x,
                 y == null ? LayoutSettings.AUTO_ANCHOR : y);
     }
 
     private static List<StackLayout.Slot> stack(LayoutSettings layout, StackLayout.Size... sizes) {
-        return StackLayout.stack(List.of(sizes), GUI_W, GUI_H, layout, MARGIN, 75, 6f);
+        return StackLayout.stack(List.of(sizes), GUI_W, GUI_H, layout, MARGIN, MARGIN_Y, 6f);
     }
 
     @Test
@@ -44,13 +45,13 @@ class StackLayoutTest {
     }
 
     @Test
-    @DisplayName("最新的一张贴着锚点顶边，旧的被挤下去一个级差")
+    @DisplayName("最新的一张贴着锚线顶边，旧的被顶上去一个级差")
     void newestCardSitsOnTheAnchor() {
-        // 卡高 30：240 高、留白 75 的画布上锚点 (132) 不触发夹取（240-75-30 = 135 > 132）
         var s = stack(anchored(null, null), new StackLayout.Size(100, 30), new StackLayout.Size(100, 30));
-        assertEquals(ANCHOR_Y, s.get(0).y(), EPS, "index 0 = 最新 = 贴着锚点");
-        assertEquals(s.get(0).y() + s.get(0).height() + 6f, s.get(1).y(), EPS,
-                "旧的比最新那张低一个级差");
+        float anchor = GUI_H - MARGIN_Y - 30f;      // 自动档：贴 HUD 带上方
+        assertEquals(anchor, s.get(0).y(), EPS, "index 0 = 最新 = 贴着锚线");
+        assertEquals(s.get(0).y() - s.get(0).height() - 6f, s.get(1).y(), EPS,
+                "旧的比最新那张高一个级差（向上生长）");
     }
 
     @Test
@@ -61,34 +62,26 @@ class StackLayoutTest {
                 new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
                 new StackLayout.Size(100, 22));
         assertEquals(one.get(0).y(), many.get(0).y(), EPS);
-        // 而且越老的越低（y 越大）
+        // 而且越老的越高（y 越小）
         for (int i = 1; i < many.size(); i++) {
-            assertTrue(many.get(i).y() > many.get(i - 1).y(), "第 " + i + " 张没有比前一张更低");
+            assertTrue(many.get(i).y() < many.get(i - 1).y(), "第 " + i + " 张没有比前一张更高");
         }
     }
 
     @Test
-    @DisplayName("退场那张在堆底走人，其余卡一动不动（顶锚的抖动老账）")
-    void leavingCardLeavesFromTheBottomWithoutDisturbingTheRest() {
-        // 六张同型卡：新卡插在锚点上时，旧的全体下移一格（由 CardMove 平滑，不是瞬移）
-        var five = stack(anchored(null, null), new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22));
-        var six = stack(anchored(null, null), new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22));
+    @DisplayName("退场那张在堆顶走人，其余卡一动不动（底锚的抖动老账）")
+    void leavingCardLeavesFromTheTopWithoutDisturbingTheRest() {
+        var five = fiveCards();
+        var six = sixCards();
         for (int i = 0; i < 5; i++) {
-            assertEquals(five.get(i).y() + 22f + 6f, six.get(i + 1).y(), EPS,
-                    "第 " + i + " 张应该整体被挤下去一个级差");
+            assertEquals(five.get(i).y() - 22f - 6f, six.get(i + 1).y(), EPS,
+                    "第 " + i + " 张应该整体被顶上去一个级差");
         }
-        // 到点退场的是最老那张（顶锚下在堆底，six 的第 5 张）。它走掉之后，剩下的五张
+        // 到点退场的是最老那张（底锚下在堆顶，six 的第 5 张）。它走掉之后，剩下的五张
         // 与"从来只有五张"的排布完全一致 —— 也就是没有任何人需要补位。
-        var backToFive = stack(anchored(null, null), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
-                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22));
         for (int i = 0; i < 5; i++) {
-            assertEquals(backToFive.get(i).y(), six.get(i).y(), EPS,
-                    "堆底那张走掉时第 " + i + " 张不该动 —— 这是顶锚不抖的根据");
+            assertEquals(five.get(i).y(), six.get(i).y(), EPS,
+                    "堆顶那张走掉时第 " + i + " 张不该动 —— 这是底锚不抖的根据");
         }
     }
 
@@ -123,22 +116,35 @@ class StackLayoutTest {
     }
 
     @Test
-    @DisplayName("默认锚点：横向 = 自动锚点公式，纵向 = 准星下方")
-    void defaultAnchorsBelowTheCrosshair() {
+    @DisplayName("自动锚线按对齐档各自解析：左缘档=竖条成线公式，右缘档=贴右边距")
+    void autoAnchorResolvesPerAlignSide() {
+        LayoutSettings left = LayoutSettings.defaults();
+        assertEquals(LayoutSettings.autoLeftEdge(GUI_W), left.anchorLeft(GUI_W), EPS);
+
+        LayoutSettings right = new LayoutSettings(Appear.SLIDE, LayoutSettings.Exit.FADE,
+                LayoutSettings.Side.RIGHT, 4f, LayoutSettings.AUTO_SCALE,
+                LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR);
+        assertEquals(GUI_W - MARGIN, right.anchorLeft(GUI_W), EPS,
+                "右缘档的自动锚线贴右边距 —— 不再错拿左缘公式（卡会瞬移到屏幕中左的那个错）");
+    }
+
+    @Test
+    @DisplayName("默认锚点：横向 = 左缘自动公式，纵向 = 贴 HUD 带上方")
+    void defaultAnchorSitsAboveTheHudBand() {
         var s = StackLayout.stack(List.of(new StackLayout.Size(120, 30)), GUI_W, GUI_H,
-                LayoutSettings.defaults(), MARGIN, 75, 6f);
+                LayoutSettings.defaults(), MARGIN, MARGIN_Y, 6f);
         assertEquals(LayoutSettings.autoLeftEdge(GUI_W), s.get(0).x(), EPS, "竖条左缘停在自动锚点");
-        assertEquals(GUI_H * LayoutSettings.DEFAULT_ANCHOR_Y, s.get(0).y(), EPS, "顶边落在准星下方");
+        assertEquals(GUI_H - MARGIN_Y - 30f, s.get(0).y(), EPS, "最新那张顶边贴 HUD 带上方");
     }
 
     @Test
     @DisplayName("分数锚点跨缩放档稳定：同一分数在大小两块画布上落在同一个相对位置")
     void fractionalAnchorIsScaleInvariant() {
-        // fx=0.5 / fy=0.3 在三档画布上都不触发夹取（x 方向 100 宽的卡放得下，y 方向 20 高也在 HUD 带上）
+        // fx=0.5 / fy=0.3 在三档画布上都不触发夹取（y 方向 0.3*h 恒低于贴底档的锚线）
         LayoutSettings dragged = anchored(0.5f, 0.3f);
         for (float[] canvas : new float[][] {{426f, 240f}, {256f, 144f}, {640f, 360f}}) {
             var s = StackLayout.stack(List.of(new StackLayout.Size(100, 20)), canvas[0], canvas[1],
-                    dragged, MARGIN, 75, 4f);
+                    dragged, MARGIN, MARGIN_Y, 4f);
             assertEquals(canvas[0] * 0.5f, s.get(0).x(), EPS,
                     canvas[0] + " 宽：x 应该在 50% 处");
             assertEquals(canvas[1] * 0.3f, s.get(0).y(), EPS,
@@ -149,17 +155,16 @@ class StackLayoutTest {
     @Test
     @DisplayName("锚点被拖得太低：第一张卡自动抬到 HUD 带上方（至少放得下一张）")
     void anchorDraggedTooLowGetsClampedAboveTheHudBand() {
-        int marginY = 75;
         LayoutSettings low = anchored(0.7f, 0.98f);
         float cardH = 20f;
-        float clampedTop = low.anchorTop(GUI_H, cardH, marginY);
-        assertEquals(GUI_H - marginY - cardH, clampedTop, EPS, "锚点夹到 HUD 带上方正好一张卡");
+        float clampedTop = low.anchorTop(GUI_H, cardH, MARGIN_Y);
+        assertEquals(GUI_H - MARGIN_Y - cardH, clampedTop, EPS, "锚点夹到 HUD 带上方正好一张卡");
 
         var slots = StackLayout.stack(List.of(new StackLayout.Size(100, cardH)), GUI_W, GUI_H,
-                low, MARGIN, marginY, 4f);
+                low, MARGIN, MARGIN_Y, 4f);
         assertEquals(clampedTop, slots.get(0).y(), EPS, "排布与夹取必须用同一个锚点");
-        // 而取舍也用同一个值：正好放得下 1 张
-        assertEquals(1, StackLayout.fittingCount(clampedTop, GUI_H, marginY, cardH, 4f));
+        // 容量与排布同源这件事由 onlyWhatFitsStaysOnScreen 整段钉住，这里守"至少放得下一张"
+        assertTrue(StackLayout.fittingCount(clampedTop, cardH, 4f) >= 1);
     }
 
     @Test
@@ -182,41 +187,41 @@ class StackLayoutTest {
     }
 
     @Test
-    @DisplayName("锚点以下放不下就丢：号称放得下的全在 HUD 带上方，多一张必然越界")
-    void onlyWhatFitsStaysAboveTheHudBand() {
+    @DisplayName("取舍与排布同源：号称放得下的全在屏内，多一张必然越出屏顶")
+    void onlyWhatFitsStaysOnScreen() {
         for (float h : new float[]{144f, 180f, 240f, 360f, 480f, 1080f}) {
             float top = LayoutSettings.defaults().anchorTop(h, 20f, 75);
-            int fits = StackLayout.fittingCount(top, h, 75, 20f, 4f);
+            int fits = StackLayout.fittingCount(top, 20f, 4f);
             assertTrue(fits >= 1, "画布 " + h + " 高时一张都放不下，取舍就无从谈起");
             var slots = cards(h, fits + 1);
             for (int i = 0; i < fits; i++) {
-                assertTrue(slots.get(i).y() + 20f <= h - 75f,
-                        "画布 " + h + " 高：第 " + i + " 张号称放得下，却压过 HUD 带（底 y="
-                                + (slots.get(i).y() + 20f) + "）");
+                assertTrue(slots.get(i).y() >= 0f,
+                        "画布 " + h + " 高：第 " + i + " 张号称放得下，顶边却出了屏幕（y="
+                                + slots.get(i).y() + "）");
             }
-            assertTrue(slots.get(fits).y() + 20f > h - 75f,
-                    "画布 " + h + " 高：第 " + fits + " 张号称放不下，却在 HUD 带上方（y=" + slots.get(fits).y() + "）");
+            assertTrue(slots.get(fits).y() < 0f,
+                    "画布 " + h + " 高：第 " + fits + " 张号称放不下，却还在屏内（y=" + slots.get(fits).y() + "）");
         }
     }
 
     /**
-     * 反例对照：自动锚点在 55% 高时，可放张数比贴底时代少 —— 这是把卡挪到准星旁边的
-     * 直接代价（可放高度从"全屏减 HUD 带"变成"锚点以下那一段"）。差额由排队 + 溢出卡接手。
-     * <p>谁要是把锚点改回底部却忘改这里，这条会红。
+     * 反例对照（方向反过来了）：贴底锚点放得下的张数比"准星旁顶锚"时代<b>多</b> ——
+     * 这是 2026-09-19 把锚点搬回右下的直接收益（可放高度从"锚点以下那一段"变回
+     * "锚线以上的整段屏幕"）。谁要是把锚点搬回准星旁却忘改这里，这条会红。
      */
     @Test
-    void anchoredColumnFitsFewerCardsThanABottomAnchoredOne() {
-        // 240 高（guiScale 3 的 1280×720）：锚点 132、HUD 带顶 165 → 只放得下 1 张
-        assertEquals(1, fitsAt(240f));
-        // 360 高（1920×1080 的 guiScale 3）：锚点 198、HUD 带顶 285 → 3 张
-        assertEquals(3, fitsAt(360f));
-        // 贴底在同一块 240 高画布上是 7 张 —— 少放是多出来的，锚点高了就该少
-        assertTrue(fitsAt(240f) < (int) ((240f - 75f + 4f) / 24f));
+    void bottomAnchoredColumnFitsMoreCardsThanACrosshairAnchoredOne() {
+        // 240 高（guiScale 3 的 1280×720）：锚线 145 → 放得下 7 张；准星旁（132）只放得下 1 张
+        assertEquals(7, fitsAt(240f));
+        // 360 高（1920×1080 的 guiScale 3）：锚线 265 → 12 张
+        assertEquals(12, fitsAt(360f));
+        // 同屏上限默认 5 张（116px）在最小的常见画布上真放得下 —— 第四批审计的核心验收点
+        assertTrue(fitsAt(240f) >= 5);
     }
 
     private static int fitsAt(float guiHeight) {
         float top = LayoutSettings.defaults().anchorTop(guiHeight, 20f, 75);
-        return StackLayout.fittingCount(top, guiHeight, 75, 20f, 4f);
+        return StackLayout.fittingCount(top, 20f, 4f);
     }
 
     /** n 张 100×20 的卡，用真实的底部留白（75）在给定画布高上排一遍。 */
@@ -227,5 +232,21 @@ class StackLayoutTest {
         }
         return StackLayout.stack(List.of(sizes), GUI_W, guiHeight, LayoutSettings.defaults(),
                 MARGIN, 75, 4f);
+    }
+
+    /** 按排布结果数一数几张完整在屏内（顶边 ≥ 0）—— 与 fittingCount 同一把尺子。 */
+    private static int countVisibleSlots(List<StackLayout.Slot> slots) {
+        return (int) slots.stream().filter(s -> s.y() >= 0f).count();
+    }
+
+    private static List<StackLayout.Slot> fiveCards() {
+        return stack(anchored(null, null), new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
+                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22), new StackLayout.Size(100, 22));
+    }
+
+    private static List<StackLayout.Slot> sixCards() {
+        return stack(anchored(null, null), new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
+                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22),
+                new StackLayout.Size(100, 22), new StackLayout.Size(100, 22));
     }
 }

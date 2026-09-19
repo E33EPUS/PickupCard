@@ -38,10 +38,12 @@ import java.util.List;
  * 背后的账本照旧 —— 取消退出时玩家的提示一条不少。
  *
  * <p>【区域框是"承诺"，卡是"样子"】虚框（四角括号）画的是这一套配置下卡堆的<b>最大占地</b>
- * （最宽卡 × 同屏上限），拨同屏上限/缩放/名字宽度它都跟着变；框里实际画几张样例只是示意
- * （画满 16 张只会变成一堵墙）。锚点被拖到连一张卡都放不下的位置时自动抬到 HUD 带上方
- * —— 与游戏里的夹取（{@link LayoutSettings#anchorTop}）同一个公式，编辑场里看见的就是
- * 游戏里会发生的。
+ * （最宽样例 × 同屏上限，向上长），拨同屏上限/缩放/名字宽度它都跟着变；框里实际画几张
+ * 样例只是示意（画满 16 张只会变成一堵墙），所以框上带一句「示意」—— 最大占地按
+ * <b>样例</b>的最宽算，玩家真捡到更长的名字时卡会更宽（2026-09-19 补的实话）。
+ * 锚线被拖到连一张卡都放不下的位置时自动抬到 HUD 带上方 —— 与游戏里的夹取
+ * （{@link LayoutSettings#anchorTop}）同一个公式，编辑场里看见的就是游戏里会发生的。
+ * 卡堆<b>向上生长</b>（2026-09-19 底锚定案）：锚线 = 最新那张的顶边，旧的往上排。
  */
 public final class AnchorEditScreen extends Screen {
 
@@ -145,7 +147,7 @@ public final class AnchorEditScreen extends Screen {
         try (NvgUi ui = NvgUi.begin(gui, palette, mouseX, mouseY, now)) {
             if (ui != null) {
                 ui.text(this.title.getString(), 8f, 6f, 0xFFFFFFFF);
-                ui.text(isAuto() ? "当前：自动（准星右下）—— 按住卡片堆拖动即变为自定义"
+                ui.text(isAuto() ? "当前：自动（右下 · 贴 HUD 带上方）—— 按住卡片堆拖动即变为自定义"
                                 : String.format(java.util.Locale.ROOT, "当前：自定义 (x=%.2f, y=%.2f 屏)",
                                 anchorX, anchorY),
                         8f, 17f, palette.textDim);
@@ -160,9 +162,13 @@ public final class AnchorEditScreen extends Screen {
         paintSampleStack(gui, g);
     }
 
-    /** 这一帧的编辑场几何：锚点、区域框（最宽卡 × 同屏上限）、样例卡的位置。 */
+    /** 这一帧的编辑场几何：锚线、区域框（最宽样例 × 同屏上限，向上长）、样例卡的位置。 */
     private record StyleGeometry(float anchorLeft, float anchorTop, float cardH, float regionW,
                                  float regionH, float scale) {
+        /** 区域框的顶：卡堆向上生长，堆高 = 同屏上限 × 卡高 + 间隙，锚线在堆底。 */
+        float regionTop() {
+            return anchorTop - (regionH - cardH);
+        }
     }
 
     private StyleGeometry geometry() {
@@ -183,13 +189,15 @@ public final class AnchorEditScreen extends Screen {
         return new StyleGeometry(left, top, cardH, regionW, regionH, scale);
     }
 
-    /** 区域框 = 四角括号（虚线在 NanoVG 里要自己拼，括号更快也更轻）。 */
+    /** 区域框 = 四角括号（虚线在 NanoVG 里要自己拼，括号更快也更轻）。框随底锚向上长。 */
     private void drawRegionBrackets(NvgUi ui, StyleGeometry g) {
         float len = 10f;
         float t = 2f;
         int color = ui.palette.accent;
-        float x = g.anchorLeft(), y = g.anchorTop();
-        float x2 = x + g.regionW(), y2 = y + g.regionH();
+        float x = g.anchorLeft();
+        float y = g.regionTop();
+        float x2 = x + g.regionW();
+        float y2 = y + g.regionH();
         // 四个角，每个角两条短线
         ui.fillRoundRect(x, y, len, t, 1f, color);
         ui.fillRoundRect(x, y, t, len, 1f, color);
@@ -199,12 +207,17 @@ public final class AnchorEditScreen extends Screen {
         ui.fillRoundRect(x, y2 - len, t, len, 1f, color);
         ui.fillRoundRect(x2 - len, y2 - t, len, t, 1f, color);
         ui.fillRoundRect(x2 - t, y2 - len, t, len, 1f, color);
+        // 【为什么写"示意"】框宽按<b>样例</b>的最宽算 —— 玩家真捡到更长的名字时卡会更宽，
+        // 这句话把"框不是硬承诺"说明白，免得被当成对不上的 bug。
+        ui.text("示意占地（按样例宽）", x, y - 11f, ui.palette.textDim);
     }
 
     /**
      * 编辑场里的样例堆：与配置界面预览同一套样例、同一个画笔、同一个缩放 ——
      * 编辑场里看到的多宽多高，游戏里就是多宽多高。最多画五张示意（画满同屏上限只会
      * 变成一堵墙，区域框已经把"最大占地"说清楚了）。
+     * <p>【向上生长（2026-09-19 底锚）】锚线 = 最新那张的顶边，旧的往上排；出了屏幕顶的
+     * 不画 —— 框已经说明那里还有位子。
      */
     private void paintSampleStack(GuiGraphics gui, StyleGeometry g) {
         PickupCardConfigScreen.Sample[] samples = PickupCardConfigScreen.Sample.values();
@@ -215,14 +228,14 @@ public final class AnchorEditScreen extends Screen {
         List<CardSlot> slots = new ArrayList<>();
         float y = g.anchorTop();
         for (int i = 0; i < count; i++) {
+            if (y < 0f) {
+                break;      // 出了屏幕顶的部分不画 —— 框已经说明那里还有位子
+            }
             CardView view = editorView(samples[i % samples.length]);
             float w = Math.min(CardMetrics.naturalWidth(canvas(style, g.scale()), font, view) * g.scale(),
                     g.regionW());
-            if (y + g.cardH > this.height) {
-                break;      // 超出屏幕的部分不画 —— 框已经说明那里还有位子
-            }
-            slots.add(new CardSlot(view, g.anchorLeft(), y, w, g.cardH));
-            y += g.cardH + gap;
+            slots.add(new CardSlot(view, g.anchorLeft(), y, w, g.cardH()));
+            y -= g.cardH() + gap;
         }
         if (!slots.isEmpty()) {
             painter.paint(gui, canvas(style, g.scale()), slots);

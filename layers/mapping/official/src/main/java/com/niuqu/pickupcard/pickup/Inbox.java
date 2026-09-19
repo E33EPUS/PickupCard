@@ -70,6 +70,21 @@ public final class Inbox {
     private Supplier<PickupCardSettings> settingsSource = PickupCardSettings::defaults;
     private Supplier<FilterSettings> filterSource = FilterSettings::defaults;
 
+    /**
+     * 渲染层这一帧量出来的<b>几何容量</b>（锚线以上真实放得下几张）。
+     * <p>【为什么账本要问渲染要这个数】"同屏上限"是玩家的意愿，"画布上放得下几张"是屏幕的
+     * 物理 —— 从前这两者打架时渲染层直接硬切摘卡，拾取无声蒸发（第四批反馈"锚定错乱"的根）。
+     * 现在渲染层每帧把几何容量递过来，补位（promote）与新卡（absorb）都拿
+     * {@code min(同屏上限, 几何容量)} 当闸门：放不下的根本不上屏，在队列里等，
+     * 等到缩放/锚点/画布腾出位子。
+     */
+    private volatile int geometryCapacity = Integer.MAX_VALUE;
+
+    /** 渲染层每帧回报几何容量；0 = 连一张都放不下。 */
+    public void setGeometryCapacity(int capacity) {
+        this.geometryCapacity = Math.max(0, capacity);
+    }
+
     private Inbox() {
     }
 
@@ -164,8 +179,10 @@ public final class Inbox {
                 ? ItemIdentity.strictKeyOf(item.stack()) : key;
         boolean firstTime = seen.markAndCheckFirst(seenKey);
         Card card = new Card(content, emphasized);
+        // 【闸门 = min(意愿, 物理)】几何放不下的不上屏，走同一条排队/溢出路径
+        int capacity = Math.min(settings().maxOnScreen(), geometryCapacity);
         NoticeQueue.Outcome<Card> outcome = queue.absorb(key, look, card, count, firstTime, now,
-                settings().mergeMode(), settings().maxOnScreen(), settings().queueSize());
+                settings().mergeMode(), capacity, settings().queueSize());
 
         for (Notice<Card> evicted : outcome.evicted()) {
             pending.add(new Event.Evicted(evicted));
@@ -180,7 +197,7 @@ public final class Inbox {
             // 排队与丢弃在屏幕上都"什么都不发生"：排队的会在补位时变成 Added，
             // 丢弃的（屏满 + 队满）只能靠日志说明白 —— 玩家看到的是"这次没弹"。
             case QUEUED -> PickupCard.LOGGER.info("[排队] key={} 屏上已经 {} 张，等位子",
-                    outcome.notice().key(), settings().maxOnScreen());
+                    outcome.notice().key(), capacity);
             case DROPPED -> {
                 // 屏满 + 队满：并进"还有 N 项"那张卡，而不是静默丢掉
                 CardContent.Overflow overflow = overflowWith(content);
@@ -190,7 +207,7 @@ public final class Inbox {
                         ? new Event.Added(spilled.notice())
                         : new Event.Merged(spilled.notice()));
                 PickupCard.LOGGER.info("[溢出] key={}：屏满且队满（同屏 {} / 排队 {}），并进溢出卡（第 {} 项）",
-                        outcome.notice().key(), settings().maxOnScreen(), settings().queueSize(),
+                        outcome.notice().key(), capacity, settings().queueSize(),
                         spilled.notice().count());
             }
         }
@@ -203,6 +220,22 @@ public final class Inbox {
      */
     public void forgetLeft(String key) {
         queue.forgetLeft(key);
+    }
+
+    /**
+     * 渲染层量出来"几何上放不下"的那几张：退回排队<b>队头</b>，位子一空第一个回来。
+     * <p>【为什么取代了硬切】从前这里直接摘卡 + forgetLeft —— 拾取在屏幕上无声蒸发，
+     * 连排队都不进（第四批反馈"锚定错乱"的根因之一）。退回排队后行为与"屏满排队"
+     * 完全同一条路：先来先上屏，回来时重播入场、重新起算停留期。
+     */
+    public void requeue(List<Notice<Card>> notices) {
+        if (notices.isEmpty()) {
+            return;
+        }
+        queue.requeueFront(notices);
+        for (Notice<Card> notice : notices) {
+            PickupCard.LOGGER.info("[退回排队] key={}：几何上放不下，等位子（先回先上）", notice.key());
+        }
     }
 
     /**

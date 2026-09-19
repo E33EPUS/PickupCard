@@ -7,7 +7,7 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * 布局设置的夹逼。锚点（anchorX/anchorY，2026-09-18 定案）是这一类的重心：
+ * 布局设置的夹逼。锚点（anchorX/anchorY，2026-09-18 定案、2026-09-19 改底锚语义）是这一类的重心：
  * 它存的是<b>画布分数</b>，跨 GUI 缩放档稳定；-1 是"自动"哨兵，必须活着穿过夹逼。
  */
 class LayoutSettingsTest {
@@ -15,8 +15,8 @@ class LayoutSettingsTest {
     @Test
     void defaultsAnchorAutomatically() {
         LayoutSettings d = LayoutSettings.defaults();
-        assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorX(), "横向自动 = 竖条成线的老公式");
-        assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorY(), "纵向自动 = 准星下方");
+        assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorX(), "横向自动 = 按对齐档解析");
+        assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorY(), "纵向自动 = 贴 HUD 带上方");
         assertEquals(LayoutSettings.Exit.FADE, d.exitMode(), "消失方式默认淡出");
         assertEquals(LayoutSettings.Side.LEFT, d.align(), "对齐默认竖条左缘锚定");
         assertEquals(LayoutSettings.Appear.SLIDE, d.appearMode());
@@ -54,17 +54,28 @@ class LayoutSettingsTest {
     }
 
     @Test
-    @DisplayName("锚点解析：-1 给公式/准星，分数给比例")
+    @DisplayName("锚点解析：-1 给公式/贴底，分数给比例")
     void anchorResolution() {
         LayoutSettings auto = LayoutSettings.defaults();
         assertEquals(LayoutSettings.autoLeftEdge(426f), auto.anchorLeft(426f), 1e-6);
-        assertEquals(240f * LayoutSettings.DEFAULT_ANCHOR_Y, auto.anchorTop(240f), 1e-6,
-                "自动纵向 = 准星下方 55%");
+        // 自动纵向 = 贴 HUD 带上方：240 高、卡高 20、留白 75 → 145
+        assertEquals(240f - 75f - 20f, auto.anchorTop(240f, 20f, 75), 1e-6,
+                "自动纵向 = 最新那张贴 HUD 带上方");
 
         LayoutSettings dragged = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, 0.75f, 0.6f);
         assertEquals(426f * 0.75f, dragged.anchorLeft(426f), 1e-6);
-        assertEquals(240f * 0.6f, dragged.anchorTop(240f), 1e-6);
+        assertEquals(240f * 0.6f, dragged.anchorTop(240f, 20f, 75), 1e-6);
+    }
+
+    @Test
+    @DisplayName("自动锚线按对齐档解析：右缘档贴右边距，不再错拿左缘公式")
+    void autoAnchorXResolvesPerAlignSide() {
+        LayoutSettings right = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE,
+                LayoutSettings.Side.RIGHT, 4f, LayoutSettings.AUTO_SCALE,
+                LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR);
+        assertEquals(426f - 16f, right.anchorLeft(426f), 1e-6,
+                "右缘档自动 = 卡右缘贴右边距 —— 切对齐档不再瞬移到屏幕中左");
     }
 
     @Test
@@ -74,10 +85,10 @@ class LayoutSettingsTest {
                 LayoutSettings.AUTO_SCALE, 0.7f, 0.98f);
         // 240 高、留白 75、卡高 20 → 第一张卡的顶边最高只能到 240-75-20 = 145
         assertEquals(145f, low.anchorTop(240f, 20f, 75), 1e-6);
-        // 正常锚点不受夹取影响
-        LayoutSettings mid = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
+        // 自动档本来就贴底，夹取不动它
+        LayoutSettings auto = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR);
-        assertEquals(240f * LayoutSettings.DEFAULT_ANCHOR_Y, mid.anchorTop(240f, 20f, 75), 1e-6);
+        assertEquals(145f, auto.anchorTop(240f, 20f, 75), 1e-6);
     }
 
     @Test
@@ -103,6 +114,6 @@ class LayoutSettingsTest {
         assertEquals(LayoutSettings.MIN_SCALE_PERCENT,
                 new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f, 10, -1f, -1f)
                         .sanitized().scalePercent());
-        assertTrue(half.anchorTop(240f) > 0f, "顺带守一下：构造不再需要已删除的 Side/leftEdge");
+        assertTrue(half.anchorTop(240f, 20f, 75) > 0f, "顺带守一下：构造不再需要已删除的 Side/leftEdge");
     }
 }

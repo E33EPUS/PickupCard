@@ -1,13 +1,12 @@
 package com.niuqu.pickupcard.config;
 
 import com.niuqu.pickupcard.filter.RuleListEdit;
+import com.niuqu.pickupcard.layout.CardMove;
 import com.niuqu.pickupcard.layout.HudSafeZone;
 import com.niuqu.pickupcard.layout.LayoutSettings;
-import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.notice.MergeMode;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
-import com.niuqu.pickupcard.rarity.RarityAccent;
 import com.niuqu.pickupcard.notice.Notice;
 import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.pickup.CardContent;
@@ -19,6 +18,7 @@ import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.render.nvg.ui.NvgButton;
+import com.niuqu.pickupcard.render.nvg.ui.NvgColorChip;
 import com.niuqu.pickupcard.render.nvg.ui.NvgPalette;
 import com.niuqu.pickupcard.render.nvg.ui.ConfigLayout;
 import com.niuqu.pickupcard.render.nvg.ui.NvgScroll;
@@ -47,6 +47,7 @@ import org.lwjgl.glfw.GLFW;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.BooleanSupplier;
+import java.util.function.Consumer;
 import java.util.function.Function;
 import java.util.function.Supplier;
 
@@ -56,18 +57,26 @@ import java.util.function.Supplier;
  * <p>【两件事决定了它的形状】
  * <ol>
  *   <li><b>形状照旧版</b>（= 从发行 jar 恢复出来的 v0.1.0 / pickupnotice 那一系）：4 段
- *       「通用 / 动画 / 位置与堆叠 / 外观」、每行"左标签右控件"、每项一句话悬停。</li>
- *   <li><b>控件自己画</b>（{@code render/nvg/ui}）：按钮/开关/滑条/输入框全是 NanoVG 画的，
- *       不再用原版控件。旧版就是自绘的（{@code ConfigWidget} 那一套）；换到 NanoVG 之后
- *       圆钮、细轨道这些才画得出来，界面也不再被原版九宫格贴图锁死。</li>
+ *       「通用 / 动画 / 位置与堆叠 / 外观」+ 过滤、每行"左标签右控件"。</li>
+ *   <li><b>控件自己画</b>（{@code render/nvg/ui}）：按钮/开关/滑条/色块全是 NanoVG 画的，
+ *       不再用原版控件。</li>
  * </ol>
  *
- * <p>【"跟随主题"为什么从界面上消失了】界面显示的是<b>生效值</b>（主题 + 你改过的），
- * 拨哪一项就写死哪一项（想回主题：TOML 里改回 -1 或空串）。几何参数（内缩 / 水平内边距 /
- * 框间距）不进界面 —— 它们是设计参数，归主题 JSON，摆在玩家面前只会把卡调歪。
- * 【2026-09-18 的两个破例】竖条宽度进了外观页（用户点名要调）；位置不再用滑条表达 ——
- * 「位置与堆叠」页一颗「拖拽调整位置」钮打开整屏编辑场（{@link AnchorEditScreen}），
- * 鼠标拖到哪儿算哪儿，写的也是"看得懂"的东西：屏幕的分数锚点。
+ * <p>【2026-09-19 的五条定案（第四批反馈审计 + grill）】
+ * <ol>
+ *   <li><b>固定行距 + 小节头</b>：行距从前按"页内行数"算（通用 22px、外观 20px），换页时
+ *       每行位移不一致 —— "排版杂乱"的数学来源。现在全界面恒 20px；页内加暗色小节头
+ *       （「显示什么」「形状」「颜色」…），扫一眼就知道哪几行是一伙的。</li>
+ *   <li><b>颜色改色块</b>（{@link NvgColorChip}）：手打 hex 属于程序员的方言，填错还静默；
+ *       现在点色块在色板里循环、「跟随主题」是第一档；精确色值仍可写 TOML（行说明里有说）。</li>
+ *   <li><b>每页一颗「恢复本页默认」</b>：改动立即生效的代价是"拖错了没有后悔药"——这颗钮
+ *       就是后悔药。位置页不重置锚点（那是玩家亲手拖的，归编辑场管）。</li>
+ *   <li><b>预览按页分工</b>（回归 2026-09-18 的定案）：非动画页画<b>一张静止完整卡</b>
+ *       （点预览/换样例重播一次入场）；动画页保留三张真卡的自动舞台。「在屏上哪儿」这件事
+ *       归拖拽编辑场 1:1 管 —— 预览面板是块小画布，把它当屏幕地图就是在撒谎。</li>
+ *   <li><b>位置底锚</b>：新卡永远贴 HUD 带上方那条固定底线、旧的向上顶（几何账见
+ *       {@link LayoutSettings}）。锚线自动档按对齐档各自解析。</li>
+ * </ol>
  *
  * <p>【界面自己不存值】控件的读写直接打到 Forge 配置上；否则"界面显示 5、实际画 9"迟早出现。
  */
@@ -75,6 +84,12 @@ public final class PickupCardConfigScreen extends Screen {
 
     // ---- 界面尺度 ----
     private static final int PAD = 6;
+    /**
+     * 全界面统一的行距/行高（2026-09-19 定案）。行距从前按页内行数算，换页时行会各自漂 ——
+     * 固定之后放不下就滚，节奏不再随内容变。
+     */
+    private static final int ROW_STEP = 20;
+    private static final int ROW_H = 18;
     /**
      * 短动画的时长（毫秒）。
      * <p>【为什么都在 100~200ms 这一档】这些动画只在"我按了东西"的<em>那一瞬间</em>回答问题
@@ -85,7 +100,6 @@ public final class PickupCardConfigScreen extends Screen {
     private static final long HOVER_IN_MS = 110L;
     private static final long HOVER_OUT_MS = 150L;
     private static final long TAB_MS = 160L;
-    private static final long PREVIEW_MS = 200L;
     /** 「加一条」被拒时那句话在底部停留多久（够读完，又不会把悬停说明永久顶掉）。 */
     private static final long FILTER_NOTE_MS = 6_000L;
     /** 换页时内容向上滑多少像素（只滑一点点：滑动是"从哪儿来"的提示，不是主体）。 */
@@ -103,7 +117,7 @@ public final class PickupCardConfigScreen extends Screen {
                         : "收起",
                 lo.previewVisible() ? (lo.switcherVisible() ? " 切样例行" : " 无切样例行") : "",
                 rows.size(),
-                Math.max(1, (int) (lo.items().h() / Math.max(1, rowStep(Math.max(1, rows.size()))))),
+                Math.max(1, (int) (lo.items().h() / ROW_STEP)),
                 itemsScroll == null ? 0f : itemsScroll.offset());
     }
 
@@ -126,9 +140,11 @@ public final class PickupCardConfigScreen extends Screen {
             hover = Math.max(hover, row.hover.at(now));
         }
         return String.format(java.util.Locale.ROOT,
-                "页=%s 样例=%s 预览卡区=(x%.0f y%.0f w%.0f h%.0f) 换页=%.2f 强调条=%.2f 舞台=%d张 最大行悬停=%.2f 画了=%s",
+                "页=%s 样例=%s 预览卡区=(x%.0f y%.0f w%.0f h%.0f) 换页=%.2f 强调条=%.2f 预览=%s 最大行悬停=%.2f 画了=%s",
                 section.label, sample.label, card.x(), card.y(), card.w(), card.h(),
-                pageAnim.at(now), tabAccentAnim.at(now), stage.size(), hover, paintedDump());
+                pageAnim.at(now), tabAccentAnim.at(now),
+                stagePage() ? "舞台" + stage.size() + "张" : "静止卡",
+                hover, paintedDump());
     }
 
     /**
@@ -175,10 +191,12 @@ public final class PickupCardConfigScreen extends Screen {
 
     /** 配置项那一列的滚动视口；每帧按当前几何重建（画布会变，视口跟着变）。 */
     private NvgScroll itemsScroll;
+    /** 换页清零、同页重建（删一条规则）保留 —— 列表忽然跳回顶上是纯惊吓。 */
+    private float savedScrollOffset;
 
     /** 这一帧配置项内容有多高（滚动的依据）。 */
     private float itemsContentHeight() {
-        return rows.size() * rowStep(Math.max(1, rows.size()));
+        return rows.size() * (float) ROW_STEP;
     }
 
     /**
@@ -191,8 +209,8 @@ public final class PickupCardConfigScreen extends Screen {
     private enum Section {
         GENERAL("通用", "弹不弹卡、要不要显示名字、什么算同一样东西"),
         ANIM("动画", "卡片出现和消失的快慢，以及数量变化怎么动"),
-        LAYOUT("位置与堆叠", "卡片停在哪、同时最多几张（预览画的就是一摞卡）"),
-        LOOK("外观", "卡片的长相：内边距、圆角、描边、各种颜色"),
+        LAYOUT("位置与堆叠", "卡片停在哪、同时最多几张（位置整屏拖拽调）"),
+        LOOK("外观", "卡片的长相：形状一节、颜色一节"),
         /**
          * 【为什么单独一页】三张名单都不是"一个值"，而是可增删的列表 —— 一行一项那个版式
          * 正好能装（一条规则一行、末尾一行输入框），但行数会随玩家自己加多少条涨，
@@ -295,6 +313,8 @@ public final class PickupCardConfigScreen extends Screen {
     private NvgPalette palette = NvgPalette.dark(StyleModel.Accents.defaults());
     /** 控件里点出来的"切换分类/重建"请求：不在事件遍历中途重建列表。 */
     private boolean pendingRebuild;
+    /** 同页重建（规则增删）保留滚动偏移；换页清零。 */
+    private boolean preserveScroll;
     /**
      * 加规则被拒时说的一句话，短时间内在底部那行顶掉悬停说明。
      * <p>【为什么要有它】"打字 → 回车 → 什么都没发生"是这类输入框最常见的失败方式，
@@ -317,17 +337,25 @@ public final class PickupCardConfigScreen extends Screen {
     /**
      * 一行：标签 + 控件 + 悬停提示 + 悬停进度。
      * <p>【为什么不是 record】悬停进度是这一行的<b>状态</b>，每行一份；record 装不下。
+     * <p>【小节头也是一行】{@code widget == null} 的行是小节头：占同样的行距、画暗色小字、
+     * 没有控件也不接悬停 —— 分组信息用"节奏"表达，不引入第二种行高。
      */
     private static final class Row {
         private final String label;
         private final NvgWidget widget;
         private final String hint;
         private final Tween hover = Tween.at(0f, 0L);
+        /** 这一帧的行顶 y（小节头画字用；选项行以控件位置为准）。 */
+        private float yAt;
 
         Row(String label, NvgWidget widget, String hint) {
             this.label = label;
             this.widget = widget;
             this.hint = hint;
+        }
+
+        boolean isHeader() {
+            return widget == null;
         }
 
         String label() {
@@ -421,6 +449,8 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     private void rebuild() {
+        boolean keep = preserveScroll;
+        preserveScroll = false;
         rows.clear();
         tabButtons.clear();
         sampleButtons.clear();
@@ -437,7 +467,7 @@ public final class PickupCardConfigScreen extends Screen {
                 }
                 section = s;
                 pageAnim.snap(0f);
-                pendingRebuild = true;
+                pendingRebuild = true;      // 换页：滚动清零（preserveScroll 保持 false）
             }, !lo.tabsOnTop()).hint(s.hint);
             ConfigLayout.Rect cell = lo.tabRect(i, sections.length);
             chip.at(cell.x(), cell.y(), cell.w(), cell.h());
@@ -453,9 +483,8 @@ public final class PickupCardConfigScreen extends Screen {
                     return;
                 }
                 sample = s;
-                // 选中的样例立刻上台：改了"下一张是谁"当场看得见
-                spawnStage();
-                nextSpawnAt = now + STAGE_SPAWN_MS;
+                // 选中的样例立刻上台/上纸：改了"下一张是谁"当场看得见
+                playOnce();
             }, false).hint(s.hint);
             // 【为什么位置是每次重建算的】预览会不会出现、切换行画不画，都取决于画布大小；
             // 算一次存起来的话，窗口一缩它们就全错位了。
@@ -463,15 +492,24 @@ public final class PickupCardConfigScreen extends Screen {
             chip.at(cell.x(), cell.y(), cell.w(), cell.h());
             sampleButtons.add(chip);
         }
-        // 「来一张」：HTML 草稿那个按钮。自动循环之外的手动入口 —— 想仔细看入场/退场，
-        // 点它当场放一张，不用等节拍。
-        Chip spawn = new Chip("来一张", () -> "来一张", () -> false, this::spawnStage, false)
-                .hint("立刻往预览里放一张当前选中的样例，完整走一遍入场 → 停留 → 消失");
+        // 「来一张」：手动入口 —— 想仔细看入场/退场，点它当场放一张，不用等节拍。
+        Chip spawn = new Chip("来一张", () -> "来一张", () -> false, this::playOnce, false)
+                .hint("立刻放一张当前选中的样例，完整走一遍入场 → 停留 → 消失（动画页）；"
+                        + "其他页重播一次入场");
         ConfigLayout.Rect spawnCell = lo.switchRect(switchCount - 1, switchCount);
         spawn.at(spawnCell.x(), spawnCell.y(), spawnCell.w(), spawnCell.h());
         sampleButtons.add(spawn);
 
         itemsScroll = new NvgScroll(lo.items().x(), lo.items().y(), lo.items().w(), lo.items().h());
+        itemsScroll.scrollTo(keep ? savedScrollOffset : 0f);
+
+        // 预览按页分工：离开动画页收舞台；回来时重新开场（节拍从头起）
+        if (stagePage()) {
+            nextSpawnAt = -1L;
+        } else {
+            stage.clear();
+            staticCard = settledCard();
+        }
 
         switch (section) {
             case GENERAL -> buildGeneral(v);
@@ -483,11 +521,78 @@ public final class PickupCardConfigScreen extends Screen {
         layoutRows();
     }
 
-    /** 「通用」：最上面那几个开关。总开关与"显示物品名"是旧版最好懂的两项。 */
+    /** 预览的分工：动画页跑三张真卡的自动舞台；其他页一张静止完整卡。 */
+    private boolean stagePage() {
+        return section == Section.ANIM;
+    }
+
+    /** 一张"早已出生"的卡：入场已播完，停在最终态 —— 静止页的主角。 */
+    private CardView settledCard() {
+        return new CardView(previewNotice(sample, sample.amount, System.currentTimeMillis() - 10_000L));
+    }
+
+    /**
+     * 「恢复本页默认」：把<b>这一页</b>看得见的项写回出厂值。
+     * <p>【位置页为什么不重置锚点】锚点是玩家在编辑场里亲手拖的刻意选择，混进"一键恢复"
+     * 里一个手滑就没了 —— 它的「回到默认」在编辑场自己那颗钮上。
+     */
+    private void restorePageDefaults() {
+        PickupCardConfig.Values v = PickupCardConfig.VALUES;
+        switch (section) {
+            case GENERAL -> {
+                v.enabled.set(true);
+                v.showItemName.set(true);
+                v.showItemId.set(false);
+                v.nameMaxWidth.set(0);
+                v.countFormat.set(CountFormat.PLUS);
+                v.separation.set((double) LayoutSettings.DEFAULT_SEPARATION);
+                v.mergeMode.set(MergeMode.SAME_NBT);
+            }
+            case ANIM -> {
+                v.stEnterMs.set(-1L);
+                v.stEnterEnabled.set(-1);
+                v.holdMs.set(4_000L);
+                v.exitMode.set(LayoutSettings.Exit.FADE);
+                v.exitMs.set(480L);
+                v.stBumpEnabled.set(-1);
+                v.stBumpMs.set(-1L);
+                v.stReviveMs.set(-1L);
+            }
+            case LAYOUT -> {
+                v.align.set(LayoutSettings.Side.LEFT);
+                v.appearMode.set(LayoutSettings.Appear.SLIDE);
+                v.scalePercent.set(LayoutSettings.AUTO_SCALE);
+                v.maxOnScreen.set(5);
+                v.queueSize.set(9);
+            }
+            case LOOK -> {
+                v.stBarWidth.set(-1);
+                v.stPaddingV.set(-1);
+                v.stIconSize.set(-1);
+                v.stCornerRadius.set(-1);
+                v.stBorderWidth.set(-1);
+                v.stFillTop.set("");
+                v.stFillBottom.set("");
+                v.stBorder.set("");
+                v.stNameColor.set("");
+            }
+            case FILTER -> {
+                v.blacklist.set(List.of());
+                v.whitelist.set(List.of());
+                v.muteList.set(List.of());
+            }
+        }
+        changed();
+        pendingRebuild = true;      // 行没变但值全变：重建让控件显示活配置
+    }
+
+    /** 「通用」：总开关置顶，下面按「显示什么」「行为与合并」分两节。 */
     private void buildGeneral(PickupCardConfig.Values v) {
         PickupCardSettings eff = PickupCardConfig.snapshot();
+        restoreRow("重置总开关、显示与合并七项（不含其他页）");
         cell("总开关", bool(v.enabled, eff.enabled()),
                 "关掉之后捡东西不再弹卡；重开时屏上不会涌出积压的旧卡");
+        header("显示什么");
         cell("显示物品名", bool(v.showItemName, eff.showItemName()),
                 "关掉后卡片只剩竖条、图标和数量，会明显变窄");
         cell("显示物品ID", bool(v.showItemId, eff.showItemId()),
@@ -495,26 +600,31 @@ public final class PickupCardConfigScreen extends Screen {
         cell("名字最大宽度", number(v.nameMaxWidth, eff.nameMaxWidth(), 0, 400, 1, "px"),
                 "名字超过这个宽度就截断加省略号；0 = 按屏宽自动");
         cell("数量写法", cycle(v.countFormat, CountFormat.values(), PickupCardConfigScreen::countName),
-                "数量的书写方式：+64 / ×64 / 纯 64 / 缩写 +1.2K");
+                "数量的书写方式，点一下换下一种：+64 → ×64 → 64 → +1.2K");
+        header("行为与合并");
         cell("卡片间距", decimal(v.separation, PickupCardConfig.layoutSnapshot().separation(), 0, 16),
                 "两张卡上下之间的空隙。卡内「框与框」的距离是另一回事，归主题 JSON");
         cell("合并粒度", cycle(v.mergeMode, MergeMode.values(), PickupCardConfigScreen::mergeName),
-                "连续捡到同一种东西时把数量并进已有那张、数字滚到新值；「同一种」的判定宽度由它决定");
+                "「同一种」的判定宽度，点一下换下一种：同名同附魔才并 → 同名就并 → 同名就并但改名不并 → 从不合并");
     }
 
     /** 「动画」：入场 / 数字跳动 / 停留 / 消失 —— 全是"看得见"的时长。 */
     private void buildAnim(PickupCardConfig.Values v) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
         PickupCardSettings eff = PickupCardConfig.snapshot();
+        restoreRow("重置本页全部九项时长与开关（主题归主题、行为归默认）");
+        header("入场");
         cell("入场时长", styleTime(v.stEnterMs, style.enterMs(), 0, 2_000, 40),
                 "新卡从竖条后面滑出来到就位一共多久；调它预览会当场重演一遍");
         cell("入场动画", styleSwitch(v.stEnterEnabled, style.enterEnabled()),
                 "只关新卡滑出这一段：关掉后新卡直接出现，跳动和淡出不受影响");
+        header("停留与消失");
         cell("停留时长", time(v.holdMs, eff.holdMs(), 500, 10_000, 250),
                 "一张卡从就位到开始淡出，在屏上待多久；连捡同一件会不断刷新这个计时");
         cell("消失方式", cycle(v.exitMode, LayoutSettings.Exit.values(), PickupCardConfigScreen::exitName),
-                "卡片怎么消失：淡出＝原地变透明；火车退回＝内容平移回竖条后；拉幕收拢＝可见范围从右往左收窄。三种都叠加透明度下降");
+                "卡片怎么消失，点一下换下一种：淡出（原地变透明）→ 火车退回（平移回竖条后）→ 拉幕收拢（可见范围从右往左收）。三种都叠加透明度下降");
         cell("消失时长", time(v.exitMs, eff.exitMs(), 0, 2_000, 20), "上面那个消失动作用多久；0 = 到点立刻消失");
+        header("合并与跳动");
         cell("数字跳动", styleSwitch(v.stBumpEnabled, style.bumpEnabled()),
                 "连续捡同一种东西时，整张卡向外鼓一下、数字从旧值滚到新值");
         cell("跳动时长", styleTime(v.stBumpMs, style.bumpMs(), 0, 1_000, 20), "上面那下「鼓」持续多久");
@@ -525,48 +635,32 @@ public final class PickupCardConfigScreen extends Screen {
     /** 「位置与堆叠」：锚在哪（拖拽调整）、怎么展开、同屏几张。 */
     private void buildLayout(PickupCardConfig.Values v) {
         PickupCardSettings settings = PickupCardConfig.snapshot();
+        restoreRow("重置对齐/展开/缩放/上限五项；锚点不在这里 —— 它归编辑场的「回到默认」");
+        header("位置");
         cell("位置", new NvgButton("", this::anchorValueText, this::openAnchorEditor),
                 "整摞卡停在哪儿。点开整屏编辑场，按住那摞卡拖到想要的位置；"
-                        + "位置按屏幕比例记忆，换缩放档不错位。锚点太低放不下时自动抬到 HUD 带上方");
+                        + "新卡永远贴着锚线、旧的向上顶。位置按屏幕比例记忆，换缩放档不错位。"
+                        + "锚点太低放不下时自动抬到 HUD 带上方");
         cell("水平对齐", cycle(v.align, LayoutSettings.Side.values(), PickupCardConfigScreen::sideName),
-                "锚线管卡的哪条边：竖条左缘锚定＝一摞卡的竖条成一条线；右缘对齐＝右缘齐、左缘随卡宽参差");
+                "锚线管卡的哪条边，点一下换下一种：竖条左缘锚定（竖条成一条线）→ 右缘对齐（右缘齐、左缘参差）。自动锚线跟着这一档各自解析");
         cell("展开方式", cycle(v.appearMode, LayoutSettings.Appear.values(),
                 PickupCardConfigScreen::appearName),
-                "新卡入场怎么从竖条右侧出现：火车＝内容整块平移出来；拉幕＝可见范围从左往右展开");
+                "新卡入场怎么从竖条右侧出现，点一下换下一种：火车（内容整块平移出来）→ 拉幕（可见范围从左往右展开）");
         cell("卡片缩放", percent(v.scalePercent, PickupCardConfig.layoutSnapshot().scalePercent()),
-                "100% 原样。「自动」= 屏上快放不下整摞时按比例缩小，最小 60%");
+                "100% 原样。「自动」= 锚线上快放不下整摞时按比例缩小，最小 60%");
+        header("数量");
         cell("同屏上限", number(v.maxOnScreen, settings.maxOnScreen(), 1, 16, 1, " 张"),
-                "同时在屏最多几张。锚点以下放不下时，放不下的自动丢最老的");
+                "同时在屏最多几张。锚线上实在放不下时，放不下的先回队列等位子，不会硬消失");
         cell("排队上限", number(v.queueSize, settings.queueSize(), 0, 32, 1, " 张"),
                 "屏上满了就先排队（先来先上屏）；0 = 不排队，屏满之后的拾取直接丢掉。"
                         + "排不上的会并进「还有 N 项」那张溢出卡");
     }
 
-    /** 「位置」那颗钮的值：一句话说清现在是自动还是自定义。 */
-    private String anchorValueText() {
-        LayoutSettings layout = PickupCardConfig.layoutSnapshot();
-        if (layout.anchorX() < 0 && layout.anchorY() < 0) {
-            return "自动（准星右下）";
-        }
-        return "自定义 (" + Math.round(layout.anchorLeft(this.width)) + ", "
-                + Math.round(layout.anchorTop(this.height)) + ")";
-    }
-
-    /** 打开整屏拖拽编辑场。配置不在这里写 —— 编辑场「完成」时才写。 */
-    private void openAnchorEditor() {
-        if (this.minecraft != null) {
-            this.minecraft.setScreen(new AnchorEditScreen(this));
-        }
-    }
-
-    /**
-     * 「外观」：只放"看得懂、调了看得出"的。
-     * <p>【竖条宽度破例进了界面】"几何参数不进界面"的旧规矩对它破例 —— 用户 2026-09-18
-     * 点名要调（默认也从 4 细到 2）。它符合这一页唯一的进门标准：看得懂、调了看得出。
-     * 其余设计参数（内缩 / 水平内边距 / 框间距）仍归主题 JSON。
-     */
+    /** 「外观」：形状一节、颜色一节。 */
     private void buildLook(PickupCardConfig.Values v) {
         StyleModel style = CardStage.INSTANCE.previewStyle();
+        restoreRow("本页九项回到主题；更细的参数（paddingH/gap/竖条内缩）本就在 TOML 里");
+        header("形状");
         cell("竖条宽度", styleNumber(v.stBarWidth, style.barWidth(), 1, 8, 1, "px"),
                 "最左那根稀有度颜色条的横向粗细；写回 -1 = 跟随主题（默认 2px）");
         cell("图标内边距", styleNumber(v.stPaddingV, style.paddingV(), 0, 8, 1, ""),
@@ -577,10 +671,20 @@ public final class PickupCardConfigScreen extends Screen {
                 "三个框的圆角半径；调到很大就变成胶囊");
         cell("描边粗细", styleNumber(v.stBorderWidth, style.borderWidth(), 0, 4, 1, "px"),
                 "框描边的粗细；0 = 不描边");
-        cell("底色（上）", color(v.stFillTop, style.fillTop()), "卡面渐变的上端；留空 = 用主题里的");
-        cell("底色（下）", color(v.stFillBottom, style.fillBottom()), "渐变的下端。和上面写成一样就是纯色");
-        cell("描边颜色", color(v.stBorder, style.border()), "框描边的颜色");
-        cell("物品名颜色", color(v.stNameColor, style.nameColor()), "名字的颜色");
+        header("颜色");
+        cell("底色（上）", color(v.stFillTop, style.fillTop()),
+                "卡面渐变的上端。点色块换一个（第一下回到主题色）；要精确色值写 TOML 的 fillTop，如 #7DE38B");
+        cell("底色（下）", color(v.stFillBottom, style.fillBottom()),
+                "渐变的下端。和上面写成一样就是纯色；精确色值写 TOML 的 fillBottom");
+        cell("描边颜色", color(v.stBorder, style.border()),
+                "框描边的颜色；精确色值写 TOML 的 border");
+        cell("物品名颜色", color(v.stNameColor, style.nameColor()),
+                "名字的颜色；精确色值写 TOML 的 nameColor");
+    }
+
+    /** 「恢复本页默认」那一行：每页第一行，行动作、不是配置项。 */
+    private void restoreRow(String what) {
+        cell("恢复本页默认", new NvgButton("", () -> "恢复", this::restorePageDefaults), what);
     }
 
     /**
@@ -592,6 +696,7 @@ public final class PickupCardConfigScreen extends Screen {
      * 「删除」—— 于是滚动、悬停高亮带、底部那句说明三样都不用为列表另写一套。
      */
     private void buildFilter(PickupCardConfig.Values v) {
+        restoreRow("清空三张名单 —— 误点会把你自己加的规则全删掉");
         filterList("黑名单", v.blacklist,
                 "命中就不弹卡。挖一片沙滩不想刷屏时写这里",
                 "加进黑名单：物品 minecraft:cobblestone / tag #forge:ores / 整个 mod @modid，回车加");
@@ -634,7 +739,8 @@ public final class PickupCardConfigScreen extends Screen {
         config.set(List.copyOf(rules));
         changed();
         // 【必须重建】名单变了 = 行数变了：不重建的话删掉的那一行会留在屏上继续可点，
-        // 而它背后的下标已经指向别人了
+        // 而它背后的下标已经指向别人了。同页重建保留滚动位置（preserveScroll）。
+        preserveScroll = true;
         pendingRebuild = true;
         layoutRows();
     }
@@ -656,19 +762,28 @@ public final class PickupCardConfigScreen extends Screen {
         rows.add(new Row(label, widget, hint));
     }
 
-    /** 逐行摆：**一行一项**（标签左、控件右），行高按画布自适应（guiScale 5 时画布只有 144 高）。 */
+    /** 小节头：占一行、不接控件，把"这几行是一伙的"画出来。 */
+    private void header(String title) {
+        rows.add(new Row(title, null, null));
+    }
+
+    /** 逐行摆：**一行一项**（标签左、控件右），行距全界面恒 20px，放不下就滚。 */
     private void layoutRows() {
         if (itemsScroll == null) {
             return;
         }
-        int step = rowStep(Math.max(1, rows.size()));
+        itemsScroll.reflow(itemsContentHeight());
         float offset = itemsScroll.offset();
         // 换页时整列往上滑一点点：滑动给的是"内容换了"的方向感（淡入只说明"变了"）
         int slide = Math.round((1f - pageAnim.at(now)) * PAGE_SLIDE);
         for (int i = 0; i < rows.size(); i++) {
+            Row row = rows.get(i);
             // 扣掉滚动偏移：控件与它画出来的位置必须是同一个坐标系，否则点了会"选错行"
-            rows.get(i).widget().at(controlX(), rowsTop() + i * step - Math.round(offset) + slide,
-                    controlW(), rowH());
+            float y = rowsTop() + i * (float) ROW_STEP - Math.round(offset) + slide;
+            row.yAt = y;
+            if (!row.isHeader()) {
+                row.widget().at(controlX(), y, controlW(), ROW_H);
+            }
         }
     }
 
@@ -713,7 +828,9 @@ public final class PickupCardConfigScreen extends Screen {
                 }
                 drawLabels(ui);
                 for (Row row : rows) {
-                    row.widget().draw(ui);
+                    if (!row.isHeader()) {
+                        row.widget().draw(ui);
+                    }
                 }
                 ui.alpha(1f);
                 if (itemsScroll != null) {
@@ -741,8 +858,6 @@ public final class PickupCardConfigScreen extends Screen {
      * <p>【为什么不是"看一眼卡不卡"】掉帧是<b>少数几帧特别慢</b>，肉眼看整体帧率往往看不出来
      * （平均值被大量快帧摊平）。所以这里记的是 <b>最大值</b>与"超过 16.7ms 的帧数"，
      * 每 {@value #FRAME_LOG_EVERY} 帧往日志里报一次；不刷屏、也不进每帧的绘制路径。
-     * <p>【为什么只统计不自动处理】先量再改：不知道是"换页那一下"慢还是"每一帧都慢"，
-     * 改哪儿都是猜。日志里那一行把两者分开。
      */
     private void frameCost(long nanos) {
         long us = nanos / 1_000L;
@@ -807,12 +922,6 @@ public final class PickupCardConfigScreen extends Screen {
 
     /**
      * 把这一帧的动画目标推进一步。
-     * <p>【为什么统一在渲染前推】一个动画一件事：换页与换样例的目标恒为 1（被打回 0 就开始播），
-     * 悬停与强调条的目标是"此刻的状态"。分散在各自的绘制里推进的话，"这一帧到底更新过谁"
-     * 就没人说得清了 —— 那种 bug 表现为"偶尔动画不动"。
-     */
-    /**
-     * 把这一帧的动画目标推进一步。
      * <p>【为什么统一在渲染前推】一个动画一件事：换页与强调条的目标恒为/随状态，悬停跟着鼠标。
      * 分散在各自的绘制里推进的话，"这一帧到底更新过谁"就没人说得清了 —— 那种 bug 表现为
      * "偶尔动画不动"。
@@ -822,6 +931,9 @@ public final class PickupCardConfigScreen extends Screen {
         pageAnim.retarget(1f, now, PAGE_MS);
         tabAccentAnim.retarget(section.ordinal(), now, TAB_MS);
         for (Row row : rows) {
+            if (row.isHeader()) {
+                continue;
+            }
             boolean on = forcedHover != null ? row.label().equals(forcedHover)
                     : row.widget().hit(mouseX, mouseY);
             row.hover.retarget(on ? 1f : 0f, now, on ? HOVER_IN_MS : HOVER_OUT_MS);
@@ -834,10 +946,8 @@ public final class PickupCardConfigScreen extends Screen {
         ConfigLayout lo = layout();
         PickupCardSettings eff = PickupCardConfig.snapshot();
         // 【标题区三行各是什么】标题居中（原版选项页的规矩：标题是页面的，不是哪一列的）；
-        // 副标题一句话居中、占满可用宽（从前它被右端的状态行挤到只剩半句，截成了 "…生效，"）；
-        // 状态行钉在标题行右端 —— 总开关是"整体生效没生效"的唯一真源，藏进页里就得翻页才知道。
-        // 【样例说明为什么没了】从前预览列顶部右对齐画一句样例说明，长说明会左溢压到第一行
-        // 配置项上；这句话悬停样例按钮时底部提示行本来就会说，留一份就是两份会打架的文案。
+        // 副标题一句话居中、占满可用宽；状态行钉在标题行右端 —— 总开关是"整体生效没生效"
+        // 的唯一真源，藏进页里就得翻页才知道。
         ui.textCentered(this.title.getString(), this.width / 2f, 6f, 0xFFFFFFFF);
         ui.textCentered("所有改动立即生效，不用保存", this.width / 2f, 17f, p.textDim);
         ui.textRight(status(), this.width - PAD - 4f, 6f,
@@ -878,10 +988,7 @@ public final class PickupCardConfigScreen extends Screen {
     /**
      * 底部那行<b>左边</b>（悬停说明）最多能画到哪个 x。
      * <p>【为什么不是整幅画布宽】预览收掉时，同一行的右端还有 {@link #PREVIEW_COLLAPSED}
-     * 那段字，而它不知道右边有东西，于是窄画布上两段字直接撞上。右对齐只解决了
-     * "有地方的时候不叠"，没解决"没地方的时候" —— 2026-09-17 实测：画布宽 320
-     * （<b>真玩家到得了</b>：1280×960 的 auto 档就是 320×240）下两段字之间已经不留缝，
-     * 画布宽 256 时重叠 67 逻辑px，整段糊成一团。
+     * 那段字，而它不知道右边有东西，于是窄画布上两段字直接撞上。
      */
     private float hintRightLimit() {
         float limit = this.width - PAD - 4f;
@@ -897,8 +1004,6 @@ public final class PickupCardConfigScreen extends Screen {
      * 选中那颗标签的强调条：从上一颗<b>滑</b>到这一颗。
      * <p>【为什么要有它】底色那一档差别在深色主题下太细，"我现在在哪一页"只剩文字颜色一条线索；
      * 加一条强调色带之后，换页这件事在眼睛的余光里也成立。
-     * <p>【为什么位置是插值算的】每一颗标签就是一个矩形，序号连续变化时矩形也在两两之间插值 ——
-     * 于是列排（往下滑）与顶排（往右滑）共用同一段代码。
      */
     private void drawTabAccent(NvgUi ui) {
         ConfigLayout lo = layout();
@@ -922,6 +1027,9 @@ public final class PickupCardConfigScreen extends Screen {
 
     /** 悬停那一行的底：一条横贯整行的浅色带，是"这一行可以被拨"的提示。 */
     private void drawRowHighlight(NvgUi ui, Row row) {
+        if (row.isHeader()) {
+            return;
+        }
         float t = row.hover.at(now);
         if (t <= 0.01f) {
             return;
@@ -935,6 +1043,14 @@ public final class PickupCardConfigScreen extends Screen {
 
     private void drawLabels(NvgUi ui) {
         for (Row row : rows) {
+            if (row.isHeader()) {
+                // 小节头：一根强调色小刺 + 暗色小字 —— 只用字号一种手段的话，它会和
+                // "没接控件的标签"混成一团（2026-09-19 真机截图抓过）。
+                ui.fillRoundRect(labelX() - 3f, row.yAt + 5f, 2f, 8f, 1f,
+                        NvgUi.fade(ui.palette.accent, 0.45f));
+                ui.text(row.label(), labelX() + 3f, row.yAt + 1f, ui.palette.textDim);
+                continue;
+            }
             NvgWidget w = row.widget();
             String text = ui.font().plainSubstrByWidth(row.label(), labelW());
             // 悬停时标签由暗到亮：它、那条高亮带、底部那句说明指的是同一行
@@ -956,7 +1072,7 @@ public final class PickupCardConfigScreen extends Screen {
         ConfigLayout.Rect items = layout().items();
         if (hint == null && mouseY >= items.y() && mouseY < items.bottom()) {
             for (Row row : rows) {
-                if (row.widget().hit(mouseX, mouseY)) {
+                if (!row.isHeader() && row.widget().hit(mouseX, mouseY)) {
                     hint = row.hint();
                     break;
                 }
@@ -995,15 +1111,15 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     // ------------------------------------------------------------------
-    // 预览舞台：一摞真卡按当前配置自动来去（HTML 草稿那个舞台的游戏版）
+    // 预览：动画页一张自动舞台，其他页一张静止完整卡
     // ------------------------------------------------------------------
 
     /**
      * 预览收起时什么都不画 —— 挤成一条比没有更难看。
-     * <p>【为什么是舞台而不是一张静止卡】HTML 草稿（{@code design/animation.html}）演示的是
-     * <b>一摞卡自动来去</b>：新卡入场、旧的被顶、合并脉冲、最老的退场 —— 配置项的效果大多
-     * 发生在"卡与卡之间"和"时间线"上，单张静止卡只验得出静态排版。现在预览跑同一套戏，
-     * 用的全是真卡的排布/时间线/画笔 —— 改哪一项当场看得到，改了真卡预览自动跟上。
+     * <p>【为什么按页分工（2026-09-19 回归）】你在调"停留时长"时，预览永远在演别人的一生
+     * （常驻舞台），节奏不由你控制；而大多数页要看的其实是<b>一张完整的卡长什么样</b> ——
+     * 静止卡 + 点一下重播入场，节奏归玩家。动画页保留舞台：那页调的就是"卡与卡之间"的事，
+     * 一张卡演不出来。
      */
     private void drawPreview(GuiGraphics gui) {
         ConfigLayout lo = layout();
@@ -1014,17 +1130,36 @@ public final class PickupCardConfigScreen extends Screen {
         if (area.w() <= 2f || area.h() <= 2f) {
             return;
         }
-        driveStage();
-        renderStage(gui, area, CardStage.INSTANCE.previewStyle());
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        if (stagePage()) {
+            driveStage();
+            renderCards(gui, area, style, new ArrayList<>(stage));
+        } else if (staticCard != null) {
+            renderCards(gui, area, style, List.of(staticCard));
+        }
     }
 
-    /** 舞台的节拍：到点来一张（选中的样例优先），退场播完的清掉。 */
+    /** 非动画页放一张卡（点预览/换样例 = 换成新出生的一张，入场重播一遍后停住）。 */
+    private void playOnce() {
+        if (stagePage()) {
+            // 「来一张」必出新卡：合并演示交给自动节拍（连发两发同款时它自己会并）
+            spawnStage(false);
+            nextSpawnAt = now + STAGE_SPAWN_MS;
+        } else {
+            staticCard = new CardView(previewNotice(sample, sample.amount, now));
+        }
+    }
+
+    /** 舞台的节拍：到点来一张（同款自动并进去演示合并），退场播完的清掉。只在动画页跑。 */
     private void driveStage() {
+        if (!stagePage()) {
+            return;
+        }
         if (nextSpawnAt < 0L) {
             nextSpawnAt = now + 500L;
         }
         if (now >= nextSpawnAt) {
-            spawnStage();
+            spawnStage(true);
             nextSpawnAt = now + STAGE_SPAWN_MS;
         }
         PickupCardSettings settings = PickupCardConfig.snapshot();
@@ -1032,10 +1167,16 @@ public final class PickupCardConfigScreen extends Screen {
                 && CardTimeline.exit(now, v.exitStartAt(), settings.exitMs()) >= 1f);
     }
 
-    /** 往舞台放一张当前选中的样例；队首同名则演示合并（脉冲 + 数字滚动）——与真卡同一条入口。 */
-    private void spawnStage() {
+    /**
+     * 往舞台放一张当前选中的样例。
+     *
+     * @param mergeDemo true = 队首是同款且没在退场时并进去（演示脉冲 + 数字滚动，自动节拍用）；
+     *                  false = 必出新卡（「来一张」手动钮用 —— 从前点它"没反应"就是因为被合并吞了）
+     */
+    private void spawnStage(boolean mergeDemo) {
         CardView front = stage.peekFirst();
-        if (front != null && front.notice().key().equals("preview:" + sample.label)) {
+        if (mergeDemo && front != null && !front.exiting()
+                && front.notice().key().equals("preview:" + sample.label)) {
             front.absorbMerge(previewNotice(sample, front.notice().count() + 1, now), now);
             return;
         }
@@ -1052,51 +1193,61 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     /**
-     * 舞台落位：真排布语义 + 真间距，锚线的相对位置照搬进面板（左缘/右缘对齐同理）。
-     * 面板太矮放不下整摞时锚点上收，与真屏的夹取是同一件事。
+     * 预览落位：<b>贴面板底</b>（与真卡的底锚同构 —— 预览说"新卡出现在固定的一点"，它自己
+     * 就得先做到），水平按锚线分数落位。堆里多张时向上生长；换位走 340ms 平滑，跟真卡一路。
      */
-    private void renderStage(GuiGraphics gui, ConfigLayout.Rect area, StyleModel style) {
+    private void renderCards(GuiGraphics gui, ConfigLayout.Rect area, StyleModel style,
+                             List<CardView> views) {
         LayoutSettings layout = PickupCardConfig.layoutSnapshot();
         float scale = previewScale();
         float gap = layout.separation() * scale;
-        List<CardView> views = new ArrayList<>(stage);
-        List<StackLayout.Size> sizes = new ArrayList<>();
-        for (CardView v : views) {
-            float w = Math.min(cardWidth(v, style, scale), area.w() - 6f);
-            sizes.add(new StackLayout.Size(Math.max(24f, w), style.boxHeight() * scale));
-        }
-        float stackH = StackLayout.totalHeight(sizes, gap);
+        // 【名字截断跟着面板走，不跟整屏走】卡壳被面板夹窄之后，名字的截断预算若还按
+        // "屏宽 × 45%" 算，文字就会溢出卡壳、戳出面板（真机上长名样例第一个露馅）。
+        // 预算 = 面板里的卡宽 − 名字以外固定占的宽（与 CardMetrics 同一把尺）。
+        float room = Math.max(24f, (area.w() - 6f) / scale);
+        CardCanvas probe = previewCanvas(style, scale, PickupCardConfig.snapshot());
+        int nameRoom = (int) Math.max(12f,
+                room - CardMetrics.namelessWidth(probe, this.font, sample.amount));
+        PickupCardSettings settings = withNameLimit(PickupCardConfig.snapshot(), nameRoom);
         float fx = layout.anchorLeft(this.width) / Math.max(1f, this.width);
-        float fy = Math.min(
-                layout.anchorTop(this.height, style.boxHeight(), HudSafeZone.bottomInset())
-                        / Math.max(1f, this.height),
-                Math.max(0f, 1f - stackH / Math.max(1f, area.h())));
-        float y = area.y() + fy * area.h();
-        List<CardSlot> slots = new ArrayList<>();
-        for (int i = 0; i < views.size(); i++) {
-            StackLayout.Size size = sizes.get(i);
+        float y = area.bottom();
+        List<CardSlot> slots = new ArrayList<>(views.size());
+        List<String> keys = new ArrayList<>(views.size());
+        for (CardView v : views) {
+            float h = style.boxHeight() * scale;
+            float w = Math.min(cardWidth(v, style, scale, settings), area.w() - 6f);
             float x;
             if (layout.align() == LayoutSettings.Side.RIGHT) {
-                x = Math.max(1f, Math.min(fx * area.w() - size.width(), area.w() - 7f - size.width()));
+                x = Math.max(1f, Math.min(fx * area.w() - w, area.w() - 7f - w));
             } else {
-                x = Math.max(1f, Math.min(fx * area.w(), area.w() - 7f - size.width()));
+                x = Math.max(1f, Math.min(fx * area.w(), area.w() - 7f - w));
             }
-            slots.add(new CardSlot(views.get(i), area.x() + x, y, size.width(), size.height()));
-            y += size.height() + gap;
+            keys.add(v.key());
+            slots.add(new CardSlot(v, area.x() + x, previewMove.y(v.key(), y - h, now), w, h));
+            y -= h + gap;
         }
-        paintPreviewCards(gui, style, slots);
+        previewMove.retain(new java.util.HashSet<>(keys));
+        if (!slots.isEmpty()) {
+            previewPainter.paint(gui, previewCanvas(style, scale, settings), slots);
+        }
+    }
+
+    /** 一份快照的副本：名字宽度上限额外夹进面板给的预算（0 = 自动 → 直接用预算）。 */
+    private static PickupCardSettings withNameLimit(PickupCardSettings s, int room) {
+        int limit = s.nameMaxWidth() > 0 ? Math.min(s.nameMaxWidth(), room) : room;
+        return new PickupCardSettings(s.holdMs(), s.exitMs(), s.mergeMode(), s.maxOnScreen(),
+                s.queueSize(), s.countFormat(), s.enabled(), s.showItemName(), s.showItemId(),
+                limit);
     }
 
     /** 一张样例在 100% 下的自然宽度 —— 走真卡的 {@code CardMetrics#naturalWidth}，不另写一份公式。 */
-    private float cardWidth(CardView view, StyleModel style, float scale) {
-        return CardMetrics.naturalWidth(previewCanvas(style, scale), this.font, view) * scale;
+    private float cardWidth(CardView view, StyleModel style, float scale, PickupCardSettings settings) {
+        return CardMetrics.naturalWidth(previewCanvas(style, scale, settings), this.font, view) * scale;
     }
 
     /**
      * 一张样例造出的真卡。数量与名字都由真卡的规则给（{@code CountFormat} / {@code displayName}），
      * 于是「数量写法」「显示物品ID」这些键在预览里立刻看得见。
-     * <p>【bornAt 是谁定的】动画页重播用周期时刻；静止页与锚点编辑场传一个"早已出生"的时刻
-     * —— 卡因此停在入场完成的最终态，永远完整可见。
      */
     /** 样例 → 账本快照。预览与锚点编辑场共用（同包），内容只有这一份。 */
     static Notice<Inbox.Card> previewNotice(Sample s, int amount, long bornAt) {
@@ -1108,25 +1259,24 @@ public final class PickupCardConfigScreen extends Screen {
     }
 
     /** 这一帧要用的画布 —— 缩放与主题都按界面上当前生效的值给，预览才不会说谎。 */
-    private CardCanvas previewCanvas(StyleModel style, float scale) {
+    private CardCanvas previewCanvas(StyleModel style, float scale, PickupCardSettings settings) {
         return new CardCanvas(now,
                 new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(),
                         style.bumpEnabled()),
-                style, PickupCardConfig.snapshot(), PickupCardConfig.layoutSnapshot(),
+                style, settings, PickupCardConfig.layoutSnapshot(),
                 this.width, this.height, scale);
     }
 
     /** 交给真卡的画笔。整摞一次画完 —— 它自己开一帧 NanoVG，比一张一张开省。 */
-    private void paintPreviewCards(GuiGraphics gui, StyleModel style, List<CardSlot> slots) {
-        if (slots.isEmpty()) {
-            return;
-        }
-        previewPainter.paint(gui, previewCanvas(style, previewScale()), slots);
-    }
-
     private final NvgCardPainter previewPainter = new NvgCardPainter();
 
-    /** 舞台节拍：每隔这么长时间自动来一张（HTML 草稿是 1250ms；略放慢，看得清退场）。 */
+    /** 预览里"换位"的平滑（与真卡 {@code CardStage} 同一个类）：新卡顶旧卡不再瞬移。 */
+    private final CardMove previewMove = new CardMove();
+
+    /** 非动画页的那张静止完整卡（{@code playOnce()} 换新重生）。 */
+    private CardView staticCard;
+
+    /** 舞台节拍：每隔这么长时间自动来一张（略放慢，看得清退场）。 */
     private static final long STAGE_SPAWN_MS = 1_700L;
     /** 舞台同屏上限（不含正在退场的那张）。 */
     private static final int STAGE_CAPACITY = 3;
@@ -1159,11 +1309,13 @@ public final class PickupCardConfigScreen extends Screen {
     // 事件：全部转给自绘控件
     // ------------------------------------------------------------------
 
-    /** 所有自绘控件：事件遍历、悬停刷新、重建时都用这一份。 */
+    /** 所有自绘控件：事件遍历、悬停刷新、重建时都用这一份（小节头没有控件，不在其中）。 */
     private List<NvgWidget> widgets() {
         List<NvgWidget> all = chips();
         for (Row row : rows) {
-            all.add(row.widget());
+            if (!row.isHeader()) {
+                all.add(row.widget());
+            }
         }
         return all;
     }
@@ -1177,19 +1329,18 @@ public final class PickupCardConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 【点预览 = 来一张】舞台上当场放一张当前选中的样例，完整走一遍入场→停留→消失
+        // 【点预览 = 放一张】动画页来一张新的走完整时间线；其他页重播一次入场
         ConfigLayout.Rect preview = layout().previewCard();
         if (layout().previewVisible()
                 && mouseX >= preview.x() && mouseX < preview.right()
                 && mouseY >= preview.y() && mouseY < preview.bottom()) {
-            spawnStage();
-            nextSpawnAt = now + STAGE_SPAWN_MS;
+            playOnce();
             return true;
         }
         ConfigLayout.Rect items = layout().items();
         for (NvgWidget w : widgets()) {
             // 滚出视口的行不该还能被点到（它们的位置在视口外，只有 x 可能重合）
-            boolean rowWidget = rows.stream().anyMatch(r -> r.widget() == w);
+            boolean rowWidget = rows.stream().anyMatch(r -> !r.isHeader() && r.widget() == w);
             if (rowWidget && (mouseY < items.y() || mouseY >= items.bottom())) {
                 continue;
             }
@@ -1228,12 +1379,9 @@ public final class PickupCardConfigScreen extends Screen {
         if (itemsScroll == null) {
             return super.mouseScrolled(mouseX, mouseY, delta);
         }
-        int step = rowStep(Math.max(1, rows.size()));
         // 一格滚三行（按行不按像素：跨缩放档手感一致，见 ScrollMath）
-        if (itemsScroll.wheel(delta, itemsContentHeight(), step)) {
-            layoutRows();
-            return true;
-        }
+        itemsScroll.wheel(delta, itemsContentHeight(), ROW_STEP * 3f);
+        layoutRows();
         return true;
     }
 
@@ -1274,7 +1422,7 @@ public final class PickupCardConfigScreen extends Screen {
             }
         }
         for (Row row : rows) {
-            if (row.label().equals(label)) {
+            if (!row.isHeader() && row.label().equals(label)) {
                 return row.widget();
             }
         }
@@ -1328,9 +1476,6 @@ public final class PickupCardConfigScreen extends Screen {
 
     /**
      * 走真实事件路径往某个文本框里打字并回车（点一下拿焦点 → 逐字 → 回车提交）。
-     * <p>【为什么要这个口子】「加一条」那条链（点 → 打字 → 回车 → 写配置 → 重建列表）全是键盘
-     * 事件，{@link #clickOption} 那条路一个都覆盖不到；而"文本框收不到字符"这种坏法在
-     * 截图里和"功能没做"长得一模一样。
      */
     public boolean typeOption(String label, String text) {
         if (!clickOption(label)) {
@@ -1343,14 +1488,14 @@ public final class PickupCardConfigScreen extends Screen {
         return true;
     }
 
-    /** 当前这一页有哪些选项（按玩家看到的顺序）。日志里留一份。 */
+    /** 当前这一页有哪些选项（按玩家看到的顺序；小节头不是选项，不列）。日志里留一份。 */
     public List<String> optionLabels() {
-        return rows.stream().map(Row::label).toList();
+        return rows.stream().filter(r -> !r.isHeader()).map(Row::label).toList();
     }
 
     /** 选项名 + 位置 + 显示值。布局是算出来的，"框压到边上了"必须能不靠眼睛查出来。 */
     public List<String> optionDump() {
-        return rows.stream().map(r -> {
+        return rows.stream().filter(r -> !r.isHeader()).map(r -> {
             NvgWidget w = r.widget();
             return r.label() + "=" + Math.round(w.x()) + "," + Math.round(w.y())
                     + " " + Math.round(w.width()) + "x" + Math.round(w.height())
@@ -1361,14 +1506,6 @@ public final class PickupCardConfigScreen extends Screen {
     // ------------------------------------------------------------------
     // 几何：按画布算，不写死
     // ------------------------------------------------------------------
-
-    private int contentLeft() {
-        return Math.round(layout().items().x()) + 2;
-    }
-
-    private int contentRight() {
-        return Math.round(layout().items().right()) - 2;
-    }
 
     /** 控件那一格多宽：配置列宽的一部分，右对齐（一行一项，不再是一行两项）。 */
     private int controlW() {
@@ -1394,14 +1531,6 @@ public final class PickupCardConfigScreen extends Screen {
     private int rowsTop() {
         // 预览已经搬到右边那一列了，配置项从这一列的顶上开始
         return Math.round(layout().items().y()) + 2;
-    }
-    private int rowH() {
-        return 18;
-    }
-
-    private int rowStep(int maxRows) {
-        int room = Math.round(layout().items().h()) - 6;
-        return Math.max(13, Math.min(22, room / Math.max(1, maxRows)));
     }
 
     // ------------------------------------------------------------------
@@ -1482,8 +1611,6 @@ public final class PickupCardConfigScreen extends Screen {
                 v -> v <= LayoutSettings.AUTO_SCALE ? "自动" : Math.round(v) + "%");
     }
 
-    /** 竖条位置那颗滑条已随「对齐方式」一起退场：位置的表达只剩锚点（拖拽编辑场写值）。 */
-
     private <E extends Enum<E>> NvgButton cycle(ForgeConfigSpec.EnumValue<E> config, E[] values,
                                                 Function<E, String> name) {
         return new NvgButton("", () -> name.apply(config.get()), () -> {
@@ -1499,20 +1626,17 @@ public final class PickupCardConfigScreen extends Screen {
         });
     }
 
-    private NvgTextField color(ForgeConfigSpec.ConfigValue<String> config, int effectiveArgb) {
-        return NvgTextField.color("", () -> {
-            String raw = config.get();
-            return raw == null || raw.isBlank() ? argbText(effectiveArgb) : raw;
-        }, text -> {
-            String trimmed = text.trim();
-            if (trimmed.isEmpty()) {
-                config.set("");
-                changed();
-            } else if (StyleOverrides.parseArgb(trimmed).isPresent()) {
-                config.set(trimmed.startsWith("#") ? trimmed : "#" + trimmed);
-                changed();
-            }
+    /** 颜色 = 色块循环（{@link NvgColorChip}）；精确色值的出路在 TOML，行说明里有写。 */
+    private NvgColorChip color(ForgeConfigSpec.ConfigValue<String> config, int effectiveArgb) {
+        return new NvgColorChip("", () -> effectiveArgb(config, effectiveArgb), config::get, text -> {
+            config.set(text);
+            changed();
         });
+    }
+
+    /** 色块画的生效色：配置里解析得动就用解析值（含手写 hex），否则回主题生效值。 */
+    private static int effectiveArgb(ForgeConfigSpec.ConfigValue<String> config, int effective) {
+        return StyleOverrides.parseArgb(config.get()).orElseGet(() -> effective);
     }
 
     /** 显示用的当前值：配置里"没改过"（-1）时给生效值，界面因此永远不显示第三态。 */
@@ -1532,10 +1656,6 @@ public final class PickupCardConfigScreen extends Screen {
     // ------------------------------------------------------------------
     // 小工具
     // ------------------------------------------------------------------
-
-    private static String argbText(int argb) {
-        return String.format("#%08X", argb);
-    }
 
     private static String sideName(LayoutSettings.Side side) {
         return side == LayoutSettings.Side.RIGHT ? "右缘对齐" : "竖条左缘锚定";
@@ -1568,10 +1688,31 @@ public final class PickupCardConfigScreen extends Screen {
     private static String mergeName(MergeMode mode) {
         return switch (mode) {
             case SAME_ITEM -> "同名就并";
-            case SAME_ITEM_KEEP_NAMED -> "同名就并·改名不并";
+            // 按钮里只放短值（控件格最窄 64px，九个字必然溢出按钮）；
+            // "同名就并、改名不并"的完整语义在悬停说明里
+            case SAME_ITEM_KEEP_NAMED -> "改名不并";
             case NEVER -> "从不合并";
             default -> "同名同附魔才并";
         };
+    }
+
+    /** 「位置」那颗钮的值：一句话说清现在是自动还是自定义（自动 = 右下贴 HUD 带）。 */
+    private String anchorValueText() {
+        LayoutSettings layout = PickupCardConfig.layoutSnapshot();
+        if (layout.anchorX() < 0 && layout.anchorY() < 0) {
+            return "自动（右下）";
+        }
+        return "自定义 (" + Math.round(layout.anchorLeft(this.width)) + ", "
+                + Math.round(layout.anchorTop(this.height,
+                        CardStage.INSTANCE.previewStyle().boxHeight() * previewScale(),
+                        HudSafeZone.bottomInset())) + ")";
+    }
+
+    /** 打开整屏拖拽编辑场。配置不在这里写 —— 编辑场「完成」时才写。 */
+    private void openAnchorEditor() {
+        if (this.minecraft != null) {
+            this.minecraft.setScreen(new AnchorEditScreen(this));
+        }
     }
 
     /** 每次改动都让渲染立刻重读，不等那一秒的重读间隔（锚点编辑场同包共用）。 */

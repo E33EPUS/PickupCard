@@ -48,6 +48,11 @@ public final class NvgScroll {
         return offset;
     }
 
+    /** 直接设偏移（换页清零 / 同页重建保留，都从这儿走）。越界值交给下一次 {@link #reflow} 夹。 */
+    public void scrollTo(float value) {
+        offset = value;
+    }
+
     /** 内容坐标 -> 屏幕坐标。 */
     public float contentY(float contentTop) {
         return y + contentTop - offset;

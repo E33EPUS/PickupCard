@@ -43,10 +43,8 @@ class HudSafeZoneTest {
 
     /**
      * 锚点夹取的最低保障：<b>最小画布（guiScale 5 → 256×144）上至少放得下一张卡</b>。
-     * <p>【为什么是"至少一张"而不是三张】自动锚点在画布高 55%（≈79），HUD 带顶在 144−75=69
-     * —— 锚点本来已经低于 HUD 带了，靠 {@code anchorTop(高, 卡高, 留白)} 的夹取抬回 49，
-     * 刚好塞下一张。锚点在准星旁边是要占屏幕中段的，代价就认到"最少 1 张"这一步；
-     * 再往上多放几张由玩家拖锚点/调缩放自己取舍。
+     * <p>自动锚点贴底（2026-09-19 起）：锚线 = 144−75−20 = 49，锚线以上放得下 3 张 ——
+     * 贴底选址后"最小画布放不下几张"的老问题自然消失；这条守的是夹取公式本身。
      */
     @Test
     void smallestCanvasStillShowsOneCard() {
@@ -56,8 +54,8 @@ class HudSafeZoneTest {
         float cardHeight = 20f;
         float gap = 4f;
         float top = defaults.anchorTop(guiHeight, cardHeight, inset);
-        int fits = StackLayout.fittingCount(top, guiHeight, inset, cardHeight, gap);
-        assertTrue(fits >= 1, "256×144 上一张都放不下（锚点夹到 " + top + "，留白 " + inset + "）");
+        int fits = StackLayout.fittingCount(top, cardHeight, gap);
+        assertTrue(fits >= 1, "256×144 上一张都放不下（锚线在 " + top + "，留白 " + inset + "）");
         // 而且"放得下的那一张"真的在 HUD 带上方
         assertTrue(top + cardHeight <= guiHeight - inset,
                 "夹取后的第一张卡压过了 HUD 带（底 y=" + (top + cardHeight) + "）");

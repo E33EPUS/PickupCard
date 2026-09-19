@@ -18,20 +18,27 @@ package com.niuqu.pickupcard.layout;
  * @param scalePercent 卡片缩放百分比（100 = 原样）。{@link #AUTO_SCALE} = 自动：放不下就缩小
  *                     （见 {@link #scale}）。它<b>不</b>属于主题：主题管长相，缩放管"塞不塞得下"。
  * @param anchorX      锚线的横坐标（<b>画布宽度的比例</b> 0~1）。左缘锚定时＝竖条左缘的位置；
- *                     右缘对齐时＝卡片右缘的位置。{@link #AUTO_ANCHOR} = 自动：左缘档让最宽的卡
- *                     右缘正好落在右边距上（竖条成线那条老公式）。
- * @param anchorY      卡堆锚点的纵坐标（<b>画布高度的比例</b> 0~1）＝ 第一张卡（最新）<b>顶边</b>的位置，
- *                     新卡永远出现在这里、旧的被挤下去。{@link #AUTO_ANCHOR} = 自动：准星下方（55% 高）。
+ *                     右缘对齐时＝卡片右缘的位置。{@link #AUTO_ANCHOR} = 自动：<b>按对齐档各自解析</b>
+ *                     （见 {@link #anchorLeft}）—— 同一条自动公式伺候两种语义是 2026-09-19 修掉的错：
+ *                     从前右缘对齐拿"竖条左缘"的数当右缘用，切一档卡就瞬移到屏幕中左。
+ * @param anchorY      卡堆锚点的纵坐标（<b>画布高度的比例</b> 0~1）＝ 第一张卡（最新）<b>顶边</b>的位置。
+ *                     卡堆<b>向上生长</b>：新卡永远出现在锚线上、旧的被顶上去（2026-09-19 定案，
+ *                     第三次回到"新卡固定一点"——前两次为顶锚下挤，这次连生长方向一起定死）。
+ *                     {@link #AUTO_ANCHOR} = 自动：贴着 HUD 带上方（见 {@link #anchorTop}）。
  *
  * <p>【为什么锚点是分数而不是像素】画布宽随 GUI 缩放剧烈变化（1280×720 上 guiScale 3 是 426 宽、
  * guiScale 5 只剩 256 宽）。写死绝对坐标的话，换一档缩放锚点就被边界夹住 ——
  * "设了等于没设的值比没有这个值更坏"（本仓库记过的老坑）。分数在所有缩放档下都落在同一个相对位置，
  * 而且配置界面里的拖拽编辑天然算出来的就是分数。
  *
+ * <p>【2026-09-19 为什么自动档从"准星下方"回到"右下贴底"】准星（50% 高）往下要给整个底部
+ * HUD 带让位 75px，常见画布（427×240）锚点以下只剩 33px —— 5 张卡需要 116px，自动缩放
+ * 从此永远激活且按张数一档一档跳（100%→75%→60%），放不下还硬切摘卡。这不是调参能救的，
+ * 是锚点选址与"HUD 带上方"的几何冲突（第四批反馈审计定案：数量优先）。右下贴底后
+ * "锚点以上的整段屏幕"都是卡堆的地盘，常见画布真能放满同屏上限。
+ *
  * <p>【2026-09-18 删掉的两组键】{@code stickTo}（贴左/贴右）与 {@code leftEdge}（绝对像素）——
- * 它们管的事现在全部由 {@code anchorX}/{@code anchorY} 表达。晚上又按用户反馈把「右缘对齐」
- * 以 {@link #align} 的形式请了回来：它是 HTML 草稿（{@code design/animation.html}）里就有的预设。
- * 同时删掉的还有"快捷栏右侧条带"落点档：卡堆锚在准星下方、向下生长，不再贴着快捷栏。
+ * 它们管的事现在全部由 {@code anchorX}/{@code anchorY} 表达。
  */
 public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float separation,
                              int scalePercent, float anchorX, float anchorY) {
@@ -46,19 +53,12 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
     public static final int MAX_SCALE_PERCENT = 200;
     /**
      * 自动缩放的<b>下限</b>：再小就看不清名字了 —— 到了这一步应该少显示几张卡
-     * （{@code StackLayout#fittingCount} 会接着丢掉放不下的），而不是把卡缩成一条缝。
+     * （调用方接排队，不再硬切），而不是把卡缩成一条缝。
      */
     public static final int MIN_AUTO_PERCENT = 60;
 
-    /** 锚点的"自动"哨兵：anchorX 跟画布宽算，anchorY 落在准星下方。 */
+    /** 锚点的"自动"哨兵：anchorX 按对齐档算，anchorY 贴着 HUD 带上方。 */
     public static final float AUTO_ANCHOR = -1f;
-    /**
-     * anchorY 自动档的落点：画布高的 55%。
-     * <p>【为什么是 55%】准星在 50%，"准星的右下角区域"要的是卡片顶边落在准星<b>下方</b>一点
-     * 而不是正中压着它；再往下就让出太多屏。可拖拽（配置界面「位置 → 拖拽调整」），
-     * 这只是没人拖过时的默认。
-     */
-    public static final float DEFAULT_ANCHOR_Y = 0.55f;
 
     /** 卡片出现时的展开方式。 */
     public enum Appear {
@@ -96,16 +96,14 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
     public static final float CONTENT_WIDTH_RATIO = 0.45f;
 
     /**
-     * anchorX 自动档：让**最宽的那张卡**右缘正好落在右边距上。
-     * <p>【为什么默认是"自动"而不是一个好看的绝对数】它要跨所有缩放档成立（见类注释），
-     * 而这个公式就是原来「竖条左缘锚定」那条老路。
+     * 左缘档的自动锚线（老公式）：让<b>最宽的那张卡</b>右缘正好落在右边距上，竖条成一条线。
      */
     public static float autoLeftEdge(float guiWidth) {
         float budget = guiWidth * CONTENT_WIDTH_RATIO;
         return Math.max(0f, guiWidth - MARGIN_X - budget);
     }
 
-    /** 默认：火车入场、原地淡出、左缘锚定、锚点自动（准星右下）。 */
+    /** 默认：火车入场、原地淡出、左缘锚定、锚点自动（右下贴 HUD 带）。 */
     public static LayoutSettings defaults() {
         return new LayoutSettings(Appear.SLIDE, Exit.FADE, Side.LEFT, DEFAULT_SEPARATION,
                 AUTO_SCALE, AUTO_ANCHOR, AUTO_ANCHOR);
@@ -113,8 +111,9 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
 
     /**
      * 这一帧该用多大的缩放（1.0 = 100%）。
-     * <p>【自动档怎么算】需要的高度 = 张数 × 卡高 + 间距（全按 100% 算），锚点以下放不下时按比例缩，
+     * <p>【自动档怎么算】需要的高度 = 张数 × 卡高 + 间距（全按 100% 算），可用高度放不下时按比例缩，
      * 下限 {@link #MIN_AUTO_PERCENT}%；装得下就恒为 100% —— <b>空着的屏幕不该把卡撑大</b>。
+     * <p>【available 是锚点<b>以上</b>那段】卡堆向上生长，地盘是锚线到屏幕顶。
      */
     public float scale(float available, float cardHeight, int cards, float gap) {
         if (scalePercent > 0) {
@@ -156,22 +155,24 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
     /**
      * 这一帧锚线的横坐标（屏幕逻辑 px）。
      * 左缘锚定时＝竖条左缘该在的位置；右缘对齐时＝卡片右缘该在的位置。
+     * <p>【自动档按对齐档各自解析】左缘档用 {@link #autoLeftEdge}（竖条成线那条老公式）；
+     * 右缘档直接贴右边距 —— 从前右缘档错拿左缘公式的数当右缘，卡会瞬移到屏幕中左
+     * （第四批反馈"锚定错乱"的三处之一）。手动分数两种档同值不同义，这是配置写明的。
      */
     public float anchorLeft(float guiWidth) {
-        return anchorX < 0f ? autoLeftEdge(guiWidth) : anchorX * guiWidth;
-    }
-
-    /** 这一帧锚点的纵坐标（屏幕逻辑 px）＝ 第一张卡（最新）顶边的位置。 */
-    public float anchorTop(float guiHeight) {
-        return anchorY < 0f ? DEFAULT_ANCHOR_Y * guiHeight : anchorY * guiHeight;
+        if (anchorX >= 0f) {
+            return anchorX * guiWidth;
+        }
+        return align == Side.RIGHT ? guiWidth - MARGIN_X : autoLeftEdge(guiWidth);
     }
 
     /**
-     * 同上，但<b>夹进"至少放得下一张卡"的范围里</b>：锚点被拖得比"HUD 带顶 − 卡高"还低时，
-     * 第一张卡自动抬到 HUD 带上方 —— 配置表达的是意图，落点必须让卡真的看得见。
-     * 排布（{@code StackLayout#stack}）与"放几张"的取舍（{@code fittingCount}）必须用同一个值。
+     * 这一帧锚点的纵坐标（屏幕逻辑 px）＝ 第一张卡（最新）顶边的位置，卡堆从这里<b>向上</b>长。
+     * <p>【自动档 = 贴着 HUD 带上方】最新那张的顶边正好落在底部留白之上 —— 新卡出现的地点
+     * 固定，且离拾取发生的快捷栏最近；常见画布上"同屏上限"不再被几何砍半。
      */
     public float anchorTop(float guiHeight, float cardHeight, int bottomMargin) {
-        return Math.min(anchorTop(guiHeight), Math.max(0f, guiHeight - bottomMargin - cardHeight));
+        float bottom = Math.max(0f, guiHeight - bottomMargin - cardHeight);
+        return anchorY < 0f ? bottom : Math.min(anchorY * guiHeight, bottom);
     }
 }

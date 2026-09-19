@@ -189,6 +189,24 @@ public final class NoticeQueue<T> {
         return promoted;
     }
 
+    /**
+     * 把几张已经在屏上的卡退回排队<b>队头</b>（几何上放不下了；2026-09-19 起，
+     * 渲染层不再硬切摘卡 —— 那会让拾取无声蒸发）。从队头回，先来先上屏的次序不乱：
+     * 最老的回到最前面，位子一空它第一个回来。回队的卡补位时会 {@code reborn}
+     * （重新起算停留期、重播入场）—— "它回来这件事"本来就值得一帧入场。
+     * <p>【活表必须同步摘掉】退回的卡不再算"在屏"：realSize 要降下来（位子才算真的空出），
+     * 同名拾取也该按"排队那张"并进去，而不是往一张已经不在屏上的卡上滚数字。
+     */
+    public void requeueFront(List<Notice<T>> notices) {
+        for (int i = notices.size() - 1; i >= 0; i--) {
+            Notice<T> notice = notices.get(i);
+            if (alive.remove(notice.key(), notice) && notice.key().equals(overflowKey)) {
+                overflowKey = null;         // 溢出卡也能被退回；走它名额照旧不占
+            }
+            pending.addFirst(notice);
+        }
+    }
+
     /** 到点该退场的卡（停留超时），从账本里摘掉并返回。 */
     public List<Notice<T>> sweep(long now, long holdMs) {
         List<Notice<T>> gone = new ArrayList<>();
