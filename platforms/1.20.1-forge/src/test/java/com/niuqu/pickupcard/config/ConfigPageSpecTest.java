@@ -50,15 +50,16 @@ class ConfigPageSpecTest {
     @Test
     void animationKeysLiveOnTheAnimPage() {
         List<ConfigPageSpec.Row> rows = rows();
-        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "展开方式").page());
-        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "入场时长").page());
-        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "入场动画").page());
-        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "消失方式").page());
-        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "消失时长").page());
+        // 标签在测试环境里解析成 key 本身（I18n 无语言管理器时原样返回）—— 钉接线不钉措辞
+        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "pickupcard.config.row.appearMode.name").page());
+        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "pickupcard.config.row.enterMs.name").page());
+        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "pickupcard.config.row.enterToggle.name").page());
+        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "pickupcard.config.row.exitMode.name").page());
+        assertEquals(ConfigPageSpec.Page.ANIM, row(rows, "pickupcard.config.row.exitMs.name").page());
         // 位置页还剩它该剩的
-        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "水平对齐").page());
-        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "卡片缩放").page());
-        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "同屏上限").page());
+        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "pickupcard.config.row.align.name").page());
+        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "pickupcard.config.row.scale.name").page());
+        assertEquals(ConfigPageSpec.Page.LAYOUT, row(rows, "pickupcard.config.row.maxOnScreen.name").page());
     }
 
     /** 同一页里标签不许重名 —— harness 按标签找控件点，重名就会点错行。 */
@@ -86,7 +87,7 @@ class ConfigPageSpecTest {
             assertNotNull(r.widget(), "值行缺控件: " + r.label());
             assertNotNull(r.hint(), "值行缺悬停说明: " + r.label());
             assertFalse(r.hint().isBlank(), "值行悬停说明是空白: " + r.label());
-            if (!"位置".equals(r.label())) {
+            if (!"pickupcard.config.row.position.name".equals(r.label())) {
                 assertTrue(r.restorable(), "值行缺恢复动作: " + r.label());
             }
         }
@@ -99,7 +100,9 @@ class ConfigPageSpecTest {
                 .filter(r -> r.page() == ConfigPageSpec.Page.ANIM && r.restorable())
                 .count();
         assertEquals(9L, n);
-        assertTrue(ConfigPageSpec.restoreHint(ConfigPageSpec.Page.ANIM, (int) n).contains("9 项"));
+                // 数字经 %s 进语言文件措辞；这里钉"动画页走重置句式"的接线
+        assertTrue(ConfigPageSpec.restoreHint(ConfigPageSpec.Page.ANIM, (int) n)
+                .contains("pickupcard.config.restore.count"));
     }
 
     /** 过滤页是动态行，注册表里不该有它 —— 恢复走 FilterPageBuilder 自己那条路。 */

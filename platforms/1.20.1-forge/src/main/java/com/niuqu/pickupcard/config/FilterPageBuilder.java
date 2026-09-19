@@ -4,6 +4,7 @@ import com.niuqu.pickupcard.filter.RuleListEdit;
 import com.niuqu.pickupcard.render.nvg.ui.NvgButton;
 import com.niuqu.pickupcard.render.nvg.ui.NvgTextField;
 import com.niuqu.pickupcard.render.nvg.ui.NvgWidget;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.List;
@@ -41,17 +42,17 @@ public final class FilterPageBuilder {
 
     /** 摆出三张名单。每张 = 一行表头（右侧只读钮报条数）+ 每条规则一行 + 一行输入框。 */
     public static void build(PickupCardConfig.Values v, Host host) {
-        filterList("黑名单", v.blacklist,
-                "命中就不弹卡。挖一片沙滩不想刷屏时写这里",
-                "加进黑名单：物品 minecraft:cobblestone / tag #forge:ores / 整个 mod @modid，回车加",
+        filterList(I18n.get("pickupcard.config.filter.blacklist"), v.blacklist,
+                I18n.get("pickupcard.config.filter.blacklist.hint"),
+                I18n.get("pickupcard.config.filter.blacklist.input"),
                 host);
-        filterList("白名单", v.whitelist,
-                "命中就一定弹卡并且强调；它压过黑名单",
-                "加进白名单：写法同上；白名单 + 静音名单 = 强调地静音弹卡",
+        filterList(I18n.get("pickupcard.config.filter.whitelist"), v.whitelist,
+                I18n.get("pickupcard.config.filter.whitelist.hint"),
+                I18n.get("pickupcard.config.filter.whitelist.input"),
                 host);
-        filterList("静音名单", v.muteList,
-                "照常弹卡，但稀有提示音和原版拾取音都被压掉",
-                "加进静音名单：写法同上",
+        filterList(I18n.get("pickupcard.config.filter.mute"), v.muteList,
+                I18n.get("pickupcard.config.filter.mute.hint"),
+                I18n.get("pickupcard.config.filter.mute.input"),
                 host);
     }
 
@@ -68,19 +69,19 @@ public final class FilterPageBuilder {
         List<String> rules = rules(config);
         // 表头这一行：标签是名单名，右边那颗只读钮报"现在几条"——只读控件的底更暗、不画描边，
         // 一眼能看出它点不动（见 NvgButton 的 action == null）
-        host.cell(title, new NvgButton("", () -> rules.size() + " 条", null), what);
+        host.cell(title, new NvgButton("", () -> I18n.get("pickupcard.config.filter.count", rules.size()), null), what);
         for (int i = 0; i < rules.size(); i++) {
             String rule = rules.get(i);
             int index = i;
-            host.cell(rule, new NvgButton("", () -> "删除", () -> writeRules(config,
+            host.cell(rule, new NvgButton("", () -> I18n.get("pickupcard.config.filter.delete"), () -> writeRules(config,
                     RuleListEdit.remove(rules(config), index), host)),
                     // 【为什么把规则原文放在最前】标签那一格只有几十像素宽，长规则在屏上就是
                     // "minecraft:cobb" —— 底部这行是唯一能看全的地方
-                    rule + " —— 点「删除」把它从「" + title + "」里去掉");
+                    I18n.get("pickupcard.config.filter.removeHint", rule, title));
         }
-        host.cell("加一条", NvgTextField
+        host.cell(I18n.get("pickupcard.config.filter.addRow"), NvgTextField
                 .rule("", () -> "", RuleListEdit.MAX_RULE_LENGTH, text -> addRule(config, title, text, host))
-                .placeholder("写一条再回车"), inputHint);
+                .placeholder(I18n.get("pickupcard.config.filter.placeholder")), inputHint);
     }
 
     private static List<String> rules(ForgeConfigSpec.ConfigValue<List<? extends String>> config) {
@@ -104,6 +105,6 @@ public final class FilterPageBuilder {
             writeRules(config, r.rules(), host);
             return;
         }
-        host.rejectNote(title + "：" + RuleListEdit.message(r.reject()));
+        host.rejectNote(I18n.get("pickupcard.config.filter.rejected", title, RuleListEdit.message(r.reject())));
     }
 }

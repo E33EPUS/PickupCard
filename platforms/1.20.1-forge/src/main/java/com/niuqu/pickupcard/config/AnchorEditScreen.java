@@ -17,6 +17,7 @@ import com.niuqu.pickupcard.render.nvg.ui.NvgWidget;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -74,7 +75,7 @@ public final class AnchorEditScreen extends Screen {
     private final NvgCardPainter painter = new NvgCardPainter();
 
     public AnchorEditScreen(Screen parent) {
-        super(Component.literal("卡片位置 · 拖拽调整"));
+        super(Component.translatable("pickupcard.anchor.title"));
         this.parent = parent;
         LayoutSettings current = PickupCardConfig.layoutSnapshot();
         this.origX = current.anchorX();
@@ -94,9 +95,11 @@ public final class AnchorEditScreen extends Screen {
         int gap = 8;
         int totalW = bw * 2 + gap;
         int by = this.height - bh - 8;
-        saveButton = new NvgButton("完成", () -> "完成", this::saveAndClose);
+        saveButton = new NvgButton(I18n.get("pickupcard.anchor.done"), () -> I18n.get("pickupcard.anchor.done"),
+                this::saveAndClose);
         saveButton.at(this.width / 2f - totalW / 2f, by, bw, bh);
-        resetButton = new NvgButton("回到默认", () -> isAuto() ? "已回到默认" : "回到默认", this::resetToAuto);
+        resetButton = new NvgButton(I18n.get("pickupcard.anchor.reset"),
+                () -> I18n.get(isAuto() ? "pickupcard.anchor.resetDone" : "pickupcard.anchor.reset"), this::resetToAuto);
         resetButton.at(this.width / 2f + totalW / 2f - bw, by, bw, bh);
         buttons = List.of(saveButton, resetButton);
     }
@@ -227,8 +230,8 @@ public final class AnchorEditScreen extends Screen {
         try (NvgUi ui = NvgUi.begin(gui, palette, mouseX, mouseY, now)) {
             if (ui != null) {
                 ui.text(this.title.getString(), 8f, 6f, 0xFFFFFFFF);
-                ui.text(isAuto() ? "当前：自动（右下 · 贴 HUD 带上方）—— 按住卡片堆拖动即变为自定义"
-                                : String.format(java.util.Locale.ROOT, "当前：自定义 (x=%.2f, y=%.2f 屏)",
+                ui.text(isAuto() ? I18n.get("pickupcard.anchor.autoHint")
+                                : String.format(java.util.Locale.ROOT, I18n.get("pickupcard.anchor.customHint"),
                                 anchorX, anchorY),
                         8f, 17f, palette.textDim);
                 drawBrackets(ui, b);
@@ -236,7 +239,7 @@ public final class AnchorEditScreen extends Screen {
                     w.mouseMoved(mouseX, mouseY);
                     w.draw(ui);
                 }
-                ui.textRight("Esc 取消 · Enter 完成", this.width - 8f, this.height - 12f, palette.textDim);
+                ui.textRight(I18n.get("pickupcard.anchor.controls"), this.width - 8f, this.height - 12f, palette.textDim);
             }
         }
         paintSampleStack(gui);
@@ -261,13 +264,13 @@ public final class AnchorEditScreen extends Screen {
         ui.fillRoundRect(x2 - len, y2 - t, len, t, 1f, color);
         ui.fillRoundRect(x2 - t, y2 - len, t, len, 1f, color);
         // 【为什么写"示意"】框宽按<b>样例</b>的最宽算 —— 玩家真捡到更长的名字时卡会更宽。
-        ui.text("示意占地（按样例宽）", x, y - 11f, ui.palette.textDim);
+        ui.text(I18n.get("pickupcard.anchor.footprint"), x, y - 11f, ui.palette.textDim);
         // 锚线：意图的那条竖线。堆被边距夹住时它还在动 —— "拖了没反应"从这里变成"看得见的让位"
         float line = editing().anchorLeft(this.width);
         ui.fillRoundRect(line - 0.75f, y - 8f, 1.5f, (y2 + 8f) - (y - 8f), 0.75f,
                 NvgUi.fade(color, 0.45f));
         if (b.clamped()) {
-            ui.text("卡已贴边距：锚线再往右，卡也不会越过屏幕边距", x, y2 + 4f, ui.palette.textDim);
+            ui.text(I18n.get("pickupcard.anchor.clamped"), x, y2 + 4f, ui.palette.textDim);
         }
     }
 

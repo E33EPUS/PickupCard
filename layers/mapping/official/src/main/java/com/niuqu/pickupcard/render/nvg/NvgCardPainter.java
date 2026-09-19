@@ -257,8 +257,10 @@ public final class NvgCardPainter {
                 box(vg, stack, style, x + bodyX + bodyShift, y, cardH, cardH, radius);
                 // 【图标是 NanoVG 图像贴图】与框同吃窗口裁剪和全局 alpha —— 入场从竖条后
                 // 滑出来时被同一扇"隧道口"裁着，退场跟着同一个 nvgGlobalAlpha 淡掉。
-                // 图像 32×32、物品占中心 16×16：pattern 把整图映到 2×iconSize，
-                // 物品区域就正好是 iconSize，中心与图标格中心对齐。
+                // 图像 64×64、物品占中央 32×32（整图一半）：pattern 把整图映到 2×iconSize，
+                // 填充矩形（边长 iconSize 居中）采样的 0.25~0.75 区正好压在物品上。
+                // 【别回到 32×32/±12】那是非整数映射（1.33px/格），矩形只采到物品的中段 ——
+                // 图标放大 1/3、四周切边，用户报的"图标错乱"就是它（ItemIconCache 类注释有全账）。
                 if (iconImage != 0) {
                     float cx = x + bodyX + bodyShift + cardH / 2f;
                     float cy = y + cardH / 2f;

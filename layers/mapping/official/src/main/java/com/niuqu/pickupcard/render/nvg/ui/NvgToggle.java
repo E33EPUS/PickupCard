@@ -1,5 +1,7 @@
 package com.niuqu.pickupcard.render.nvg.ui;
 
+import net.minecraft.network.chat.Component;
+
 import java.util.function.Consumer;
 import java.util.function.Supplier;
 
@@ -23,7 +25,10 @@ public final class NvgToggle extends NvgWidget {
 
     @Override
     public String value() {
-        return state.get() ? "开" : "关";
+        // 【文案走语言文件】shared 碰不到客户端 I18n，走 Component（与 CardMetrics 同款）；
+        // 硬编码中文在英文客户端就是漏网的原文（英文截图抓到"开/关"混在英文界面里）。
+        return Component.translatable(state.get()
+                ? "pickupcard.config.toggle.on" : "pickupcard.config.toggle.off").getString();
     }
 
     @Override

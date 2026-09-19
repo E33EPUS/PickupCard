@@ -7,6 +7,7 @@ import com.niuqu.pickupcard.config.PickupCardConfigScreen;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.render.CardStage;
 import net.minecraft.client.KeyMapping;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.Screenshot;
 import net.minecraft.commands.Commands;
@@ -329,7 +330,7 @@ public final class DevHarness {
             // 把整条链一起验掉 —— handoff 待办里那条"配置界面没点过"就是它。
             if (configTicks == WARMUP_TICKS + 26) {
                 PickupCard.LOGGER.info("[harness-auto] 第 1 页控件: {}", configLabels(mc));
-                clickByLabel(mc, "位置与堆叠");            // 切到「位置与堆叠」页
+                clickByLabel(mc, I18n.get("pickupcard.config.page.layout.name"));            // 切到「位置与堆叠」页
                 return;
             }
             if (configTicks == WARMUP_TICKS + 30) {
@@ -357,7 +358,7 @@ public final class DevHarness {
             }
             if (configTicks == WARMUP_TICKS + 46) {
                 // 「位置」那颗钮：点开整屏拖拽编辑场，再 Esc 取消 —— 开关这条链要能自动走通
-                clickByLabel(mc, "位置");
+                clickByLabel(mc, I18n.get("pickupcard.config.row.position.name"));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 47) {
@@ -384,7 +385,7 @@ public final class DevHarness {
                     editor.cancelForHarness();
                 }
                 PickupCard.LOGGER.info("[harness-auto] Esc 后：{}", PickupCardConfig.anchorDump());
-                clickByLabel(mc, "动画");        // 下一项要拖的滑条在动画页
+                clickByLabel(mc, I18n.get("pickupcard.config.page.anim.name"));        // 下一项要拖的滑条在动画页
                 return;
             }
             if (configTicks == WARMUP_TICKS + 52) {
@@ -392,7 +393,7 @@ public final class DevHarness {
                 // 【为什么拖到 50% 不是 35%】0.35 × 2000 = 700，吸附到 40 的倍数是 680 ——
                 // 撞上 dev 配置目录里上一次拖拽残留的 680，"变了才算通"就永远等不到变化
                 // （第三轮实测：680 → 680，其实链路是好的，日志冤枉了它）。
-                dragOption(mc, "入场时长", 0.5);
+                dragOption(mc, I18n.get("pickupcard.config.row.enterMs.name"), 0.5);
                 long after = CardStage.INSTANCE.previewStyle().enterMs();
                 PickupCard.LOGGER.info("[harness-auto] 拖『入场时长』到 50%：{} → {}（变了才算拖拽这条链通）",
                         before, after);
@@ -404,7 +405,7 @@ public final class DevHarness {
             // 和"动画播完了"在日志里长得一模一样。
             if (configTicks == WARMUP_TICKS + 54) {
                 PickupCard.LOGGER.info("[harness-auto] 换样例前: {}", configState(mc));
-                if (!clickByLabel(mc, "稀有")) {
+                if (!clickByLabel(mc, I18n.get("pickupcard.config.sample.rare.label"))) {
                     PickupCard.LOGGER.warn("[harness-auto] 这一档画布上没有切样例行（预览收起了）");
                 }
                 PickupCard.LOGGER.info("[harness-auto] 点『稀有』后: {}", configState(mc));
@@ -422,12 +423,12 @@ public final class DevHarness {
                 return;
             }
             if (configTicks == WARMUP_TICKS + 64) {
-                clickByLabel(mc, "长名");     // 长名字那一档：验截断，也验"预览不越界"
+                clickByLabel(mc, I18n.get("pickupcard.config.sample.longName.label"));     // 长名字那一档：验截断，也验"预览不越界"
                 return;
             }
             if (configTicks == WARMUP_TICKS + 66) {
                 // 悬停「停留时长」（动画页上的那一项）：太短的行悬停看不出来，这一页正好有
-                hoverByLabel(mc, "停留时长");
+                hoverByLabel(mc, I18n.get("pickupcard.config.row.holdMs.name"));
                 PickupCard.LOGGER.info("[harness-auto] 悬停「停留时长」后: {}", configState(mc));
                 return;
             }
@@ -442,7 +443,7 @@ public final class DevHarness {
             }
             if (configTicks == WARMUP_TICKS + 74) {
                 hoverByLabel(mc, null);       // 松开悬停，接着切到布局页看那一摞卡
-                clickByLabel(mc, "位置与堆叠");
+                clickByLabel(mc, I18n.get("pickupcard.config.page.layout.name"));
                 PickupCard.LOGGER.info("[harness-auto] 切页那一帧（换页无动画，强调条该在起点）: {}",
                         configState(mc));
                 return;
@@ -460,20 +461,20 @@ public final class DevHarness {
                 return;
             }
             if (configTicks == WARMUP_TICKS + 86) {
-                clickByLabel(mc, "过滤");
+                clickByLabel(mc, I18n.get("pickupcard.config.page.filter.name"));
                 PickupCard.LOGGER.info("[harness-auto] 切到过滤页: {}", configState(mc));
                 PickupCard.LOGGER.info("[harness-auto] {}", configLabels(mc));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 90) {
                 // 一条合法规则：走"点 → 逐字 → 回车"的完整键盘路径
-                typeByLabel(mc, "加一条", "minecraft:cobblestone");
+                typeByLabel(mc, I18n.get("pickupcard.config.filter.addRow"), "minecraft:cobblestone");
                 PickupCard.LOGGER.info("[harness-auto] 加了一条合法规则后: {}", filterDump(mc));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 94) {
                 // 一条缺命名空间的：必须被拒，而且要在界面上说出来（不是静默吞掉）
-                typeByLabel(mc, "加一条", "cobblestone");
+                typeByLabel(mc, I18n.get("pickupcard.config.filter.addRow"), "cobblestone");
                 PickupCard.LOGGER.info("[harness-auto] 加了一条非法规则后: {}", filterDump(mc));
                 return;
             }
@@ -504,23 +505,23 @@ public final class DevHarness {
             }
             if (configTicks == WARMUP_TICKS + 107) {
                 // 2026-09-19 重构回归线：展开方式搬进动画页 + 恢复默认单一出处 + 舞台唯一身份
-                clickByLabel(mc, "动画");
+                clickByLabel(mc, I18n.get("pickupcard.config.page.anim.name"));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 108) {
                 // 恢复默认：恢复后「消失方式」必须是正本默认（火车退回）——
                 // 从前手抄默认值漂成 FADE，点恢复反而把设置改错
                 PickupCard.LOGGER.info("[harness-auto] 恢复前: {}", configLabels(mc));
-                clickByLabel(mc, "恢复本页默认");
+                clickByLabel(mc, I18n.get("pickupcard.config.button.restore"));
                 return;
             }
             if (configTicks == WARMUP_TICKS + 109) {
                 PickupCard.LOGGER.info("[harness-auto] 恢复后: {}", configLabels(mc));
                 // 连来三张：三张卡必须三把不同的平滑账（键唯一），y 值各不相同 ——
                 // 从前同款卡共用一个身份，全部钉在同一个 y 上（"预览卡片重叠"）
-                clickByLabel(mc, "来一张");
-                clickByLabel(mc, "来一张");
-                clickByLabel(mc, "来一张");
+                clickByLabel(mc, I18n.get("pickupcard.config.button.spawn"));
+                clickByLabel(mc, I18n.get("pickupcard.config.button.spawn"));
+                clickByLabel(mc, I18n.get("pickupcard.config.button.spawn"));
                 PickupCard.LOGGER.info("[harness-auto] 连来三张: {}", configState(mc));
                 capture(mc, "stage-cards");
                 return;
@@ -543,7 +544,7 @@ public final class DevHarness {
                 // 连拍一串；周期 4.6s，取 5 张、每张隔 1.2s，必然覆盖到入场 / 停 / 脉冲 / 淡出。
                 // 【118 起拍】前面挪进了"舞台三连拍"（+114/+117），连拍起点跟着后移。
                 if (configTicks == WARMUP_TICKS + 118) {
-                    clickByLabel(mc, "通用");
+                    clickByLabel(mc, I18n.get("pickupcard.config.page.general.name"));
                     PickupCard.LOGGER.info("[harness-auto] 重播连拍：回到通用页看单卡预览");
                 }
                 capture(mc, "config-cycle" + ((configTicks - WARMUP_TICKS - 118) / CYCLE_EVERY));

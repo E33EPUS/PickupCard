@@ -15,6 +15,7 @@ import com.niuqu.pickupcard.render.nvg.ui.NvgWidget;
 import com.niuqu.pickupcard.render.nvg.ui.Tween;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.network.chat.Component;
@@ -299,13 +300,15 @@ public final class PickupCardConfigScreen extends Screen {
             if (leftAligned) {
                 ui.text(text.get(), x + 4f, ty, color);
             } else {
-                ui.textCentered(text.get(), x + w / 2f, ty, color);
+                // 【缩字不换行】整行装不下被挤压时，芯片里的文字跟着缩（英文样例名
+                // "Long name" 在窄窗口必然超宽），不叠到邻居头上
+                ui.textCenteredFitted(text.get(), x + w / 2f, ty, color, w - 6f);
             }
         }
     }
 
     public PickupCardConfigScreen(Screen parent) {
-        super(Component.literal("拾起卡片 · 设置"));
+        super(Component.translatable("pickupcard.config.title"));
         this.parent = parent;
         // 预览一打开就核对样例的真实稀有度（只跑一次）—— 标称与实际不符会在日志里报 ERROR
         PreviewStage.Sample.verify();
@@ -354,29 +357,48 @@ public final class PickupCardConfigScreen extends Screen {
 
         PreviewStage.Sample[] samples = PreviewStage.Sample.values();
         int switchCount = samples.length + 1;      // 样例 + 「来一张」
-        for (int i = 0; i < samples.length; i++) {
-            PreviewStage.Sample s = samples[i];
-            Chip chip = new Chip(s.label(), () -> s.label(), () -> s == sample, () -> {
-                if (s == sample) {
-                    return;
-                }
-                sample = s;
-                // 选中的样例立刻上台/上纸：改了"下一张是谁"当场看得见
-                preview.playOnce(now, s);
-            }, false).hint(s.hint());
+        // 【等分改内容宽】等分是按中文两字标签定的；语言一换（Common / Experience /
+        // Spawn one）文本就溢出芯片叠到邻居头上（英文截图抓到的）。每颗按自己的文案
+        // 量宽，整行装不下时整行按比例压 —— 窄窗口牺牲余白，不牺牲可读性。
+        ConfigLayout.Rect row0 = lo.switchRect(0, switchCount);
+        ConfigLayout.Rect rowN = lo.switchRect(switchCount - 1, switchCount);
+        float chipGap = 3f;
+        float[] chipWidths = new float[switchCount];
+        float widthsTotal = 0f;
+        for (int i = 0; i < switchCount; i++) {
+            String label = i < samples.length ? samples[i].label()
+                    : I18n.get("pickupcard.config.button.spawn");
+            chipWidths[i] = Math.max(row0.h(), this.font.width(label) + 10f);
+            widthsTotal += chipWidths[i];
+        }
+        float squeeze = Math.min(1f, (rowN.x() + rowN.w() - row0.x() - chipGap * (switchCount - 1))
+                / widthsTotal);
+        float chipX = row0.x();
+        for (int i = 0; i < switchCount; i++) {
+            float w = chipWidths[i] * squeeze;
+            Chip chip;
+            if (i < samples.length) {
+                PreviewStage.Sample s = samples[i];
+                chip = new Chip(s.label(), () -> s.label(), () -> s == sample, () -> {
+                    if (s == sample) {
+                        return;
+                    }
+                    sample = s;
+                    // 选中的样例立刻上台/上纸：改了"下一张是谁"当场看得见
+                    preview.playOnce(now, s);
+                }, false).hint(s.hint());
+            } else {
+                // 「来一张」：手动入口 —— 想仔细看入场/退场，点它当场放一张，不用等节拍。
+                chip = new Chip(I18n.get("pickupcard.config.button.spawn"),
+                        () -> I18n.get("pickupcard.config.button.spawn"), () -> false,
+                        () -> preview.playOnce(now, sample), false)
+                        .hint(I18n.get("pickupcard.config.button.spawn.hint"));
+            }
             // 位置每次重建算的：预览会不会出现、切换行画不画，都取决于画布大小
-            ConfigLayout.Rect cellRect = lo.switchRect(i, switchCount);
-            chip.at(cellRect.x(), cellRect.y(), cellRect.w(), cellRect.h());
+            chip.at(chipX, row0.y(), w, row0.h());
+            chipX += w + chipGap;
             sampleButtons.add(chip);
         }
-        // 「来一张」：手动入口 —— 想仔细看入场/退场，点它当场放一张，不用等节拍。
-        Chip spawn = new Chip("来一张", () -> "来一张", () -> false,
-                () -> preview.playOnce(now, sample), false)
-                .hint("动画页：立刻放一张当前样例，完整走一遍入场 → 停留 → 消失；"
-                        + "其他页：立刻换成这张样例的静止卡");
-        ConfigLayout.Rect spawnCell = lo.switchRect(switchCount - 1, switchCount);
-        spawn.at(spawnCell.x(), spawnCell.y(), spawnCell.w(), spawnCell.h());
-        sampleButtons.add(spawn);
 
         itemsScroll = new NvgScroll(lo.items().x(), lo.items().y(), lo.items().w(), lo.items().h());
         itemsScroll.scrollTo(keep ? savedScrollOffset : 0f);
@@ -430,7 +452,9 @@ public final class PickupCardConfigScreen extends Screen {
                 }
             }
         }
-        cell("恢复本页默认", new NvgButton("", () -> "恢复", this::restorePageDefaults),
+        cell(I18n.get("pickupcard.config.button.restore"),
+                new NvgButton("", () -> I18n.get("pickupcard.config.button.restore.short"),
+                        this::restorePageDefaults),
                 ConfigPageSpec.restoreHint(restored, n));
     }
 
@@ -619,10 +643,10 @@ public final class PickupCardConfigScreen extends Screen {
         NvgPalette p = ui.palette;
         ConfigLayout lo = layout();
         PickupCardSettings eff = PickupCardConfig.snapshot();
-        // 标题居中；副标题一句话居中；状态行钉在标题行右端 —— 总开关是"整体生效没生效"
-        // 的唯一真源，藏进页里就得翻页才知道。
-        ui.textCentered(this.title.getString(), this.width / 2f, 6f, 0xFFFFFFFF);
-        ui.textCentered("所有改动立即生效，不用保存", this.width / 2f, 17f, p.textDim);
+        // 标题靠左、副标题跟同一个左缘（用户要求标题不居中；对齐 MARGIN 与标签列同一起点）。
+        // 状态行钉在标题行右端 —— 总开关是"整体生效没生效"的唯一真源，藏进页里就得翻页才知道。
+        ui.text(this.title.getString(), ConfigLayout.MARGIN, 6f, 0xFFFFFFFF);
+        ui.text(I18n.get("pickupcard.config.subtitle"), ConfigLayout.MARGIN, 17f, p.textDim);
         ui.textRight(status(), this.width - PAD - 4f, 6f,
                 eff.enabled() ? p.accent : p.textDim);
         // 标题和内容之间那条线：没有它，标题行和第一行标签会连成一片
@@ -634,24 +658,27 @@ public final class PickupCardConfigScreen extends Screen {
                 lo.tabs().h() + 4f, p.panel, 0x80202836);
         // 预览列：面板底 + 标题（收掉时这两样都不画）
         if (lo.previewVisible()) {
-            ui.text("预览", lo.preview().x(), lo.preview().y(), p.textDim);
+            ui.text(I18n.get("pickupcard.config.preview"), lo.preview().x(), lo.preview().y(), p.textDim);
             ui.fillRoundRect(lo.preview().x() - 2f, lo.preview().y() + 10f,
                     lo.preview().w() + 4f, Math.max(0f, lo.preview().h() - 12f), p.radius,
                     0x40202A38);
         } else {
             // 右对齐：底部那行左边是悬停说明（drawHint），左对齐会跟它叠在一起
-            ui.textRight(PREVIEW_COLLAPSED, lo.items().right(), this.height - 12f, p.textDim);
+            ui.textRight(previewCollapsed(), lo.items().right(), this.height - 12f, p.textDim);
         }
     }
 
     /** 标题行右端那行状态：总开关之外，玩家最常想知道的是"卡现在缩到了多少"。 */
     private String status() {
         PickupCardSettings eff = PickupCardConfig.snapshot();
-        return (eff.enabled() ? "总开关 开 · " : "总开关 关 · ") + scaleText();
+        return I18n.get(eff.enabled() ? "pickupcard.config.status.on" : "pickupcard.config.status.off")
+                + scaleText();
     }
 
-    /** 底部那行「预览被收掉了」的提示语。提成常量：{@link #hintRightLimit()} 要按它的宽度让路。 */
-    private static final String PREVIEW_COLLAPSED = "预览已收起（窗口太窄）";
+    /** 底部那行「预览被收掉了」的提示语。方法而不是常量：文案要在取用的那一刻解析。 */
+    private static String previewCollapsed() {
+        return I18n.get("pickupcard.config.preview.collapsed");
+    }
 
     /** 底部那行<b>左边</b>（悬停说明）最多能画到哪个 x。 */
     private float hintRightLimit() {
@@ -659,7 +686,7 @@ public final class PickupCardConfigScreen extends Screen {
         ConfigLayout lo = layout();
         if (!lo.previewVisible()) {
             limit = Math.min(limit,
-                    lo.items().right() - this.font.width(PREVIEW_COLLAPSED) - PAD);
+                    lo.items().right() - this.font.width(previewCollapsed()) - PAD);
         }
         return limit;
     }
@@ -794,7 +821,8 @@ public final class PickupCardConfigScreen extends Screen {
     /** 标题右上角那行：总开关之外，玩家最常想知道的是"卡现在缩到了多少"。 */
     private static String scaleText() {
         int pct = PickupCardConfig.layoutSnapshot().scalePercent();
-        return "卡片缩放 " + (pct > LayoutSettings.AUTO_SCALE ? pct + "%" : "自动");
+        return I18n.get("pickupcard.config.scale",
+                pct > LayoutSettings.AUTO_SCALE ? pct + "%" : I18n.get("pickupcard.config.value.auto"));
     }
 
     // ------------------------------------------------------------------
@@ -1031,12 +1059,13 @@ public final class PickupCardConfigScreen extends Screen {
     private String anchorValueText() {
         LayoutSettings layout = PickupCardConfig.layoutSnapshot();
         if (layout.anchorX() < 0 && layout.anchorY() < 0) {
-            return "自动（右下）";
+            return I18n.get("pickupcard.config.anchor.value.auto");
         }
-        return "自定义 (" + Math.round(layout.anchorLeft(this.width)) + ", "
-                + Math.round(layout.anchorTop(this.height,
+        return I18n.get("pickupcard.config.anchor.value.custom",
+                Math.round(layout.anchorLeft(this.width)),
+                Math.round(layout.anchorTop(this.height,
                         CardStage.INSTANCE.previewStyle().boxHeight() * PreviewStage.scale(),
-                        HudSafeZone.bottomInset())) + ")";
+                        HudSafeZone.bottomInset())));
     }
 
     /** 打开整屏拖拽编辑场。配置不在这里写 —— 编辑场「完成」时才写。 */

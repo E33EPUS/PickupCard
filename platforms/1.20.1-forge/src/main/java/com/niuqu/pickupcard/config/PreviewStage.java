@@ -19,6 +19,7 @@ import com.niuqu.pickupcard.render.nvg.ui.ConfigLayout;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
@@ -89,32 +90,33 @@ public final class PreviewStage {
      * {@link #verify()} 启动时对一次，不符报 ERROR。
      */
     public enum Sample {
-        COMMON("普通", Items.STONE, Rarity.COMMON, 64, false, null,
-                "最常见的那一档 —— 灰。原版绝大多数物品都在这档（钻石剑、钻石镐也是）"),
-        RARE("稀有", Items.GOLDEN_APPLE, Rarity.RARE, 1, false, null,
-                "稀有档 —— 青。样例必须是真·稀有的物品：拿钻石剑当稀有样例只会得到一片灰"),
-        XP("经验", Items.NETHER_STAR, null, 137, true, null,
-                "经验卡：绿是它专用的一档，刻意不参与稀有度分级"),
-        LONG_NAME("长名", Items.ENCHANTED_GOLDEN_APPLE, Rarity.EPIC, 1, false,
-                "附魔金苹果（珍藏 · 来自末地城）", "史诗档 —— 紫；顺带验名字太长会被截断");
+        COMMON("pickupcard.config.sample.common.label", Items.STONE, Rarity.COMMON, 64, false, null,
+                "pickupcard.config.sample.common.hint"),
+        RARE("pickupcard.config.sample.rare.label", Items.GOLDEN_APPLE, Rarity.RARE, 1, false, null,
+                "pickupcard.config.sample.rare.hint"),
+        XP("pickupcard.config.sample.xp.label", Items.NETHER_STAR, null, 137, true, null,
+                "pickupcard.config.sample.xp.hint"),
+        LONG_NAME("pickupcard.config.sample.longName.label", Items.ENCHANTED_GOLDEN_APPLE, Rarity.EPIC, 1, false,
+                "pickupcard.config.sample.longName.custom", "pickupcard.config.sample.longName.hint");
 
-        final String label;
+        // 【存 key】同 ConfigPageSpec.Page：枚举初始化早于语言加载，文案在访问器里解析
+        final String labelKey;
         /** 这一格的数量。<b>不是显示字符串</b> —— 写法由玩家选的 {@code CountFormat} 决定。 */
         final int amount;
         /** 值得给一层稀有度微光的卡（经验卡）。 */
         final boolean glow;
-        final String hint;
+        final String hintKey;
         /** 这一格<b>标称</b>的稀有度；{@code null} = 不参与稀有度演示（经验卡）。 */
         private final Rarity tier;
         private final ItemStack icon;
 
-        Sample(String label, Item item, Rarity tier, int amount, boolean glow,
-               String customName, String hint) {
-            this.label = label;
+        Sample(String labelKey, Item item, Rarity tier, int amount, boolean glow,
+               String customName, String hintKey) {
+            this.labelKey = labelKey;
             this.tier = tier;
             this.amount = amount;
             this.glow = glow;
-            this.hint = hint;
+            this.hintKey = hintKey;
             this.icon = new ItemStack(item);
             if (customName != null) {
                 // 玩家自己改过名的物品就长这样：名字长、还带符号
@@ -133,7 +135,7 @@ public final class PreviewStage {
             for (Sample s : values()) {
                 if (s.tier != null && s.icon.getRarity() != s.tier) {
                     PickupCard.LOGGER.error("[样例] {} 标称 {}，实际读到的是 {}（{}）—— 预览的颜色会不对",
-                            s.label, s.tier, s.icon.getRarity(),
+                            s.label(), s.tier, s.icon.getRarity(),
                             BuiltInRegistries.ITEM.getKey(s.icon.getItem()));
                 }
             }
@@ -142,11 +144,11 @@ public final class PreviewStage {
         private static boolean verifyDone;
 
         public String label() {
-            return label;
+            return I18n.get(labelKey);
         }
 
         public String hint() {
-            return hint;
+            return I18n.get(hintKey);
         }
 
         public int amount() {

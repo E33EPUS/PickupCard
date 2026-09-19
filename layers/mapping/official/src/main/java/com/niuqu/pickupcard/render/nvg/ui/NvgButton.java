@@ -46,6 +46,10 @@ public final class NvgButton extends NvgWidget {
             ui.well(x, y, w, h, wellColor(p));
         }
         int textColor = action == null ? p.textDim : p.text;
-        ui.textCentered(value.get(), x + w / 2f, y + (h - ui.font().lineHeight) / 2f, textColor);
+        // 【缩字不换行】值比盒宽就整体缩小（见 NvgUi#textCenteredFitted）—— 英文的
+        // 循环选项值（"Same name + enchants"）在等分行布局里必然超宽，截断会让玩家
+        // 认不出当前档位
+        ui.textCenteredFitted(value.get(), x + w / 2f, y + (h - ui.font().lineHeight) / 2f,
+                textColor, w - 6f);
     }
 }

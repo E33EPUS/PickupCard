@@ -208,6 +208,31 @@ public final class NvgUi implements AutoCloseable {
                 Math.round(y), fade(argb, alpha), true));
     }
 
+    /**
+     * 居中写一行，<b>超过 maxW 就整体缩小到装得下</b>（以文字垂直中心为锚）。
+     * <p>【为什么存在】语言一换（英文 "Same name + enchants" / "Long name"），文案比
+     * 中文宽一截：按钮盒不能为它变宽（行宽是布局契约），截断又会让循环选项认不出来
+     * —— 缩字是唯一不破坏布局的兜底。日常（zh / 宽窗口）k=1，一个像素都不动。
+     */
+    public void textCenteredFitted(String s, float centerX, float y, int argb, float maxW) {
+        register(() -> {
+            float tw = font.width(s);
+            int color = fade(argb, alpha);
+            if (tw <= maxW || tw <= 0f) {
+                gui.drawString(font, s, Math.round(centerX - tw / 2f), Math.round(y), color, true);
+                return;
+            }
+            float k = maxW / tw;
+            var pose = gui.pose();
+            pose.pushPose();
+            pose.translate(centerX, y + font.lineHeight / 2f, 0f);
+            pose.scale(k, k, 1f);
+            gui.drawString(font, s, Math.round(-tw / 2f), Math.round(-font.lineHeight / 2f),
+                    color, true);
+            pose.popPose();
+        });
+    }
+
     /** 右对齐写一行（x 给右缘）。 */
     public void textRight(String s, float rightX, float y, int argb) {
         register(() -> gui.drawString(font, s, Math.round(rightX - font.width(s)),

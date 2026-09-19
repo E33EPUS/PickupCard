@@ -1,5 +1,7 @@
 package com.niuqu.pickupcard.filter;
 
+import net.minecraft.network.chat.Component;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -78,15 +80,19 @@ public final class RuleListEdit {
         return List.copyOf(out);
     }
 
-    /** 拒绝原因翻成一句给玩家看的话（空串 = 没被拒）。 */
+    /**
+     * 拒绝原因翻成一句给玩家看的话（空串 = 没被拒）。
+     * <p>shared 碰不到客户端 I18n，走 {@link Component}（与 CardMetrics 的溢出文案同款）；
+     * 无语言管理器的测试环境里 getString() 原样返回 key。
+     */
     public static String message(Reject reject) {
         return switch (reject) {
             case NONE -> "";
-            case BLANK -> "还没写东西";
-            case TOO_LONG -> "太长了（最多 " + MAX_RULE_LENGTH + " 个字符）";
-            case BAD_SYNTAX -> "写法不对 —— 物品 minecraft:cobblestone / tag #forge:ores / mod @modid";
-            case DUPLICATE -> "这条已经在名单里了";
-            case FULL -> "一张名单最多 " + MAX_RULES + " 条";
+            case BLANK -> Component.translatable("pickupcard.filter.reject.blank").getString();
+            case TOO_LONG -> Component.translatable("pickupcard.filter.reject.tooLong", MAX_RULE_LENGTH).getString();
+            case BAD_SYNTAX -> Component.translatable("pickupcard.filter.reject.badSyntax").getString();
+            case DUPLICATE -> Component.translatable("pickupcard.filter.reject.duplicate").getString();
+            case FULL -> Component.translatable("pickupcard.filter.reject.full", MAX_RULES).getString();
         };
     }
 }

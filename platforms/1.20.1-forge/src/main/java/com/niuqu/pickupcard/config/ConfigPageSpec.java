@@ -12,6 +12,7 @@ import com.niuqu.pickupcard.render.nvg.ui.NvgWidget;
 import com.niuqu.pickupcard.style.StyleModel;
 import com.niuqu.pickupcard.style.StyleOverrides;
 import com.niuqu.pickupcard.text.CountFormat;
+import net.minecraft.client.resources.language.I18n;
 import net.minecraftforge.common.ForgeConfigSpec;
 
 import java.util.ArrayList;
@@ -41,27 +42,30 @@ public final class ConfigPageSpec {
 
     /** 配置界面的一页。标签与页说明（底部那行）也归这里 —— 从前在界面的 Section 枚举里。 */
     public enum Page {
-        GENERAL("通用", "弹不弹卡、要不要显示名字、什么算同一样东西"),
-        ANIM("动画", "卡片出现和消失的快慢，以及数量变化怎么动"),
-        LAYOUT("位置与堆叠", "卡片停在哪、同时最多几张（位置整屏拖拽调）"),
-        LOOK("外观", "卡片的长相：形状一节、颜色一节"),
+        GENERAL("pickupcard.config.page.general.name", "pickupcard.config.page.general.hint"),
+        ANIM("pickupcard.config.page.anim.name", "pickupcard.config.page.anim.hint"),
+        LAYOUT("pickupcard.config.page.layout.name", "pickupcard.config.page.layout.hint"),
+        LOOK("pickupcard.config.page.look.name", "pickupcard.config.page.look.hint"),
         /** 【为什么单独一页】三张名单是可增删的列表，行数会涨，跟固定八行的"外观"不是一回事。 */
-        FILTER("过滤", "哪些东西不弹卡、一定要弹、或者弹了不出声");
+        FILTER("pickupcard.config.page.filter.name", "pickupcard.config.page.filter.hint");
 
-        final String label;
-        final String hint;
+        // 【存 key 不存文案】枚举常量在类加载时初始化，那时语言可能没加载完/还会切换 ——
+        // 文案在 label()/hint() 被调用的那一刻解析。测试环境里 I18n.get 原样返回 key，
+        // 测试因此钉的是"接线"而不是措辞（措辞归语言文件 + 一致性单测）。
+        private final String labelKey;
+        private final String hintKey;
 
-        Page(String label, String hint) {
-            this.label = label;
-            this.hint = hint;
+        Page(String labelKey, String hintKey) {
+            this.labelKey = labelKey;
+            this.hintKey = hintKey;
         }
 
         public String label() {
-            return label;
+            return I18n.get(labelKey);
         }
 
         public String hint() {
-            return hint;
+            return I18n.get(hintKey);
         }
     }
 
@@ -95,6 +99,11 @@ public final class ConfigPageSpec {
     private ConfigPageSpec() {
     }
 
+    /** 文案一律走语言文件（zh_cn/en_us）；测试环境里 I18n 原样返回 key —— 测试钉接线不钉措辞。 */
+    private static String tr(String key) {
+        return I18n.get(key);
+    }
+
     /**
      * 全部配置行。顺序 = 玩家看到的顺序（页内小节头夹在中间）。
      *
@@ -117,32 +126,32 @@ public final class ConfigPageSpec {
     // ------------------------------------------------------------------
 
     private static void addGeneral(List<Row> rows, PickupCardConfig.Values v, PickupCardSettings eff) {
-        rows.add(new Row(Page.GENERAL, "总开关",
-                "关掉之后捡东西不再弹卡；重开时屏上不会涌出积压的旧卡",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.master.name"),
+                tr("pickupcard.config.row.master.hint"),
                 () -> bool(v.enabled, eff.enabled()), restore(v.enabled)));
-        rows.add(new Row(Page.GENERAL, "显示什么", null, null, null));
-        rows.add(new Row(Page.GENERAL, "显示物品名",
-                "关掉后卡片只剩竖条、图标和数量，会明显变窄",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.section.show"), null, null, null));
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.showName.name"),
+                tr("pickupcard.config.row.showName.hint"),
                 () -> bool(v.showItemName, eff.showItemName()), restore(v.showItemName)));
-        rows.add(new Row(Page.GENERAL, "显示物品ID",
-                "名字一栏显示 minecraft:stone 这样的注册 ID，而不是它的中文名",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.showId.name"),
+                tr("pickupcard.config.row.showId.hint"),
                 () -> bool(v.showItemId, eff.showItemId()), restore(v.showItemId)));
-        rows.add(new Row(Page.GENERAL, "名字最大宽度",
-                "名字超过这个宽度就截断加省略号；0 = 按屏宽自动",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.nameMaxWidth.name"),
+                tr("pickupcard.config.row.nameMaxWidth.hint"),
                 () -> number(v.nameMaxWidth, eff.nameMaxWidth(), 0, 400, 1, "px"),
                 restore(v.nameMaxWidth)));
-        rows.add(new Row(Page.GENERAL, "数量写法",
-                "数量的书写方式，点一下换下一种：+64 → ×64 → 64 → +1.2K",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.countFormat.name"),
+                tr("pickupcard.config.row.countFormat.hint"),
                 () -> cycle(v.countFormat, CountFormat.values(), ConfigPageSpec::countName),
                 restore(v.countFormat)));
-        rows.add(new Row(Page.GENERAL, "行为与合并", null, null, null));
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.section.behavior"), null, null, null));
         // 间距没有"-1=没改"的哨兵（范围 0..32），shown 永远不会用到 —— 传默认值即可
-        rows.add(new Row(Page.GENERAL, "卡片间距",
-                "两张卡上下之间的空隙。卡内「框与框」的距离是另一回事，归主题 JSON",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.separation.name"),
+                tr("pickupcard.config.row.separation.hint"),
                 () -> decimal(v.separation, LayoutSettings.DEFAULT_SEPARATION, 0, 16),
                 restore(v.separation)));
-        rows.add(new Row(Page.GENERAL, "合并粒度",
-                "「同一种」的判定宽度，点一下换下一种：同名同附魔才并 → 同名就并 → 同名就并但改名不并 → 从不合并",
+        rows.add(new Row(Page.GENERAL, tr("pickupcard.config.row.mergeMode.name"),
+                tr("pickupcard.config.row.mergeMode.hint"),
                 () -> cycle(v.mergeMode, MergeMode.values(), ConfigPageSpec::mergeName),
                 restore(v.mergeMode)));
     }
@@ -153,40 +162,40 @@ public final class ConfigPageSpec {
 
     private static void addAnim(List<Row> rows, PickupCardConfig.Values v,
                                 StyleModel style, PickupCardSettings eff) {
-        rows.add(new Row(Page.ANIM, "入场", null, null, null));
-        rows.add(new Row(Page.ANIM, "入场时长",
-                "新卡从竖条后面滑出来到就位一共多久；调它预览会当场重演一遍",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.section.enter"), null, null, null));
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.enterMs.name"),
+                tr("pickupcard.config.row.enterMs.hint"),
                 () -> styleTime(v.stEnterMs, style.enterMs(), 0, 2_000, 40), restore(v.stEnterMs)));
-        rows.add(new Row(Page.ANIM, "入场动画",
-                "只关新卡滑出这一段：关掉后新卡直接出现，跳动和淡出不受影响",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.enterToggle.name"),
+                tr("pickupcard.config.row.enterToggle.hint"),
                 () -> styleSwitch(v.stEnterEnabled, style.enterEnabled()),
                 restore(v.stEnterEnabled)));
         // 【2026-09-19 搬家】展开方式 = 入场的形态（火车/拉幕），从前错放在位置页 ——
         // 玩家在动画页找不到它（审计第一问）。它跟入场时长是一伙的。
-        rows.add(new Row(Page.ANIM, "展开方式",
-                "新卡入场怎么从竖条右侧出现，点一下换下一种：火车（内容整块平移出来）→ 拉幕（可见范围从左往右展开）",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.appearMode.name"),
+                tr("pickupcard.config.row.appearMode.hint"),
                 () -> cycle(v.appearMode, LayoutSettings.Appear.values(), ConfigPageSpec::appearName),
                 restore(v.appearMode)));
-        rows.add(new Row(Page.ANIM, "停留与消失", null, null, null));
-        rows.add(new Row(Page.ANIM, "停留时长",
-                "一张卡从就位到开始淡出，在屏上待多久；连捡同一件会不断刷新这个计时",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.section.holdExit"), null, null, null));
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.holdMs.name"),
+                tr("pickupcard.config.row.holdMs.hint"),
                 () -> time(v.holdMs, eff.holdMs(), 500, 10_000, 250), restore(v.holdMs)));
-        rows.add(new Row(Page.ANIM, "消失方式",
-                "卡片怎么消失，点一下换下一种：火车退回（平移回竖条后，默认）→ 淡出（原地变透明）→ 拉幕收拢（可见范围从右往左收）。三种都叠加透明度下降",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.exitMode.name"),
+                tr("pickupcard.config.row.exitMode.hint"),
                 () -> cycle(v.exitMode, LayoutSettings.Exit.values(), ConfigPageSpec::exitName),
                 restore(v.exitMode)));
-        rows.add(new Row(Page.ANIM, "消失时长",
-                "上面那个消失动作用多久；0 = 到点立刻消失",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.exitMs.name"),
+                tr("pickupcard.config.row.exitMs.hint"),
                 () -> time(v.exitMs, eff.exitMs(), 0, 2_000, 20), restore(v.exitMs)));
-        rows.add(new Row(Page.ANIM, "合并与跳动", null, null, null));
-        rows.add(new Row(Page.ANIM, "数字跳动",
-                "连续捡同一种东西时，整张卡向外鼓一下、数字从旧值滚到新值",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.section.bump"), null, null, null));
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.bumpToggle.name"),
+                tr("pickupcard.config.row.bumpToggle.hint"),
                 () -> styleSwitch(v.stBumpEnabled, style.bumpEnabled()), restore(v.stBumpEnabled)));
-        rows.add(new Row(Page.ANIM, "跳动时长",
-                "上面那下「鼓」持续多久",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.bumpMs.name"),
+                tr("pickupcard.config.row.bumpMs.hint"),
                 () -> styleTime(v.stBumpMs, style.bumpMs(), 0, 1_000, 20), restore(v.stBumpMs)));
-        rows.add(new Row(Page.ANIM, "淡回时长",
-                "卡快淡完时又捡到同一种东西，多久补回不透明（已淡到快看不见时改按新卡重播）",
+        rows.add(new Row(Page.ANIM, tr("pickupcard.config.row.reviveMs.name"),
+                tr("pickupcard.config.row.reviveMs.hint"),
                 () -> styleTime(v.stReviveMs, style.reviveMs(), 0, 1_000, 20), restore(v.stReviveMs)));
     }
 
@@ -196,30 +205,26 @@ public final class ConfigPageSpec {
 
     private static void addLayout(List<Row> rows, PickupCardConfig.Values v,
                                   PickupCardSettings eff, AnchorBridge bridge) {
-        rows.add(new Row(Page.LAYOUT, "位置", null, null, null));
-        rows.add(new Row(Page.LAYOUT, "位置",
-                "整摞卡停在哪儿。点开整屏编辑场，按住那摞卡拖到想要的位置，"
-                        + "全屏幕随便拖、拖到哪儿就是哪儿；新卡永远贴着锚线、旧的向上顶。"
-                        + "位置按屏幕比例记忆，换缩放档不错位；锚线上放不下几张，"
-                        + "放不下的自己去排队",
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.section.position"), null, null, null));
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.row.position.name"),
+                tr("pickupcard.config.row.position.hint"),
                 () -> new NvgButton("", bridge::anchorValueText, bridge::openEditor), null));
-        rows.add(new Row(Page.LAYOUT, "水平对齐",
-                "锚线管卡的哪条边，点一下换下一种：竖条左缘锚定（竖条成一条线）→ 右缘对齐（右缘齐、左缘参差）。自动锚线跟着这一档各自解析",
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.row.align.name"),
+                tr("pickupcard.config.row.align.hint"),
                 () -> cycle(v.align, LayoutSettings.Side.values(), ConfigPageSpec::sideName),
                 restore(v.align)));
-        rows.add(new Row(Page.LAYOUT, "卡片缩放",
-                "100% 原样。「自动」= 锚线上快放不下整摞时按比例缩小，最小 60%",
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.row.scale.name"),
+                tr("pickupcard.config.row.scale.hint"),
                 () -> percent(v.scalePercent, PickupCardConfig.layoutSnapshot().scalePercent()),
                 restore(v.scalePercent)));
-        rows.add(new Row(Page.LAYOUT, "数量", null, null, null));
-        rows.add(new Row(Page.LAYOUT, "同屏上限",
-                "同时在屏最多几张。锚线上实在放不下时，放不下的先回队列等位子，不会硬消失",
-                () -> number(v.maxOnScreen, eff.maxOnScreen(), 1, 16, 1, " 张"),
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.section.count"), null, null, null));
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.row.maxOnScreen.name"),
+                tr("pickupcard.config.row.maxOnScreen.hint"),
+                () -> number(v.maxOnScreen, eff.maxOnScreen(), 1, 16, 1, tr("pickupcard.config.unit.cards")),
                 restore(v.maxOnScreen)));
-        rows.add(new Row(Page.LAYOUT, "排队上限",
-                "屏上满了就先排队（先来先上屏）；0 = 不排队，屏满之后的拾取直接丢掉。"
-                        + "排不上的会并进「还有 N 项」那张溢出卡",
-                () -> number(v.queueSize, eff.queueSize(), 0, 32, 1, " 张"),
+        rows.add(new Row(Page.LAYOUT, tr("pickupcard.config.row.queueSize.name"),
+                tr("pickupcard.config.row.queueSize.hint"),
+                () -> number(v.queueSize, eff.queueSize(), 0, 32, 1, tr("pickupcard.config.unit.cards")),
                 restore(v.queueSize)));
     }
 
@@ -228,39 +233,39 @@ public final class ConfigPageSpec {
     // ------------------------------------------------------------------
 
     private static void addLook(List<Row> rows, PickupCardConfig.Values v, StyleModel style) {
-        rows.add(new Row(Page.LOOK, "形状", null, null, null));
-        rows.add(new Row(Page.LOOK, "竖条宽度",
-                "最左那根稀有度颜色条的横向粗细；写回 -1 = 跟随主题（默认 2px）",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.section.shape"), null, null, null));
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.barWidth.name"),
+                tr("pickupcard.config.row.barWidth.hint"),
                 () -> styleNumber(v.stBarWidth, style.barWidth(), 1, 8, 1, "px"),
                 restore(v.stBarWidth)));
-        rows.add(new Row(Page.LOOK, "图标内边距",
-                "图标距卡顶、卡底各留多少；调大卡片变高，图标大小不变",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.paddingV.name"),
+                tr("pickupcard.config.row.paddingV.hint"),
                 () -> styleNumber(v.stPaddingV, style.paddingV(), 0, 8, 1, ""),
                 restore(v.stPaddingV)));
-        rows.add(new Row(Page.LOOK, "图标大小",
-                "原版物品图标是 16 —— 取 16 或它的整数倍最清晰",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.iconSize.name"),
+                tr("pickupcard.config.row.iconSize.hint"),
                 () -> styleNumber(v.stIconSize, style.iconSize(), 8, 64, 1, "px"),
                 restore(v.stIconSize)));
-        rows.add(new Row(Page.LOOK, "圆角",
-                "三个框的圆角半径；调到很大就变成胶囊",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.cornerRadius.name"),
+                tr("pickupcard.config.row.cornerRadius.hint"),
                 () -> styleNumber(v.stCornerRadius, style.cornerRadius(), 0, 16, 1, "px"),
                 restore(v.stCornerRadius)));
-        rows.add(new Row(Page.LOOK, "描边粗细",
-                "框描边的粗细；0 = 不描边",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.borderWidth.name"),
+                tr("pickupcard.config.row.borderWidth.hint"),
                 () -> styleNumber(v.stBorderWidth, style.borderWidth(), 0, 4, 1, "px"),
                 restore(v.stBorderWidth)));
-        rows.add(new Row(Page.LOOK, "颜色", null, null, null));
-        rows.add(new Row(Page.LOOK, "底色（上）",
-                "卡面渐变的上端。点色块换一个（第一下回到主题色）；要精确色值写 TOML 的 fillTop，如 #7DE38B",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.section.color"), null, null, null));
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.fillTop.name"),
+                tr("pickupcard.config.row.fillTop.hint"),
                 () -> color(v.stFillTop, style.fillTop()), restore(v.stFillTop)));
-        rows.add(new Row(Page.LOOK, "底色（下）",
-                "渐变的下端。和上面写成一样就是纯色；精确色值写 TOML 的 fillBottom",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.fillBottom.name"),
+                tr("pickupcard.config.row.fillBottom.hint"),
                 () -> color(v.stFillBottom, style.fillBottom()), restore(v.stFillBottom)));
-        rows.add(new Row(Page.LOOK, "描边颜色",
-                "框描边的颜色；精确色值写 TOML 的 border",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.borderColor.name"),
+                tr("pickupcard.config.row.borderColor.hint"),
                 () -> color(v.stBorder, style.border()), restore(v.stBorder)));
-        rows.add(new Row(Page.LOOK, "物品名颜色",
-                "名字的颜色；精确色值写 TOML 的 nameColor",
+        rows.add(new Row(Page.LOOK, tr("pickupcard.config.row.nameColor.name"),
+                tr("pickupcard.config.row.nameColor.hint"),
                 () -> color(v.stNameColor, style.nameColor()), restore(v.stNameColor)));
     }
 
@@ -271,11 +276,11 @@ public final class ConfigPageSpec {
     /** 「恢复本页默认」那行的说明：项数现算，杜绝"九项"那种手抄漂移。 */
     public static String restoreHint(Page page, int restorable) {
         if (page == Page.FILTER) {
-            return "清空三张名单 —— 误点会把你自己加的规则全删掉";
+            return tr("pickupcard.config.restore.filter");
         }
-        String base = "重置本页 " + restorable + " 项（其他页不动）";
+        String base = I18n.get("pickupcard.config.restore.count", restorable);
         if (page == Page.LAYOUT) {
-            return base + "；锚点不在这里 —— 它归编辑场的「回到默认」";
+            return base + tr("pickupcard.config.restore.anchorNote");
         }
         return base;
     }
@@ -360,7 +365,7 @@ public final class ConfigPageSpec {
                             : Math.max(LayoutSettings.MIN_SCALE_PERCENT, pct));
                     changed();
                 },
-                value -> value <= LayoutSettings.AUTO_SCALE ? "自动" : Math.round(value) + "%");
+                value -> value <= LayoutSettings.AUTO_SCALE ? tr("pickupcard.config.value.auto") : Math.round(value) + "%");
     }
 
     private static <E extends Enum<E>> NvgButton cycle(ForgeConfigSpec.EnumValue<E> config, E[] values,
@@ -409,20 +414,22 @@ public final class ConfigPageSpec {
     // ------------------------------------------------------------------
 
     private static String sideName(LayoutSettings.Side side) {
-        return side == LayoutSettings.Side.RIGHT ? "右缘对齐" : "竖条左缘锚定";
+        return tr(side == LayoutSettings.Side.RIGHT
+                ? "pickupcard.config.value.align.right" : "pickupcard.config.value.align.barLeft");
     }
 
     /** 草稿（design/animation.html）自己的叫法：火车＝平移，拉幕＝展开可见范围。 */
     private static String appearName(LayoutSettings.Appear appear) {
-        return appear == LayoutSettings.Appear.CLIP ? "拉幕" : "火车";
+        return tr(appear == LayoutSettings.Appear.CLIP
+                ? "pickupcard.config.value.appear.clip" : "pickupcard.config.value.appear.train");
     }
 
     /** 与入场对称的那一半：淡出 / 火车退回 / 拉幕收拢。 */
     private static String exitName(LayoutSettings.Exit exit) {
         return switch (exit) {
-            case TRAIN -> "火车退回";
-            case WIPE -> "拉幕收拢";
-            default -> "淡出";
+            case TRAIN -> tr("pickupcard.config.value.exit.trainBack");
+            case WIPE -> tr("pickupcard.config.value.exit.wipe");
+            default -> tr("pickupcard.config.value.exit.fade");
         };
     }
 
@@ -437,10 +444,10 @@ public final class ConfigPageSpec {
 
     private static String mergeName(MergeMode mode) {
         return switch (mode) {
-            case SAME_ITEM -> "同名就并";
-            case SAME_ITEM_KEEP_NAMED -> "改名不并";
-            case NEVER -> "从不合并";
-            default -> "同名同附魔才并";
+            case SAME_ITEM -> tr("pickupcard.config.value.merge.sameItem");
+            case SAME_ITEM_KEEP_NAMED -> tr("pickupcard.config.value.merge.keepNamed");
+            case NEVER -> tr("pickupcard.config.value.merge.never");
+            default -> tr("pickupcard.config.value.merge.strict");
         };
     }
 }
