@@ -367,12 +367,18 @@ public final class DevHarness {
                     return;
                 }
                 PickupCard.LOGGER.info("[harness-auto] 进编辑场: {}", editor.stateDump());
-                // 真实事件路径拖到 (70%, 60%)，dump 出来"变没变"一眼可读
+                // 真实事件路径拖到 (70%,60%)，dump 出来"变没变"一眼可读
                 editor.dragForHarness(0.70, 0.60);
                 PickupCard.LOGGER.info("[harness-auto] 拖到 (70%,60%) 后: {}", editor.stateDump());
+                // 2026-09-19 方案一（所见即所得）：拍下括号/锚线/贴边提示 —— 堆被夹住时
+                // 锚线还在动，这张图就是"诚实"二字的证据
+                capture(mc, "editor-dragged");
                 return;
             }
             if (configTicks == WARMUP_TICKS + 48) {
+                // 先拍再取消：这一帧才是拖完之后的（上一帧缓冲已按锚点 0.70/0.60 渲染过）
+                // —— 括号被夹在边距上 + 「卡已贴边距」提示，方案一所见即所得的定妆照
+                capture(mc, "editor-clamped");
                 // Esc 取消：配置必须原样（没写盘），回到配置界面
                 if (mc.screen instanceof AnchorEditScreen editor) {
                     editor.cancelForHarness();
@@ -496,19 +502,54 @@ public final class DevHarness {
                 PickupCard.LOGGER.info("[harness-auto] 删完的过滤页: {}", configLabels(mc));
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 110 && configTicks < WARMUP_TICKS + 111 + CYCLE_EVERY * CYCLE_FRAMES
-                    && (configTicks - WARMUP_TICKS - 111) % CYCLE_EVERY == 0) {
+            if (configTicks == WARMUP_TICKS + 107) {
+                // 2026-09-19 重构回归线：展开方式搬进动画页 + 恢复默认单一出处 + 舞台唯一身份
+                clickByLabel(mc, "动画");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 108) {
+                // 恢复默认：恢复后「消失方式」必须是正本默认（火车退回）——
+                // 从前手抄默认值漂成 FADE，点恢复反而把设置改错
+                PickupCard.LOGGER.info("[harness-auto] 恢复前: {}", configLabels(mc));
+                clickByLabel(mc, "恢复本页默认");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 109) {
+                PickupCard.LOGGER.info("[harness-auto] 恢复后: {}", configLabels(mc));
+                // 连来三张：三张卡必须三把不同的平滑账（键唯一），y 值各不相同 ——
+                // 从前同款卡共用一个身份，全部钉在同一个 y 上（"预览卡片重叠"）
+                clickByLabel(mc, "来一张");
+                clickByLabel(mc, "来一张");
+                clickByLabel(mc, "来一张");
+                PickupCard.LOGGER.info("[harness-auto] 连来三张: {}", configState(mc));
+                capture(mc, "stage-cards");
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 110) {
+                PickupCard.LOGGER.info("[harness-auto] 舞台停稳后: {}", configState(mc));
+                return;
+            }
+            if (configTicks == WARMUP_TICKS + 114 || configTicks == WARMUP_TICKS + 117) {
+                // 三张卡是同一 tick 放进去的，入场要走 ~0.4s 才走到"看得见"：等两拍再拍，
+                // 拍的就是"三张卡三个位置、三把身份"的本尊（重叠 bug 的反面证据）
+                PickupCard.LOGGER.info("[harness-auto] 舞台入场中: {}", configState(mc));
+                capture(mc, configTicks == WARMUP_TICKS + 114 ? "stage-mid" : "stage-settled");
+                return;
+            }
+            if (configTicks >= WARMUP_TICKS + 118 && configTicks < WARMUP_TICKS + 118 + CYCLE_EVERY * CYCLE_FRAMES
+                    && (configTicks - WARMUP_TICKS - 118) % CYCLE_EVERY == 0) {
                 // 【为什么要在收工之后还拍一段】用户第 2 条要的是"预览重播设计时间线" ——
                 // 而"重播有没有真的发生"只有跨一个周期比像素才答得出来。回到通用页（单卡预览），
                 // 连拍一串；周期 4.6s，取 5 张、每张隔 1.2s，必然覆盖到入场 / 停 / 脉冲 / 淡出。
-                if (configTicks == WARMUP_TICKS + 111) {
+                // 【118 起拍】前面挪进了"舞台三连拍"（+114/+117），连拍起点跟着后移。
+                if (configTicks == WARMUP_TICKS + 118) {
                     clickByLabel(mc, "通用");
                     PickupCard.LOGGER.info("[harness-auto] 重播连拍：回到通用页看单卡预览");
                 }
-                capture(mc, "config-cycle" + ((configTicks - WARMUP_TICKS - 111) / CYCLE_EVERY));
+                capture(mc, "config-cycle" + ((configTicks - WARMUP_TICKS - 118) / CYCLE_EVERY));
                 return;
             }
-            if (configTicks >= WARMUP_TICKS + 111 + CYCLE_EVERY * CYCLE_FRAMES) {
+            if (configTicks >= WARMUP_TICKS + 118 + CYCLE_EVERY * CYCLE_FRAMES) {
                 PickupCard.LOGGER.info("[harness-auto] 配置界面模式收工，退出客户端");
                 mc.stop();
             }

@@ -3,8 +3,7 @@ package com.niuqu.pickupcard.config;
 import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.layout.HudSafeZone;
 import com.niuqu.pickupcard.layout.LayoutSettings;
-import com.niuqu.pickupcard.notice.Notice;
-import com.niuqu.pickupcard.pickup.Inbox;
+import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.render.CardCanvas;
 import com.niuqu.pickupcard.render.CardMetrics;
 import com.niuqu.pickupcard.render.CardSlot;
@@ -16,6 +15,7 @@ import com.niuqu.pickupcard.render.nvg.ui.NvgPalette;
 import com.niuqu.pickupcard.render.nvg.ui.NvgUi;
 import com.niuqu.pickupcard.render.nvg.ui.NvgWidget;
 import com.niuqu.pickupcard.style.CardTimeline;
+import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.client.gui.screens.Screen;
@@ -33,19 +33,19 @@ import java.util.List;
  * 就是真屏上的一大段，拖不准；而且"位置好不好"是遮挡关系的问题 —— 真实 HUD、准星、
  * 侧栏都在 1:1 画布上，缩小的模拟屏看不出来。与 keyhud 的拖拽编辑同一套路。
  *
+ * <p>【所见即所得（2026-09-19 方案一，审计第三问的定案）】从前编辑场自己算一套几何：
+ * 区域框夹在"离右缘一个占地宽"里，游戏里又夹在"离右缘一个卡宽"里，存进配置的锚点却
+ * 两边都不管 —— 三层各夹各的，拖到头"堆不动、设了没反应"。现在样例堆直接走
+ * {@link StackLayout#stack}（与游戏同一条公式、同一个夹取）：堆停下的地方就是游戏里
+ * 会画的地方；锚线单独画出来 —— 被边距夹住时锚线还在动，"拖了没反应"不再是谜，
+ * 界面上明说「卡已贴边距」。
+ *
+ * <p>【抓取以卡为基准】按住的是卡，偏移就记"手与卡的相对位置"（从前记的是手与锚线的，
+ * 卡被夹住时离锚线有一段距离，拖动要先吃掉这段死区卡才动）。
+ *
  * <p>【真卡为什么要挂起】屏幕上只能有一摞卡。编辑场自己画一摞样例（当前配置的样子），
  * 真卡若照画就叠在一起分不清谁是谁；{@link CardStage#setSuspended} 只是"这几帧不画"，
  * 背后的账本照旧 —— 取消退出时玩家的提示一条不少。
- *
- * <p>【区域框是"承诺"，卡是"样子"】虚框（四角括号）画的是这一套配置下卡堆的<b>最大占地</b>
- * （最宽样例 × 同屏上限，向上长），拨同屏上限/缩放/名字宽度它都跟着变；框里实际画几张
- * 样例只是示意（画满 16 张只会变成一堵墙），所以框上带一句「示意」—— 最大占地按
- * <b>样例</b>的最宽算，玩家真捡到更长的名字时卡会更宽（2026-09-19 补的实话）。
- * 框与示例堆都<b>跟着「水平对齐」档走</b>：左缘档锚线在框左、右缘档锚线在框右 ——
- * 从前永远按左缘画，右缘对齐的玩家在编辑场里看到的和游戏里差一张卡宽。
- * <b>全屏幕随便拖</b>（2026-09-19 用户拍板删掉自造的夹取圈）：拖到哪儿就是哪儿，
- * 压到 HUD 带上也照存，编辑场画的就是游戏里会画的位置。
- * 卡堆<b>向上生长</b>（2026-09-19 底锚定案）：锚线 = 最新那张的顶边，旧的往上排。
  */
 public final class AnchorEditScreen extends Screen {
 
@@ -60,8 +60,11 @@ public final class AnchorEditScreen extends Screen {
     private float anchorY;
 
     private boolean dragging;
+    /** 手与<b>最新那张卡</b>左上角的偏移（抓取以卡为基准 —— 见类注释）。 */
     private double grabDx;
     private double grabDy;
+    /** 抓住那张卡的宽（右缘对齐时锚线 = 卡右缘，要用它折算）。 */
+    private float grabW;
 
     private long now;
     private NvgButton saveButton;
@@ -107,7 +110,7 @@ public final class AnchorEditScreen extends Screen {
     }
 
     // ------------------------------------------------------------------
-    // 几何：编辑中的锚点（与游戏里同一套公式）
+    // 几何：编辑中的锚点（与游戏同一套公式、同一个夹取）
     // ------------------------------------------------------------------
 
     /** 编辑中的布局快照：展开/消失/对齐/间距/缩放照当前配置，锚点用编辑中的值。 */
@@ -122,17 +125,92 @@ public final class AnchorEditScreen extends Screen {
     }
 
     private float cardScale() {
-        return PickupCardConfigScreen.previewScale();
+        return PreviewStage.scale();
     }
 
-    /** 锚点像素 x（编辑中的值；自动档照公式解析，玩家看见的就是游戏里会有的）。 */
-    private float anchorLeftPx() {
-        return editing().anchorLeft(this.width);
+    /** 编辑场画布：与配置界面预览同一条构造路（settings/layout 取当前生效值）。 */
+    private CardCanvas canvas(StyleModel style, float scale) {
+        return new CardCanvas(now,
+                new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(),
+                        style.bumpEnabled()),
+                style, PickupCardConfig.snapshot(), PickupCardConfig.layoutSnapshot(),
+                this.width, this.height, scale);
     }
 
-    /** 锚点像素 y：带"至少放得下一张卡"的夹取（与游戏里同一公式）。 */
-    private float anchorTopPx(float cardHeight) {
-        return editing().anchorTop(this.height, cardHeight, HudSafeZone.bottomInset());
+    /**
+     * 样例堆的槽位：<b>与游戏完全同一条排布</b> —— 同一公式、同一个"卡不出边距"夹取
+     * （所见即所得）。堆最多画五张示意（画满同屏上限只会变成一堵墙，括号已经把
+     * 最大占地说清楚了）。
+     */
+    private List<CardSlot> sampleSlots() {
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        float scale = cardScale();
+        CardCanvas canvas = canvas(style, scale);
+        var font = Minecraft.getInstance().font;
+        LayoutSettings lay = editing();
+        PreviewStage.Sample[] samples = PreviewStage.Sample.values();
+        int count = Math.min(5, Math.max(1, v.maxOnScreen.get()));
+        float cardH = CardMetrics.height(canvas, font);
+        List<CardView> views = new ArrayList<>(count);
+        List<StackLayout.Size> sizes = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            CardView view = PreviewStage.settledView(samples[i % samples.length]);
+            views.add(view);
+            sizes.add(new StackLayout.Size(CardMetrics.width(canvas, font, view), cardH));
+        }
+        // 游戏侧的实参一字不差：宽度上限夹取、底部留白、卡间距全同源
+        List<StackLayout.Slot> slots = StackLayout.stack(sizes, this.width, this.height, lay,
+                CardStage.MARGIN_X, HudSafeZone.bottomInset(), lay.separation());
+        List<CardSlot> out = new ArrayList<>(count);
+        for (int i = 0; i < count; i++) {
+            StackLayout.Slot s = slots.get(i);
+            out.add(new CardSlot(views.get(i), s.x(), s.y(), s.width(), s.height()));
+        }
+        return out;
+    }
+
+    /**
+     * 最大占地的括号：按"最宽样例 × 同屏上限"跑一遍同一套排布，取并集 ——
+     * 框因此天然被同一个边距夹住，不再有自己的那套夹取。
+     */
+    private record Bracket(float x, float y, float w, float h, boolean clamped) {
+    }
+
+    private Bracket bracket() {
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        float scale = cardScale();
+        CardCanvas canvas = canvas(style, scale);
+        var font = Minecraft.getInstance().font;
+        LayoutSettings lay = editing();
+        float cardH = CardMetrics.height(canvas, font);
+        float widest = 0f;
+        for (PreviewStage.Sample s : PreviewStage.Sample.values()) {
+            widest = Math.max(widest, CardMetrics.naturalWidth(canvas, font, PreviewStage.settledView(s)));
+        }
+        widest *= scale;
+        int rows = Math.max(1, v.maxOnScreen.get());
+        List<StackLayout.Size> sizes = new ArrayList<>(rows);
+        for (int i = 0; i < rows; i++) {
+            sizes.add(new StackLayout.Size(widest, cardH));
+        }
+        List<StackLayout.Slot> slots = StackLayout.stack(sizes, this.width, this.height, lay,
+                CardStage.MARGIN_X, HudSafeZone.bottomInset(), lay.separation());
+        float minX = Float.MAX_VALUE;
+        float minY = Float.MAX_VALUE;
+        float maxX = -Float.MAX_VALUE;
+        float maxY = -Float.MAX_VALUE;
+        for (StackLayout.Slot s : slots) {
+            minX = Math.min(minX, s.x());
+            minY = Math.min(minY, s.y());
+            maxX = Math.max(maxX, s.x() + s.width());
+            maxY = Math.max(maxY, s.y() + s.height());
+        }
+        // 贴边判定：最新那张"想停"的 x（意图）与实际被夹到的 x 对不上 = 贴边了
+        float intent = lay.align() == LayoutSettings.Side.RIGHT
+                ? lay.anchorLeft(this.width) - widest
+                : lay.anchorLeft(this.width);
+        boolean clamped = Math.abs(slots.get(0).x() - intent) > 0.5f;
+        return new Bracket(minX, minY, Math.max(1f, maxX - minX), Math.max(1f, maxY - minY), clamped);
     }
 
     // ------------------------------------------------------------------
@@ -145,7 +223,7 @@ public final class AnchorEditScreen extends Screen {
         // 世界之上盖一层薄暮色：括号和字读得出，遮挡关系还看得清
         gui.fill(0, 0, this.width, this.height, 0x59000000);
 
-        StyleGeometry g = geometry();
+        Bracket b = bracket();
         try (NvgUi ui = NvgUi.begin(gui, palette, mouseX, mouseY, now)) {
             if (ui != null) {
                 ui.text(this.title.getString(), 8f, 6f, 0xFFFFFFFF);
@@ -153,7 +231,7 @@ public final class AnchorEditScreen extends Screen {
                                 : String.format(java.util.Locale.ROOT, "当前：自定义 (x=%.2f, y=%.2f 屏)",
                                 anchorX, anchorY),
                         8f, 17f, palette.textDim);
-                drawRegionBrackets(ui, g);
+                drawBrackets(ui, b);
                 for (NvgWidget w : buttons) {
                     w.mouseMoved(mouseX, mouseY);
                     w.draw(ui);
@@ -161,50 +239,18 @@ public final class AnchorEditScreen extends Screen {
                 ui.textRight("Esc 取消 · Enter 完成", this.width - 8f, this.height - 12f, palette.textDim);
             }
         }
-        paintSampleStack(gui, g);
+        paintSampleStack(gui);
     }
 
-    /** 这一帧的编辑场几何：锚线、区域框（最宽样例 × 同屏上限，向上长）、样例卡的位置。 */
-    private record StyleGeometry(float regionLeft, float anchorTop, float cardH, float regionW,
-                                 float regionH, float scale) {
-        /** 区域框的顶：卡堆向上生长，堆高 = 同屏上限 × 卡高 + 间隙，锚线在堆底。 */
-        float regionTop() {
-            return anchorTop - (regionH - cardH);
-        }
-    }
-
-    private StyleGeometry geometry() {
-        var style = CardStage.INSTANCE.previewStyle();
-        float scale = cardScale();
-        float cardH = style.boxHeight() * scale;
-        float line = anchorLeftPx();
-        float top = anchorTopPx(cardH);
-        float gap = v.separation.get().floatValue() * scale;
-        float widest = 0f;
-        for (PickupCardConfigScreen.Sample s : PickupCardConfigScreen.Sample.values()) {
-            widest = Math.max(widest, CardMetrics.naturalWidth(canvas(style, scale),
-                    Minecraft.getInstance().font, editorView(s)));
-        }
-        int rows = v.maxOnScreen.get();
-        float regionW = Math.max(24f, widest);
-        float regionH = Math.max(cardH, rows * cardH + (rows - 1) * gap);
-        // 【区域框跟着对齐档长】右缘对齐时锚线管的是卡右缘 —— 框在锚线左边，不在右边。
-        // 从前永远按左缘画，选了右缘对齐的玩家看到的示例和游戏里差一整张卡宽。
-        float regionLeft = editing().align() == LayoutSettings.Side.RIGHT
-                ? line - regionW : line;
-        regionLeft = Math.max(0f, Math.min(regionLeft, this.width - regionW));
-        return new StyleGeometry(regionLeft, top, cardH, regionW, regionH, scale);
-    }
-
-    /** 区域框 = 四角括号（虚线在 NanoVG 里要自己拼，括号更快也更轻）。框随底锚向上长。 */
-    private void drawRegionBrackets(NvgUi ui, StyleGeometry g) {
+    /** 区域括号 + 锚线。框是"承诺"，卡是"样子"，锚线是"意图" —— 三样说的都是同一套几何。 */
+    private void drawBrackets(NvgUi ui, Bracket b) {
         float len = 10f;
         float t = 2f;
         int color = ui.palette.accent;
-        float x = g.regionLeft();
-        float y = g.regionTop();
-        float x2 = x + g.regionW();
-        float y2 = y + g.regionH();
+        float x = b.x();
+        float y = b.y();
+        float x2 = x + b.w();
+        float y2 = y + b.h();
         // 四个角，每个角两条短线
         ui.fillRoundRect(x, y, len, t, 1f, color);
         ui.fillRoundRect(x, y, t, len, 1f, color);
@@ -214,60 +260,36 @@ public final class AnchorEditScreen extends Screen {
         ui.fillRoundRect(x, y2 - len, t, len, 1f, color);
         ui.fillRoundRect(x2 - len, y2 - t, len, t, 1f, color);
         ui.fillRoundRect(x2 - t, y2 - len, t, len, 1f, color);
-        // 【为什么写"示意"】框宽按<b>样例</b>的最宽算 —— 玩家真捡到更长的名字时卡会更宽，
-        // 这句话把"框不是硬承诺"说明白，免得被当成对不上的 bug。
+        // 【为什么写"示意"】框宽按<b>样例</b>的最宽算 —— 玩家真捡到更长的名字时卡会更宽。
         ui.text("示意占地（按样例宽）", x, y - 11f, ui.palette.textDim);
+        // 锚线：意图的那条竖线。堆被边距夹住时它还在动 —— "拖了没反应"从这里变成"看得见的让位"
+        float line = editing().anchorLeft(this.width);
+        ui.fillRoundRect(line - 0.75f, y - 8f, 1.5f, (y2 + 8f) - (y - 8f), 0.75f,
+                NvgUi.fade(color, 0.45f));
+        if (b.clamped()) {
+            ui.text("卡已贴边距：锚线再往右，卡也不会越过屏幕边距", x, y2 + 4f, ui.palette.textDim);
+        }
     }
 
     /**
      * 编辑场里的样例堆：与配置界面预览同一套样例、同一个画笔、同一个缩放 ——
-     * 编辑场里看到的多宽多高，游戏里就是多宽多高。最多画五张示意（画满同屏上限只会
-     * 变成一堵墙，区域框已经把"最大占地"说清楚了）。
-     * <p>【向上生长（2026-09-19 底锚）】锚线 = 最新那张的顶边，旧的往上排；出了屏幕顶的
-     * 不画 —— 框已经说明那里还有位子。
+     * 编辑场里看到的多宽多高，游戏里就是多宽多高。
+     * <p>【贴着容量画】游戏里放不下的卡根本不会上屏（几何容量门把它们退回排队），
+     * 编辑场照办：容量之外的示意卡不画 —— 这也是"所见即所得"的一半。
      */
-    private void paintSampleStack(GuiGraphics gui, StyleGeometry g) {
-        PickupCardConfigScreen.Sample[] samples = PickupCardConfigScreen.Sample.values();
-        int count = Math.min(5, v.maxOnScreen.get());
-        float gap = v.separation.get().floatValue() * g.scale();
-        var style = CardStage.INSTANCE.previewStyle();
-        var font = Minecraft.getInstance().font;
-        List<CardSlot> slots = new ArrayList<>();
-        float y = g.anchorTop();
-        for (int i = 0; i < count; i++) {
-            if (y < 0f) {
-                break;      // 出了屏幕顶的部分不画 —— 框已经说明那里还有位子
-            }
-            CardView view = editorView(samples[i % samples.length]);
-            float w = Math.min(CardMetrics.naturalWidth(canvas(style, g.scale()), font, view) * g.scale(),
-                    g.regionW());
-            // 示例堆与游戏同一条规则：左缘档竖条贴锚线，右缘档卡右缘贴锚线
-            float x = editing().align() == LayoutSettings.Side.RIGHT
-                    ? g.regionLeft() + g.regionW() - w : g.regionLeft();
-            slots.add(new CardSlot(view, x, y, w, g.cardH()));
-            y -= g.cardH() + gap;
-        }
+    private void paintSampleStack(GuiGraphics gui) {
+        StyleModel style = CardStage.INSTANCE.previewStyle();
+        float scale = cardScale();
+        LayoutSettings lay = editing();
+        float unscaledH = style.boxHeight();
+        int capacity = StackLayout.fittingCount(
+                lay.anchorTop(this.height, unscaledH, HudSafeZone.bottomInset()),
+                unscaledH, lay.separation());
+        List<CardSlot> all = sampleSlots();
+        List<CardSlot> slots = all.subList(0, Math.min(all.size(), Math.max(0, capacity)));
         if (!slots.isEmpty()) {
-            painter.paint(gui, canvas(style, g.scale()), slots);
+            painter.paint(gui, canvas(style, scale), slots);
         }
-    }
-
-    /** 编辑场画布：与配置界面预览同一条构造路（settings/layout 取当前生效值）。 */
-    private CardCanvas canvas(com.niuqu.pickupcard.style.StyleModel style, float scale) {
-        return new CardCanvas(now,
-                new CardTimeline(style.enterMs(), style.bumpMs(), style.enterEnabled(),
-                        style.bumpEnabled()),
-                style, PickupCardConfig.snapshot(), PickupCardConfig.layoutSnapshot(),
-                this.width, this.height, scale);
-    }
-
-    /**
-     * 编辑场自己的样例卡：born 在很久以前 → 入场已完成、无退场计划。
-     * 拖动的时候卡必须稳定 —— 重播动画会让"拖到哪"变得看不清。
-     */
-    private static CardView editorView(PickupCardConfigScreen.Sample s) {
-        Notice<Inbox.Card> notice = PickupCardConfigScreen.previewNotice(s, s.amount, -10_000L);
-        return new CardView(notice);
     }
 
     // ------------------------------------------------------------------
@@ -281,10 +303,12 @@ public final class AnchorEditScreen extends Screen {
                 return true;
             }
         }
-        // 点空白处即开始拖：偏移记的是"手与卡堆的相对位置"，卡不会跳到指针底下
+        // 点空白处即开始拖：偏移记的是"手与卡的相对位置"，卡不会跳到指针底下
         dragging = true;
-        grabDx = mouseX - anchorLeftPx();
-        grabDy = mouseY - anchorTopPx(CardStage.INSTANCE.previewStyle().boxHeight() * cardScale());
+        CardSlot newest = sampleSlots().get(0);
+        grabDx = mouseX - newest.x();
+        grabDy = mouseY - newest.y();
+        grabW = newest.width();
         return true;
     }
 
@@ -294,7 +318,7 @@ public final class AnchorEditScreen extends Screen {
             w.mouseDragged(mouseX, mouseY);
         }
         if (dragging) {
-            setAnchorPx(mouseX - grabDx, mouseY - grabDy);
+            setAnchorFromCard(mouseX - grabDx, mouseY - grabDy);
         }
         return true;
     }
@@ -327,11 +351,17 @@ public final class AnchorEditScreen extends Screen {
     }
 
     /**
-     * 把锚点设到屏幕坐标（逻辑 px）。<b>全屏幕随便拖（2026-09-19 用户拍板）</b>：
-     * 从前这里自作主张夹了"离右缘 26px / HUD 带上方"一圈，屏幕底部一整条拖进去没反应 ——
-     * 用户原话"拖不了，有限制"。锚点是玩家的明确选择，压到快捷栏上也照存；
-     * 放得下几张由游戏侧的几何容量自己少排，编辑场画的就是真实会画的位置。
+     * 把锚点设到"让最新那张卡的边贴到这里"。以<b>卡</b>为基准而不是锚线：抓着卡拖，
+     * 卡就该跟着手走（被边距夹住时除外 —— 那是游戏里真实会发生的事，锚线会替它走）。
+     * <b>全屏幕随便拖（2026-09-19 用户拍板）</b>：锚点本身没有任何自造的夹取圈，
+     * 压到 HUD 带上也照存；放得下几张由游戏侧的几何容量自己少排。
      */
+    private void setAnchorFromCard(double cardLeft, double cardTop) {
+        float lineX = (float) cardLeft
+                + (editing().align() == LayoutSettings.Side.RIGHT ? grabW : 0f);
+        setAnchorPx(lineX, cardTop);
+    }
+
     private void setAnchorPx(double x, double y) {
         float px = (float) Math.max(0, Math.min(x, this.width));
         float py = (float) Math.max(0, Math.min(y, this.height));
@@ -349,7 +379,7 @@ public final class AnchorEditScreen extends Screen {
     private void saveAndClose() {
         v.anchorX.set((double) Math.round(anchorX * 1000f) / 1000.0);
         v.anchorY.set((double) Math.round(anchorY * 1000f) / 1000.0);
-        PickupCardConfigScreen.changed();
+        ConfigPageSpec.changed();
         Minecraft.getInstance().setScreen(parent);
     }
 
@@ -363,16 +393,18 @@ public final class AnchorEditScreen extends Screen {
     // ------------------------------------------------------------------
 
     public String stateDump() {
+        Bracket b = bracket();
         return String.format(java.util.Locale.ROOT,
-                "编辑场 锚点=(%.3f,%.3f)%s 区域=%.0fx%.0f 真卡挂起=%s",
-                anchorX, anchorY, isAuto() ? "（自动）" : "", geometry().regionW(), geometry().regionH(),
+                "编辑场 锚点=(%.3f,%.3f)%s 占地=%.0fx%.0f@(%d,%d)%s 真卡挂起=%s",
+                anchorX, anchorY, isAuto() ? "（自动）" : "", b.w(), b.h(),
+                Math.round(b.x()), Math.round(b.y()), b.clamped() ? " 已贴边距" : "",
                 CardStage.INSTANCE.suspended());
     }
 
-    /** 走真实事件路径拖一次：按在锚点上（偏移=0）→ 拖到目标分数 → 松开。 */
+    /** 走真实事件路径拖一次：按在最新那张卡上（偏移=0）→ 拖到目标分数 → 松开。 */
     public boolean dragForHarness(double fx, double fy) {
-        float cardH = CardStage.INSTANCE.previewStyle().boxHeight() * cardScale();
-        mouseClicked(anchorLeftPx(), anchorTopPx(cardH), 0);
+        CardSlot newest = sampleSlots().get(0);
+        mouseClicked(newest.x(), newest.y(), 0);
         mouseDragged(fx * this.width, fy * this.height, 0, 0, 0);
         mouseReleased(fx * this.width, fy * this.height, 0);
         return true;

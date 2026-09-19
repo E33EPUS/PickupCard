@@ -55,6 +55,11 @@ public final class CardMove {
         return previous;
     }
 
+    /** 只读：这张卡当前画在哪（没上过屏返回 null）。给诊断读数用 —— "重叠与否"只有数字能定案。 */
+    public Float drawnY(String key) {
+        return drawn.get(key);
+    }
+
     /** 忘掉已经不在屏上的卡，免得账越记越长。 */
     public void retain(Set<String> liveKeys) {
         drawn.keySet().retainAll(liveKeys);
