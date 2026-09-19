@@ -381,8 +381,8 @@ public final class PickupCardConfigScreen extends Screen {
         itemsScroll = new NvgScroll(lo.items().x(), lo.items().y(), lo.items().w(), lo.items().h());
         itemsScroll.scrollTo(keep ? savedScrollOffset : 0f);
 
-        // 预览按页分工：离开动画页收舞台；回来时重新开场（节拍从头起）
-        preview.setStageMode(stagePage(), sample);
+        // 预览按页分工（2026-09-19 grill 定案）：动画页舞台、位置页整屏缩影、其余页静止特写
+        preview.setMode(previewMode(), sample);
 
         restoreRow(page);
         if (page == ConfigPageSpec.Page.FILTER) {
@@ -402,9 +402,19 @@ public final class PickupCardConfigScreen extends Screen {
         layoutRows();
     }
 
-    /** 预览的分工：动画页跑三张真卡的自动舞台；其他页一张静止完整卡。 */
+    /** 预览的分工：动画页跑三张真卡的自动舞台；位置页整屏缩影；其余页一张静止完整卡。 */
     private boolean stagePage() {
         return page == ConfigPageSpec.Page.ANIM;
+    }
+
+    private PreviewStage.Mode previewMode() {
+        if (page == ConfigPageSpec.Page.ANIM) {
+            return PreviewStage.Mode.STAGE;
+        }
+        if (page == ConfigPageSpec.Page.LAYOUT) {
+            return PreviewStage.Mode.MINIMAP;
+        }
+        return PreviewStage.Mode.STATIC;
     }
 
     /** 「恢复本页默认」那一行：每页第一行，行动作、不是配置项。项数现算，不再手抄。 */
@@ -811,12 +821,18 @@ public final class PickupCardConfigScreen extends Screen {
 
     @Override
     public boolean mouseClicked(double mouseX, double mouseY, int button) {
-        // 【点预览 = 放一张】动画页来一张新的走完整时间线；其他页重播一次入场
+        // 【点预览 = 放一张】动画页来一张新的走完整时间线；其他页重播一次入场。
+        // 【位置页例外】预览这时是整屏缩影 —— 点它直接开拖拽编辑场：在缩略图上看到
+        // 位置不满意，下一步动作必然是"去调位置"，给他一步到位。
         ConfigLayout.Rect previewArea = layout().previewCard();
         if (layout().previewVisible()
                 && mouseX >= previewArea.x() && mouseX < previewArea.right()
                 && mouseY >= previewArea.y() && mouseY < previewArea.bottom()) {
-            preview.playOnce(now, sample);
+            if (page == ConfigPageSpec.Page.LAYOUT) {
+                openAnchorEditor();
+            } else {
+                preview.playOnce(now, sample);
+            }
             return true;
         }
         ConfigLayout.Rect items = layout().items();

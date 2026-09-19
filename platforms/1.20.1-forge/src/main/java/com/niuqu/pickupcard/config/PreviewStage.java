@@ -2,7 +2,9 @@ package com.niuqu.pickupcard.config;
 
 import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.layout.CardMove;
+import com.niuqu.pickupcard.layout.HudSafeZone;
 import com.niuqu.pickupcard.layout.LayoutSettings;
+import com.niuqu.pickupcard.layout.StackLayout;
 import com.niuqu.pickupcard.notice.Notice;
 import com.niuqu.pickupcard.notice.PickupCardSettings;
 import com.niuqu.pickupcard.pickup.CardContent;
@@ -10,12 +12,14 @@ import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.render.CardCanvas;
 import com.niuqu.pickupcard.render.CardMetrics;
 import com.niuqu.pickupcard.render.CardSlot;
+import com.niuqu.pickupcard.render.CardStage;
 import com.niuqu.pickupcard.render.CardView;
 import com.niuqu.pickupcard.render.nvg.NvgCardPainter;
 import com.niuqu.pickupcard.render.nvg.ui.ConfigLayout;
 import com.niuqu.pickupcard.style.CardTimeline;
 import com.niuqu.pickupcard.style.StyleModel;
 import net.minecraft.client.Minecraft;
+import net.minecraft.client.gui.GuiGraphics;
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.item.Item;
@@ -42,8 +46,29 @@ import java.util.Locale;
  * 一张卡，"三张真卡的自动舞台"名不副实，退场只能靠手动点爆（用户报的"还没退出动画"）。
  * 现在每四拍并一次（演示合并脉冲 + 数字滚动），其余开新卡：容量到了自然有老卡退场，
  * 动画页要调的入场→停留→消失一整条链自己会演完。
+ *
+ * <p>【三种模式（2026-09-19 grill 定案）】
+ * <ul>
+ *   <li>{@link Mode#STAGE} —— 动画页：三张真卡的自动舞台，贴面板底向上长；</li>
+ *   <li>{@link Mode#STATIC} —— 其余页：一张居中的静止完整卡，看"卡长什么样"；</li>
+ *   <li>{@link Mode#MINIMAP} —— 位置页：<b>整屏等比缩影</b>。用户 grill 定案"预览要和
+ *       游戏里的位置对得上"：整块屏幕按面板宽等比缩进预览（HUD 带画暗示线），卡按
+ *       真实的锚点/对齐/同屏上限/缩放公式排在缩影里 —— 与游戏同一条
+ *       {@link StackLayout#stack}，位置一眼对上。取舍已言明：缩影里的卡很小，
+ *       但位置页要的就是位置感；看卡的长相去别的页（特写）。</li>
+ * </ul>
  */
 public final class PreviewStage {
+
+    /** 预览模式，见类注释。 */
+    public enum Mode {
+        /** 动画页：自动舞台。 */
+        STAGE,
+        /** 默认：居中静止卡（特写）。 */
+        STATIC,
+        /** 位置页：整屏等比缩影。 */
+        MINIMAP
+    }
 
     /** 舞台节拍：每隔这么长时间来一拍（略放慢，看得清退场）。 */
     private static final long BEAT_MS = 1_700L;
@@ -134,7 +159,7 @@ public final class PreviewStage {
         }
     }
 
-    /** 预览缩放：手动档照玩家的选择画；自动档在预览里恒为 100%（倍率取决于真实卡堆，预览面板算它只会骗人）。 */
+    /** 预览缩放：手动档照玩家的选择画；自动档在特写里恒为 100%（倍率取决于真实卡堆，特写面板算它只会骗人）。 */
     public static float scale() {
         int pct = PickupCardConfig.layoutSnapshot().scalePercent();
         return pct > LayoutSettings.AUTO_SCALE ? pct / 100f : 1f;
@@ -163,9 +188,9 @@ public final class PreviewStage {
     private final java.util.ArrayDeque<Entry> stage = new java.util.ArrayDeque<>();
     private final CardMove move = new CardMove();
     private final NvgCardPainter painter = new NvgCardPainter();
-    /** 非动画页的那张静止完整卡（{@code playOnce} 换新重生）。 */
+    /** 特写模式的那张静止完整卡（{@code playOnce} 换新重生）。 */
     private CardView staticCard;
-    private boolean stageMode;
+    private Mode mode = Mode.STATIC;
     /** 下一拍的时刻（{@code <0} = 还没开过场）。 */
     private long nextSpawnAt = -1L;
     private long beats;
@@ -177,30 +202,32 @@ public final class PreviewStage {
     }
 
     /**
-     * 按页分工（2026-09-19 定案）：动画页跑三张真卡的自动舞台；其他页一张静止完整卡。
+     * 按页分工（2026-09-19 grill 定案）：动画页跑舞台、位置页上缩影、其余页静止特写。
      * 离开动画页收舞台；回来时重新开场（节拍从头起）。
      */
-    public void setStageMode(boolean stagePage, Sample sample) {
-        if (stagePage) {
-            if (!stageMode) {
+    public void setMode(Mode want, Sample sample) {
+        if (want == Mode.STAGE) {
+            if (mode != Mode.STAGE) {
                 nextSpawnAt = -1L;
             }
         } else {
             stage.clear();
             move.retain(java.util.Set.of());
-            staticCard = new CardView(notice(nextKey(), sample, sample.amount,
-                    System.currentTimeMillis() - 10_000L));
+            staticCard = want == Mode.STATIC
+                    ? new CardView(notice(nextKey(), sample, sample.amount,
+                            System.currentTimeMillis() - 10_000L))
+                    : null;      // 缩影不需要特写卡 —— 卡堆现场按真实公式排
         }
-        stageMode = stagePage;
+        mode = want;
     }
 
-    /** 「来一张」/ 点预览：动画页放一张走完整时间线；其他页把静止卡换成当前样例。 */
+    /** 「来一张」/ 点预览：动画页放一张走完整时间线；特写页把静止卡换成当前样例；缩影页无事可做（卡堆是真实排布，没有"多来一张"）。 */
     public void playOnce(long now, Sample sample) {
-        if (stageMode) {
+        if (mode == Mode.STAGE) {
             // 手动钮必出新卡：合并演示交给自动节拍
             spawn(now, sample, false);
             nextSpawnAt = now + BEAT_MS;
-        } else {
+        } else if (mode == Mode.STATIC) {
             staticCard = new CardView(notice(nextKey(), sample, sample.amount,
                     System.currentTimeMillis() - 10_000L));
         }
@@ -208,7 +235,7 @@ public final class PreviewStage {
 
     /** 舞台的节拍：到点来一拍，退场播完的清掉。只在舞台模式下动。 */
     public void drive(long now, Sample sample) {
-        if (!stageMode) {
+        if (mode != Mode.STAGE) {
             return;
         }
         if (nextSpawnAt < 0L) {
@@ -255,19 +282,47 @@ public final class PreviewStage {
     }
 
     // ------------------------------------------------------------------
+    // 缩影几何：render 与点击命中共用同一块矩形
+    // ------------------------------------------------------------------
+
+    /**
+     * 位置页缩影的矩形：<b>整块屏幕等比缩进预览面板</b> —— 宽随面板，高按真实屏幕的
+     * 宽高比折算，在面板里垂直居中。映射比 {@code ratio = 缩略宽 / 真实画布宽}：
+     * 真实坐标 × ratio = 缩略坐标，锚点分数、HUD 带高、卡尺寸全部同一条映射。
+     */
+    public static ConfigLayout.Rect mapRect(ConfigLayout.Rect area, float canvasWidth, float canvasHeight) {
+        float w = Math.max(1f, area.w());
+        float h = w * canvasHeight / Math.max(1f, canvasWidth);
+        float y = area.y() + Math.max(0f, (area.h() - h) / 2f);
+        return new ConfigLayout.Rect(area.x(), y, w, h);
+    }
+
+    /**
+     * 按 (x, y, 宽, 高) 画一块矩形。
+     * <p>【为什么包一层】{@code GuiGraphics.fill} 的签名是<b>两个对角点</b> (x1,y1,x2,y2)
+     * —— 当成 (x,y,w,h) 传的话，"宽高"被当成"右下角坐标"，1px 的边框线会画成横跨
+     * 小半个屏幕的大色块（2026-09-19 缩影第一版的真事：底边框 fill 画出了 400×470
+     * 物理px 的半透明灰块压在配置列上）。
+     */
+    private static void fillRect(GuiGraphics gui, float x, float y, float w, float h, int color) {
+        gui.fill(Math.round(x), Math.round(y), Math.round(x + w), Math.round(y + h), color);
+    }
+
+    // ------------------------------------------------------------------
     // 画
     // ------------------------------------------------------------------
 
     /**
-     * 画这一帧的预览（动画页 = 舞台整摞；其他页 = 居中的静止卡）。
+     * 画这一帧的预览（动画页 = 舞台整摞；位置页 = 整屏缩影；其余页 = 居中的静止卡）。
      *
-     * @param area   预览面板里放卡的那块（{@code ConfigLayout#previewCard}）
-     * @param canvas 逻辑画布宽/高（卡宽上限按它算 —— 与真卡同一把尺）
+     * @param area 预览面板里放卡的那块（{@code ConfigLayout#previewCard}）
      */
-    public void render(net.minecraft.client.gui.GuiGraphics gui, ConfigLayout.Rect area,
+    public void render(GuiGraphics gui, ConfigLayout.Rect area,
                        float canvasWidth, float canvasHeight, StyleModel style, long now) {
-        if (stageMode) {
+        if (mode == Mode.STAGE) {
             renderStage(gui, area, canvasWidth, canvasHeight, style, now);
+        } else if (mode == Mode.MINIMAP) {
+            renderMinimap(gui, area, canvasWidth, canvasHeight, style, now);
         } else if (staticCard != null) {
             renderStatic(gui, area, canvasWidth, canvasHeight, style, now);
         }
@@ -288,6 +343,77 @@ public final class PreviewStage {
         float y = area.y() + (area.h() - h) / 2f;
         painter.paint(gui, previewCanvas(style, scale, settings, canvasWidth, canvasHeight, now),
                 List.of(new CardSlot(staticCard, x, y, w, h)));
+    }
+
+    /**
+     * 位置页的整屏缩影。<b>卡堆与游戏同一条公式</b>：锚点分数、对齐档、同屏上限、
+     * 自动缩放全部按真实值先算，再整体乘映射比落进缩略矩形 —— 缩略里卡停的地方
+     * 就是游戏里卡停的地方。HUD 带画一条暗示带：它决定了自动锚线的位置，也解释
+     * "为什么卡不能更低"。
+     */
+    private void renderMinimap(GuiGraphics gui, ConfigLayout.Rect area,
+                               float canvasWidth, float canvasHeight, StyleModel style, long now) {
+        ConfigLayout.Rect map = mapRect(area, canvasWidth, canvasHeight);
+        float ratio = map.w() / Math.max(1f, canvasWidth);
+
+        // 缩略屏的"身体"：暗底 + 一圈细边 —— 不画它，看不出来这是一块屏幕
+        int frame = 0x5080A0B0;
+        fillRect(gui, map.x(), map.y(), map.w(), 1, frame);
+        fillRect(gui, map.x(), map.y() + map.h() - 1, map.w(), 1, frame);
+        fillRect(gui, map.x(), map.y(), 1, map.h(), frame);
+        fillRect(gui, map.x() + map.w() - 1, map.y(), 1, map.h(), frame);
+
+        // HUD 带暗示：底部一条半透明带 + 上沿线。自动锚线就停在这条带之上 ——
+        // 它是"卡为什么不能更低"的几何答案（高度按同一条 ratio 折算，位置诚实）。
+        float insetPx = HudSafeZone.bottomInset() * ratio;
+        fillRect(gui, map.x() + 1, map.y() + map.h() - insetPx, map.w() - 2, insetPx, 0x28FFFFFF);
+        fillRect(gui, map.x() + 1, map.y() + map.h() - insetPx, map.w() - 2, 1, 0x50FFFFFF);
+
+        // ---- 卡堆：先按真实坐标算（与游戏同一条公式），再整体乘 ratio 落进缩略 ----
+        LayoutSettings lay = PickupCardConfig.layoutSnapshot().sanitized();
+        PickupCardSettings real = PickupCardConfig.snapshot();
+        var font = Minecraft.getInstance().font;
+        float cardScale = scale();
+        float unscaledH = style.boxHeight();
+        float anchorTopReal = lay.anchorTop(canvasHeight, unscaledH, HudSafeZone.bottomInset());
+        int count = Math.max(1, real.maxOnScreen());
+        // 自动缩放按真实坐标算（"张数×卡高 vs 可用高"的比例式），缩略里照搬同一个倍率
+        cardScale = lay.scale(anchorTopReal, unscaledH, count, lay.separation());
+        // 真实容量裁剪：放不下的卡在游戏里也上不了屏（几何容量门）—— 缩影必须说同一句实话
+        int capacity = StackLayout.fittingCount(anchorTopReal, unscaledH * cardScale, lay.separation());
+        int visible = Math.min(count, capacity);
+        if (visible <= 0) {
+            return;     // 真实屏幕上一张都放不下（锚点被拖到极低）：缩影如实画空
+        }
+
+        PreviewStage.Sample[] samples = Sample.values();
+        List<CardView> views = new ArrayList<>(visible);
+        List<StackLayout.Size> sizes = new ArrayList<>(visible);
+        float ratioScale = ratio * cardScale;
+        for (int i = 0; i < visible; i++) {
+            CardView view = settledView(samples[i % samples.length]);
+            views.add(view);
+            sizes.add(new StackLayout.Size(
+                    CardMetrics.naturalWidth(
+                            previewCanvas(style, cardScale, real, canvasWidth, canvasHeight, now),
+                            font, view) * ratioScale,
+                    unscaledH * ratioScale));
+        }
+        List<StackLayout.Slot> slots = StackLayout.stack(sizes, map.w(), map.h(), lay,
+                Math.round(CardStage.MARGIN_X * ratio), Math.round(HudSafeZone.bottomInset() * ratio),
+                lay.separation() * ratioScale);
+
+        // 画：mini 画布的宽/高/缩放全用缩略坐标系的值 —— 卡宽上限（0.45 屏宽）随之同构，
+        // 名字截断预算和真实屏幕是同一条公式算出来的
+        CardCanvas mini = previewCanvas(style, cardScale * ratio, real,
+                map.w(), map.h(), now);
+        List<CardSlot> out = new ArrayList<>(views.size());
+        for (int i = 0; i < views.size(); i++) {
+            StackLayout.Slot s = slots.get(i);
+            out.add(new CardSlot(views.get(i),
+                    map.x() + s.x(), map.y() + s.y(), s.width(), s.height()));
+        }
+        painter.paint(gui, mini, out);
     }
 
     /**
@@ -337,9 +463,19 @@ public final class PreviewStage {
         CardCanvas probe = previewCanvas(style, scale, PickupCardConfig.snapshot(),
                 canvasWidth, canvasHeight, now);
         int nameRoom = (int) Math.max(12f,
-                room - CardMetrics.namelessWidth(probe, Minecraft.getInstance().font,
-                        stage.isEmpty() ? 0 : stage.peekFirst().view().notice().count()));
+                room - CardMetrics.namelessWidth(probe, Minecraft.getInstance().font, sampleAmount()));
         return withNameLimit(PickupCardConfig.snapshot(), nameRoom);
+    }
+
+    /** 名字预算用的数量：舞台看队首，特写看静止卡，缩影看第一张示意卡。 */
+    private int sampleAmount() {
+        if (!stage.isEmpty()) {
+            return stage.peekFirst().view().notice().count();
+        }
+        if (staticCard != null) {
+            return staticCard.notice().count();
+        }
+        return Sample.COMMON.amount;
     }
 
     /** 一份快照的副本：名字宽度上限额外夹进面板给的预算（0 = 自动 → 直接用预算）。 */
@@ -369,9 +505,12 @@ public final class PreviewStage {
 
     // ------------------------------------------------------------------
 
-    /** 给 harness 的读数：几张卡、各自画在哪个 y、key 是谁 —— 重叠与否只有数字能定案。 */
+    /** 给 harness 的读数：模式、几张卡、各自画在哪个 y、key 是谁 —— 重叠与否只有数字能定案。 */
     public String stateDump() {
-        if (!stageMode) {
+        if (mode == Mode.MINIMAP) {
+            return "缩影";
+        }
+        if (mode != Mode.STAGE) {
             return "静止卡";
         }
         StringBuilder ys = new StringBuilder();

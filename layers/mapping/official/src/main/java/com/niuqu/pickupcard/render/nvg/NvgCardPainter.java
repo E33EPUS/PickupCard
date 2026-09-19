@@ -382,9 +382,20 @@ public final class NvgCardPainter {
             // 去混合，`setShaderColor(1,1,1,alpha)` 等于没压 —— 图标全程满亮，摘卡那一刻
             // 才凭空消失（用户报的"最后一帧图标回弹"；亮色方块物品才显形，深色贴图看不出来，
             // 2026-09-19 真机逐帧测量钉死：外壳 74.6→65.2 在淡，图标 70.2→76.9 反而在升）。
-            // 把 RGB 一起向卡面底色靠拢，不依赖混合，两种渲染层读起来都是"跟着卡一起淡"。
             // 平贴图物品走 entityTranslucentCull（有混合），本来就对，这个改法对它同样成立。
-            float k = 1f - com.niuqu.pickupcard.style.Easing.clamp01(alpha);   // 0=原样 → 1=融进卡面
+            //
+            // 【融合窗口为什么延迟（2026-09-19 用户报"图标逐渐变黑然后瞬间消失"）】
+            // 旧曲线 k = 1-alpha 全程跟随壳衰减，而壳走 easeOutCubic —— 前 30% 就掉掉大半
+            // 不透明度，图标跟着前段就显著变暗（"逐渐变黑"）；尾段壳快没了，图标还剩几个
+            // 百分比的原色残影，摘卡那一刻残影消失（"瞬间消失"）。改成按退场进度的延迟窗口：
+            // 前 15% 图标完全原亮（壳还厚，托得住"卡在淡"的读感）；15%~50% 快速沉入卡面
+            // 色（此刻壳也在大潮式衰减，图标越来越像"卡的一部分"，读到的是卡在消失而不是
+            // 图标在变黑）；50% 后恒为融合态 —— 无原色残影可留，摘卡无感。三种退场共用。
+            float t = view.exiting()
+                    ? com.niuqu.pickupcard.style.CardTimeline.exit(
+                            canvas.now(), view.exitStartAt(), canvas.settings().exitMs())
+                    : 0f;
+            float k = com.niuqu.pickupcard.style.Easing.clamp01((t - 0.15f) / 0.35f);   // 0=原样 → 1=融进卡面
             int fill = avgCardFill(style);
             RenderSystem.setShaderColor(
                     1f + (((fill >> 16) & 0xFF) / 255f - 1f) * k,
