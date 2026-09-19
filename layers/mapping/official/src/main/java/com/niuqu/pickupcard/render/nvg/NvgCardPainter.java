@@ -1,12 +1,12 @@
 package com.niuqu.pickupcard.render.nvg;
 
-import com.mojang.blaze3d.systems.RenderSystem;
 import com.niuqu.pickupcard.PickupCard;
 import com.niuqu.pickupcard.layout.LayoutSettings;
 import com.niuqu.pickupcard.pickup.CardContent;
 import com.niuqu.pickupcard.pickup.Inbox;
 import com.niuqu.pickupcard.rarity.RarityAccent;
 import com.niuqu.pickupcard.render.CardCanvas;
+import com.niuqu.pickupcard.render.ItemIconCache;
 import com.niuqu.pickupcard.render.CardMetrics;
 import com.niuqu.pickupcard.render.CardSlot;
 import com.niuqu.pickupcard.render.CardView;
@@ -33,6 +33,7 @@ import static org.lwjgl.nanovg.NanoVG.nvgFill;
 import static org.lwjgl.nanovg.NanoVG.nvgFillColor;
 import static org.lwjgl.nanovg.NanoVG.nvgFillPaint;
 import static org.lwjgl.nanovg.NanoVG.nvgGlobalAlpha;
+import static org.lwjgl.nanovg.NanoVG.nvgImagePattern;
 import static org.lwjgl.nanovg.NanoVG.nvgLinearGradient;
 import static org.lwjgl.nanovg.NanoVG.nvgRGBA;
 import static org.lwjgl.nanovg.NanoVG.nvgRect;
@@ -123,6 +124,14 @@ public final class NvgCardPainter {
     public void paint(GuiGraphics gui, CardCanvas canvas, List<CardSlot> slots) {
         Font font = Minecraft.getInstance().font;
 
+        // 【图标贴图缓存】图标已并入 NanoVG 帧（见 paintShell 的 iconImage）——先在帧外
+        // 确保本帧要画的物品都渲好了离屏贴图（ensure 要切 FBO，不能发生在帧内）。
+        int iconCenterX = canvas.guiWidth() / 2;
+        int iconCenterY = canvas.guiHeight() / 2;
+        for (CardSlot slot : slots) {
+            ItemIconCache.ensure(iconStackOf(canvas, slot), iconCenterX, iconCenterY);
+        }
+
         gui.flush();
 
         NvgCanvas nvg = NvgCanvas.shared();
@@ -155,7 +164,10 @@ public final class NvgCardPainter {
                             String.format(java.util.Locale.ROOT, "%.2f", exitAlphaOf(canvas, slot)));
                 }
                 nvgSave(vg);
-                // 退场：整张卡（外壳 + 竖条 + 微光 + 影子）一起淡，见类注释
+                // 退场：整张卡（外壳 + 竖条 + 微光 + 图标）一起淡，见类注释。
+                // 【图标吃同一个 alpha】图标是 NanoVG 图像贴图（ItemIconCache 离屏渲的
+                // 带 alpha 贴图），和外壳同帧同变换同 scissor —— 一次 nvgGlobalAlpha
+                // 同时管壳和图标，这就是"图标跟随淡出"的兑现处。
                 nvgGlobalAlpha(vg, exitAlphaOf(canvas, slot));
                 // 【缩放落在变换上】外壳一律按"未缩放的卡"画，位置与大小由这两个变换给。
                 // 这样竖条宽、圆角、描边、微光全都一起缩，不会出现"卡小了但边还是粗的"。
@@ -174,17 +186,32 @@ public final class NvgCardPainter {
                 paintShell(vg, style, -w0 / 2f, -h0 / 2f, w0, h0,
                         accentOf(card, style.accents()), canvas.barOf(slot.view()),
                         bodyShiftOf(canvas, slot, style, rise), rise, isHighlighted(card),
-                        glowScaleOf(canvas, slot), windowOf(canvas, slot, style, rise));
+                        glowScaleOf(canvas, slot), windowOf(canvas, slot, style, rise),
+                        ItemIconCache.image(vg, iconStackOf(canvas, slot)), style.iconSize());
                 nvgRestore(vg);
             }
         } finally {
             nvg.end();
         }
 
-        // 内容排在 NanoVG 之后：它画在卡面之上（用的是同一批屏幕坐标）
+        // 内容排在 NanoVG 之后：它画在卡面之上（用的是同一批屏幕坐标）。
+        // 图标已不在这一路 —— 它进了上面的 NanoVG 帧（NO_BLEND 物品无法淡出的根治，
+        // 见 ItemIconCache 类注释）；这里只剩文字（原版字形，alpha 走颜色本身，本来就有效）。
         for (CardSlot slot : slots) {
             content(gui, canvas, slot, font);
         }
+    }
+
+    /** 这张卡该画的图标栈：普通物品 / 溢出卡的轮换图标 / 经验卡的固定替代。 */
+    private static ItemStack iconStackOf(CardCanvas canvas, CardSlot slot) {
+        Inbox.Card card = slot.view().notice().payload();
+        if (card.content() instanceof CardContent.Item item) {
+            return item.stack();
+        }
+        if (card.content() instanceof CardContent.Overflow overflow) {
+            return cycleIcon(overflow, canvas.now());
+        }
+        return XP_ICON;
     }
 
     // ------------------------------------------------------------------
@@ -209,7 +236,8 @@ public final class NvgCardPainter {
      */
     public static void paintShell(long vg, StyleModel style, float x, float y, float cardW, float cardH,
                                   int accent, float barFill, float bodyShift, float rise,
-                                  boolean highlighted, float glowScale, RevealWindow window) {
+                                  boolean highlighted, float glowScale, RevealWindow window,
+                                  long iconImage, float iconSize) {
         float gap = style.gap();
         float barW = style.barWidth();
         float bodyX = barW + gap;
@@ -227,6 +255,21 @@ public final class NvgCardPainter {
             nvgScissor(vg, x + window.left(), y, window.width(), cardH);
             if (window.width() > 0.01f) {
                 box(vg, stack, style, x + bodyX + bodyShift, y, cardH, cardH, radius);
+                // 【图标是 NanoVG 图像贴图】与框同吃窗口裁剪和全局 alpha —— 入场从竖条后
+                // 滑出来时被同一扇"隧道口"裁着，退场跟着同一个 nvgGlobalAlpha 淡掉。
+                // 图像 32×32、物品占中心 16×16：pattern 把整图映到 2×iconSize，
+                // 物品区域就正好是 iconSize，中心与图标格中心对齐。
+                if (iconImage != 0) {
+                    float cx = x + bodyX + bodyShift + cardH / 2f;
+                    float cy = y + cardH / 2f;
+                    NVGPaint iconPaint = NVGPaint.mallocStack(stack);
+                    nvgImagePattern(vg, cx - iconSize, cy - iconSize,
+                            iconSize * 2f, iconSize * 2f, 0f, (int) iconImage, 1f, iconPaint);
+                    nvgBeginPath(vg);
+                    nvgRect(vg, cx - iconSize / 2f, cy - iconSize / 2f, iconSize, iconSize);
+                    nvgFillPaint(vg, iconPaint);
+                    nvgFill(vg);
+                }
                 float infoX = x + bodyX + cardH + gap;
                 float infoW = Math.max(0f, x + cardW - infoX);
                 if (infoW > 0f) {
@@ -362,64 +405,10 @@ public final class NvgCardPainter {
             scissor(gui, gui.pose(), win, h);
         }
 
-        // 图标：居中缩放后交给原版渲染，附魔光效与耐久条白拿
-        // 【淡出为什么借全局色调制向量】物品图标是原版画的，没有"染色"参数可传，这是唯一
-        // 的入口。两件事让它安全：GuiGraphics.renderItem 内部自己会 flush（所以 set 与真正
-        // 提交之间不会被别的卡插队），以及 ItemRenderer 全程不碰 setShaderColor。
-        // 【为什么提交完才能复位】renderItem 把图标本体当场 endBatch，但堆叠数/耐久条这些
-        // 装饰层是**排进队列**的——先复位再提交，它们就以全不透明上屏（用户报的"图标末帧
-        // 闪回"正是它，文字修完之后轮到它露头）。所以复位必须排在一次 flush 之后。
-        // 【字节 <4 连画都不画】同一把尺子管文字和图标：alpha ≈ 0 的绘制只剩开销。
-        boolean fading = alpha < 0.999f;
-        boolean iconVisible = !fading || textVisible(0xFFFFFFFF, alpha);
-        if (fading) {
-            // 【设色之前必须先冲一次】前面几张卡的文字此时正**排着队还没提交**，而
-            // renderItem 内部自己那次 flush 会把它们一起冲出去 —— 那样它们就会跟着这张卡
-            // 一起淡（受伤的是别人的字）。先把队列清空，这次设色就只落在这一张卡的图标上。
-            gui.flush();
-            // 【为什么 RGB 也要压，而不是只压 alpha】实体渲染层（entitySolid/entityCutout ——
-            // 方块物品和大量 mod 物品落在这两档）是 NO_BLEND：帧缓冲不拿 fragment 的 alpha
-            // 去混合，`setShaderColor(1,1,1,alpha)` 等于没压 —— 图标全程满亮，摘卡那一刻
-            // 才凭空消失（用户报的"最后一帧图标回弹"；亮色方块物品才显形，深色贴图看不出来，
-            // 2026-09-19 真机逐帧测量钉死：外壳 74.6→65.2 在淡，图标 70.2→76.9 反而在升）。
-            // 平贴图物品走 entityTranslucentCull（有混合），本来就对，这个改法对它同样成立。
-            //
-            // 【融合窗口为什么延迟（2026-09-19 用户报"图标逐渐变黑然后瞬间消失"）】
-            // 旧曲线 k = 1-alpha 全程跟随壳衰减，而壳走 easeOutCubic —— 前 30% 就掉掉大半
-            // 不透明度，图标跟着前段就显著变暗（"逐渐变黑"）；尾段壳快没了，图标还剩几个
-            // 百分比的原色残影，摘卡那一刻残影消失（"瞬间消失"）。改成按退场进度的延迟窗口：
-            // 前 15% 图标完全原亮（壳还厚，托得住"卡在淡"的读感）；15%~50% 快速沉入卡面
-            // 色（此刻壳也在大潮式衰减，图标越来越像"卡的一部分"，读到的是卡在消失而不是
-            // 图标在变黑）；50% 后恒为融合态 —— 无原色残影可留，摘卡无感。三种退场共用。
-            float t = view.exiting()
-                    ? com.niuqu.pickupcard.style.CardTimeline.exit(
-                            canvas.now(), view.exitStartAt(), canvas.settings().exitMs())
-                    : 0f;
-            float k = com.niuqu.pickupcard.style.Easing.clamp01((t - 0.15f) / 0.35f);   // 0=原样 → 1=融进卡面
-            int fill = avgCardFill(style);
-            RenderSystem.setShaderColor(
-                    1f + (((fill >> 16) & 0xFF) / 255f - 1f) * k,
-                    1f + (((fill >> 8) & 0xFF) / 255f - 1f) * k,
-                    1f + ((fill & 0xFF) / 255f - 1f) * k,
-                    1f);
-        }
-        if (iconVisible) {
-            float scale = style.iconSize() / CardMetrics.ICON_PX;
-            gui.pose().pushPose();
-            gui.pose().translate(x + h / 2f, h / 2f, 0f);
-            gui.pose().scale(scale, scale, 1f);
-            ItemStack iconStack = card.content() instanceof CardContent.Item item
-                    ? item.stack()
-                    : card.content() instanceof CardContent.Overflow overflow
-                            ? cycleIcon(overflow, canvas.now()) : XP_ICON;
-            gui.renderItem(iconStack, -8, -8);
-            gui.pose().popPose();
-        }
-        if (fading) {
-            // 【先冲队列再复位】装饰层此刻还在队列里，不冲掉就会跟着"全亮"上屏（见上）
-            gui.flush();
-            RenderSystem.setShaderColor(1f, 1f, 1f, 1f);
-        }
+        // 【图标不在这里了】图标已并入 NanoVG 帧（paintShell 的 iconImage）—— 2026-09-19
+        // hunt 根因：原版 renderItem 走 NO_BLEND 渲染层（方块/mod 物品），alpha 分量无效，
+        // 数学上不存在淡出，怎么调曲线都是"变黑然后消失"。离屏渲成带 alpha 的贴图后
+        // （ItemIconCache），图标与卡壳同吃一个 nvgGlobalAlpha，三档退场都是真淡出。
 
         // 文字：alpha 直接乘进颜色里（原版字形用的就是这个色的 alpha），不走全局色。
         // 【alpha 字节掉到 4 以下就整段不画】原版 Font.adjustColor（1.20.1 Font.java:109）
@@ -627,15 +616,6 @@ public final class NvgCardPainter {
             return argb;
         }
         return withAlpha(argb, Math.round(((argb >>> 24) & 0xFF) * Easing.clamp01(alpha)));
-    }
-
-    /** 卡面渐变（上/下）的平均色 —— 图标淡出时向它靠拢，浅色/深色主题都成立。 */
-    private static int avgCardFill(StyleModel style) {
-        int top = style.fillTop(), bottom = style.fillBottom();
-        int r = ((top >> 16 & 0xFF) + (bottom >> 16 & 0xFF)) / 2;
-        int g = ((top >> 8 & 0xFF) + (bottom >> 8 & 0xFF)) / 2;
-        int b = ((top & 0xFF) + (bottom & 0xFF)) / 2;
-        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     /**
