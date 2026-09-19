@@ -18,6 +18,15 @@
 动画页自动演"的分工。消失方式有了三档（淡出 / 火车退回 / 拉幕收拢），可以和
 入场方式自由组合；经验卡的微光会呼吸了；淡出最后一帧图标闪回的毛病修了。
 
+**物品图标这一版彻底重做。** 上一版的图标是"离屏烘一张贴图再画"——贴图是死画面，
+于是附魔光效不再滚动、图标整体发暗、方块类被钉在低分辨率上显得毛糙、方向还上下
+颠倒。现在**每个图标都按原版方式逐帧现渲**：附魔光效边捡边闪、方块清晰锐利、
+亮度与原版一致。退场淡出改为在淡出期间把实心渲染层换成可混合层，所以图标与卡片
+同步真透明淡出，不再"变黑再消失"。
+
+英文界面这一版补齐：所有文案（含色块标签、样例卡名）都走语言文件，长英文标签
+（如 Placement & stacking）自动缩字而不是穿出边框或截断。
+
 纯客户端，服务端不用装；不依赖 ApricityUI。从 0.2.1 直接覆盖即可，
 配置文件兼容（旧的贴边/竖条位置键会被忽略，锚点在配置界面里拖）。
 
@@ -30,8 +39,20 @@ on scale and card width). The config screen got a layout pass: constant row rhyt
 section headers, a per-page "restore defaults" button, color swatches with
 "follow theme" first, and a per-page preview (static card elsewhere, live stage on
 the animation page). Exits now have three modes freely combinable with entrances,
-the rarity glow breathes, and the last-frame icon flash is fixed. Client-side only,
-no hard dependencies; drop-in upgrade from 0.2.1.
+the rarity glow breathes, and the last-frame icon flash is fixed.
+
+Item icons were rebuilt this release. The previous build baked each icon into an
+offscreen texture once - a frozen snapshot, which killed the scrolling enchant
+glint, dimmed the icons, made block icons look low-resolution, and rendered them
+upside down. Icons are now rerendered through the vanilla pipeline every frame:
+glint animates, blocks are crisp, brightness matches vanilla. Exit fades now swap
+the solid render layer for a blended one during the fade, so icons fade out in
+true alpha alongside the card instead of darkening first.
+
+The English UI is now complete: every string (including the color-swatch labels
+and sample card names) comes from the language files, and long English labels
+such as "Placement & stacking" scale to fit instead of overflowing or clipping.
+Client-side only, no hard dependencies; drop-in upgrade from 0.2.1.
 
 ## v0.2.1
 
