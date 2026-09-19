@@ -305,10 +305,10 @@ public final class PickupCardConfig {
 
             exitMode = builder
                     .comment("卡片怎么消失。三种都叠加透明度下降，不会硬切。",
-                            "  FADE  = 淡出：原地变透明（默认）。",
-                            "  TRAIN = 火车退回：内容整块平移回竖条后面，与火车入场对称。",
+                            "  TRAIN = 火车退回：内容整块平移回竖条后面，与火车入场对称（默认）。",
+                            "  FADE  = 淡出：原地变透明。",
                             "  WIPE  = 拉幕收拢：可见范围从右往左收窄，与拉幕入场对称。")
-                    .defineEnum("exitMode", LayoutSettings.Exit.FADE);
+                    .defineEnum("exitMode", LayoutSettings.Exit.TRAIN);
 
             align = builder
                     .comment("水平对齐：锚线（anchorX）管的是卡的哪一条边。",

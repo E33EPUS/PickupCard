@@ -70,7 +70,7 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
 
     /** 卡片的消失方式：和入场对称的那一半。三种都叠加透明度下降，不会硬切。 */
     public enum Exit {
-        /** 原地淡出（默认）。 */
+        /** 原地淡出。 */
         FADE,
         /** 内容整块平移回竖条后面 —— 火车入场的逆放。 */
         TRAIN,
@@ -103,9 +103,9 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
         return Math.max(0f, guiWidth - MARGIN_X - budget);
     }
 
-    /** 默认：火车入场、原地淡出、左缘锚定、锚点自动（右下贴 HUD 带）。 */
+    /** 默认：火车入场、<b>火车退回</b>（与入场对称的退场，2026-09-19 用户定案）、左缘锚定、锚点自动（右下贴 HUD 带）。 */
     public static LayoutSettings defaults() {
-        return new LayoutSettings(Appear.SLIDE, Exit.FADE, Side.LEFT, DEFAULT_SEPARATION,
+        return new LayoutSettings(Appear.SLIDE, Exit.TRAIN, Side.LEFT, DEFAULT_SEPARATION,
                 AUTO_SCALE, AUTO_ANCHOR, AUTO_ANCHOR);
     }
 

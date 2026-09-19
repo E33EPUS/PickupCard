@@ -616,7 +616,7 @@ public final class PickupCardConfigScreen extends Screen {
         cell("停留时长", time(v.holdMs, eff.holdMs(), 500, 10_000, 250),
                 "一张卡从就位到开始淡出，在屏上待多久；连捡同一件会不断刷新这个计时");
         cell("消失方式", cycle(v.exitMode, LayoutSettings.Exit.values(), PickupCardConfigScreen::exitName),
-                "卡片怎么消失，点一下换下一种：淡出（原地变透明）→ 火车退回（平移回竖条后）→ 拉幕收拢（可见范围从右往左收）。三种都叠加透明度下降");
+                "卡片怎么消失，点一下换下一种：火车退回（平移回竖条后，默认）→ 淡出（原地变透明）→ 拉幕收拢（可见范围从右往左收）。三种都叠加透明度下降");
         cell("消失时长", time(v.exitMs, eff.exitMs(), 0, 2_000, 20), "上面那个消失动作用多久；0 = 到点立刻消失");
         header("合并与跳动");
         cell("数字跳动", styleSwitch(v.stBumpEnabled, style.bumpEnabled()),

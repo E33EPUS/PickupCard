@@ -17,7 +17,7 @@ class LayoutSettingsTest {
         LayoutSettings d = LayoutSettings.defaults();
         assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorX(), "横向自动 = 按对齐档解析");
         assertEquals(LayoutSettings.AUTO_ANCHOR, d.anchorY(), "纵向自动 = 贴 HUD 带上方");
-        assertEquals(LayoutSettings.Exit.FADE, d.exitMode(), "消失方式默认淡出");
+        assertEquals(LayoutSettings.Exit.TRAIN, d.exitMode(), "消失方式默认火车退回（与入场对称，2026-09-19 定案）");
         assertEquals(LayoutSettings.Side.LEFT, d.align(), "对齐默认竖条左缘锚定");
         assertEquals(LayoutSettings.Appear.SLIDE, d.appearMode());
         assertEquals(4f, d.separation(), 1e-6);
