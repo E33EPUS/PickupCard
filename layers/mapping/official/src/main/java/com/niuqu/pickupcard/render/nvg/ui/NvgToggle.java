@@ -41,7 +41,9 @@ public final class NvgToggle extends NvgWidget {
         float pillY = y + (h - pillH) / 2f;
         float r = pillH / 2f;
 
-        ui.text(value(), x + 2f, y + (h - ui.font().lineHeight) / 2f, p.text);
+        // 开/关两个字在"轨道以左的自由区"里居中 —— 顶在最左边时，宽控件上像一行字掉队了
+        ui.text(value(), (x + pillX - ui.font().width(value())) / 2f,
+                y + (h - ui.font().lineHeight) / 2f, p.text);
 
         // 轨道
         ui.fillRoundRect(pillX, pillY, pillW, pillH, r, on ? p.accent : p.well);

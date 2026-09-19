@@ -41,8 +41,10 @@ import java.util.List;
  * （最宽样例 × 同屏上限，向上长），拨同屏上限/缩放/名字宽度它都跟着变；框里实际画几张
  * 样例只是示意（画满 16 张只会变成一堵墙），所以框上带一句「示意」—— 最大占地按
  * <b>样例</b>的最宽算，玩家真捡到更长的名字时卡会更宽（2026-09-19 补的实话）。
- * 锚线被拖到连一张卡都放不下的位置时自动抬到 HUD 带上方 —— 与游戏里的夹取
- * （{@link LayoutSettings#anchorTop}）同一个公式，编辑场里看见的就是游戏里会发生的。
+ * 框与示例堆都<b>跟着「水平对齐」档走</b>：左缘档锚线在框左、右缘档锚线在框右 ——
+ * 从前永远按左缘画，右缘对齐的玩家在编辑场里看到的和游戏里差一张卡宽。
+ * <b>全屏幕随便拖</b>（2026-09-19 用户拍板删掉自造的夹取圈）：拖到哪儿就是哪儿，
+ * 压到 HUD 带上也照存，编辑场画的就是游戏里会画的位置。
  * 卡堆<b>向上生长</b>（2026-09-19 底锚定案）：锚线 = 最新那张的顶边，旧的往上排。
  */
 public final class AnchorEditScreen extends Screen {
@@ -163,7 +165,7 @@ public final class AnchorEditScreen extends Screen {
     }
 
     /** 这一帧的编辑场几何：锚线、区域框（最宽样例 × 同屏上限，向上长）、样例卡的位置。 */
-    private record StyleGeometry(float anchorLeft, float anchorTop, float cardH, float regionW,
+    private record StyleGeometry(float regionLeft, float anchorTop, float cardH, float regionW,
                                  float regionH, float scale) {
         /** 区域框的顶：卡堆向上生长，堆高 = 同屏上限 × 卡高 + 间隙，锚线在堆底。 */
         float regionTop() {
@@ -175,7 +177,7 @@ public final class AnchorEditScreen extends Screen {
         var style = CardStage.INSTANCE.previewStyle();
         float scale = cardScale();
         float cardH = style.boxHeight() * scale;
-        float left = anchorLeftPx();
+        float line = anchorLeftPx();
         float top = anchorTopPx(cardH);
         float gap = v.separation.get().floatValue() * scale;
         float widest = 0f;
@@ -186,7 +188,12 @@ public final class AnchorEditScreen extends Screen {
         int rows = v.maxOnScreen.get();
         float regionW = Math.max(24f, widest);
         float regionH = Math.max(cardH, rows * cardH + (rows - 1) * gap);
-        return new StyleGeometry(left, top, cardH, regionW, regionH, scale);
+        // 【区域框跟着对齐档长】右缘对齐时锚线管的是卡右缘 —— 框在锚线左边，不在右边。
+        // 从前永远按左缘画，选了右缘对齐的玩家看到的示例和游戏里差一整张卡宽。
+        float regionLeft = editing().align() == LayoutSettings.Side.RIGHT
+                ? line - regionW : line;
+        regionLeft = Math.max(0f, Math.min(regionLeft, this.width - regionW));
+        return new StyleGeometry(regionLeft, top, cardH, regionW, regionH, scale);
     }
 
     /** 区域框 = 四角括号（虚线在 NanoVG 里要自己拼，括号更快也更轻）。框随底锚向上长。 */
@@ -194,7 +201,7 @@ public final class AnchorEditScreen extends Screen {
         float len = 10f;
         float t = 2f;
         int color = ui.palette.accent;
-        float x = g.anchorLeft();
+        float x = g.regionLeft();
         float y = g.regionTop();
         float x2 = x + g.regionW();
         float y2 = y + g.regionH();
@@ -234,7 +241,10 @@ public final class AnchorEditScreen extends Screen {
             CardView view = editorView(samples[i % samples.length]);
             float w = Math.min(CardMetrics.naturalWidth(canvas(style, g.scale()), font, view) * g.scale(),
                     g.regionW());
-            slots.add(new CardSlot(view, g.anchorLeft(), y, w, g.cardH()));
+            // 示例堆与游戏同一条规则：左缘档竖条贴锚线，右缘档卡右缘贴锚线
+            float x = editing().align() == LayoutSettings.Side.RIGHT
+                    ? g.regionLeft() + g.regionW() - w : g.regionLeft();
+            slots.add(new CardSlot(view, x, y, w, g.cardH()));
             y -= g.cardH() + gap;
         }
         if (!slots.isEmpty()) {
@@ -316,14 +326,15 @@ public final class AnchorEditScreen extends Screen {
         cancel();       // Esc 走这里：取消，不写配置
     }
 
-    /** 把锚点设到屏幕坐标（逻辑 px），并夹进"卡堆整体还在屏内"的范围。 */
+    /**
+     * 把锚点设到屏幕坐标（逻辑 px）。<b>全屏幕随便拖（2026-09-19 用户拍板）</b>：
+     * 从前这里自作主张夹了"离右缘 26px / HUD 带上方"一圈，屏幕底部一整条拖进去没反应 ——
+     * 用户原话"拖不了，有限制"。锚点是玩家的明确选择，压到快捷栏上也照存；
+     * 放得下几张由游戏侧的几何容量自己少排，编辑场画的就是真实会画的位置。
+     */
     private void setAnchorPx(double x, double y) {
-        float scale = cardScale();
-        float cardH = CardStage.INSTANCE.previewStyle().boxHeight() * scale;
-        float maxX = Math.max(0f, this.width - HudSafeZone.PAD - 24f);      // 至少留一条竖条的宽度
-        float maxY = Math.max(0f, this.height - HudSafeZone.bottomInset() - cardH);
-        float px = (float) Math.max(0, Math.min(x, maxX));
-        float py = (float) Math.max(0, Math.min(y, maxY));
+        float px = (float) Math.max(0, Math.min(x, this.width));
+        float py = (float) Math.max(0, Math.min(y, this.height));
         anchorX = px / this.width;
         anchorY = py / this.height;
     }

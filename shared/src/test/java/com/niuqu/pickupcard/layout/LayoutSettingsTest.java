@@ -79,13 +79,13 @@ class LayoutSettingsTest {
     }
 
     @Test
-    @DisplayName("锚点夹取：拖得太低时第一张卡自动抬到 HUD 带上方")
-    void anchorTopClampsAboveTheHudBand() {
+    @DisplayName("自定义锚 = 拖到哪儿就是哪儿，不再自动抬（2026-09-19 用户拍板删夹取）")
+    void customAnchorIsNotClamped() {
         LayoutSettings low = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, 0.7f, 0.98f);
-        // 240 高、留白 75、卡高 20 → 第一张卡的顶边最高只能到 240-75-20 = 145
-        assertEquals(145f, low.anchorTop(240f, 20f, 75), 1e-6);
-        // 自动档本来就贴底，夹取不动它
+        assertEquals(240f * 0.98f, low.anchorTop(240f, 20f, 75), 1e-6,
+                "自定义锚线原样落在 98% 高 —— 压到 HUD 带上是玩家的选择");
+        // 自动档仍贴底
         LayoutSettings auto = new LayoutSettings(LayoutSettings.Appear.SLIDE, LayoutSettings.Exit.FADE, LayoutSettings.Side.LEFT, 4f,
                 LayoutSettings.AUTO_SCALE, LayoutSettings.AUTO_ANCHOR, LayoutSettings.AUTO_ANCHOR);
         assertEquals(145f, auto.anchorTop(240f, 20f, 75), 1e-6);

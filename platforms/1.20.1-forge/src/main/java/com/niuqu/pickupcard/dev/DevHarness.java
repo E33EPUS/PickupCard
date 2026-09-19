@@ -437,7 +437,7 @@ public final class DevHarness {
             if (configTicks == WARMUP_TICKS + 74) {
                 hoverByLabel(mc, null);       // 松开悬停，接着切到布局页看那一摞卡
                 clickByLabel(mc, "位置与堆叠");
-                PickupCard.LOGGER.info("[harness-auto] 切页那一帧（换页/强调条都该在起点）: {}",
+                PickupCard.LOGGER.info("[harness-auto] 切页那一帧（换页无动画，强调条该在起点）: {}",
                         configState(mc));
                 return;
             }

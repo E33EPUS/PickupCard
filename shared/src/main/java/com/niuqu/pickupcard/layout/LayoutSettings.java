@@ -170,9 +170,12 @@ public record LayoutSettings(Appear appearMode, Exit exitMode, Side align, float
      * 这一帧锚点的纵坐标（屏幕逻辑 px）＝ 第一张卡（最新）顶边的位置，卡堆从这里<b>向上</b>长。
      * <p>【自动档 = 贴着 HUD 带上方】最新那张的顶边正好落在底部留白之上 —— 新卡出现的地点
      * 固定，且离拾取发生的快捷栏最近；常见画布上"同屏上限"不再被几何砍半。
+     * <p>【自定义档 = 拖到哪儿就是哪儿（2026-09-19 深夜改）】从前这里还夹了一道"至少放得下
+     * 一张"，编辑场底部一整条拖进去没反应 —— 用户原话"不能全屏幕拖，有限制"。夹取删了：
+     * 锚点是玩家的明确选择，压到 HUD 带上/拖出屏底都照算；放得下几张由几何容量自己少排
+     * （{@code StackLayout#fittingCount} + 账本容量门），多的去排队。
      */
     public float anchorTop(float guiHeight, float cardHeight, int bottomMargin) {
-        float bottom = Math.max(0f, guiHeight - bottomMargin - cardHeight);
-        return anchorY < 0f ? bottom : Math.min(anchorY * guiHeight, bottom);
+        return anchorY < 0f ? guiHeight - bottomMargin - cardHeight : anchorY * guiHeight;
     }
 }

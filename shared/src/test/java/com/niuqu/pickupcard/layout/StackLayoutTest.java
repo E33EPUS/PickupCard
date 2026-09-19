@@ -153,18 +153,20 @@ class StackLayoutTest {
     }
 
     @Test
-    @DisplayName("锚点被拖得太低：第一张卡自动抬到 HUD 带上方（至少放得下一张）")
-    void anchorDraggedTooLowGetsClampedAboveTheHudBand() {
+    @DisplayName("自定义锚拖得很低：排布照原样落在锚线上（不再自动抬），容量自己少排")
+    void anchorDraggedLowStaysWhereDragged() {
         LayoutSettings low = anchored(0.7f, 0.98f);
         float cardH = 20f;
-        float clampedTop = low.anchorTop(GUI_H, cardH, MARGIN_Y);
-        assertEquals(GUI_H - MARGIN_Y - cardH, clampedTop, EPS, "锚点夹到 HUD 带上方正好一张卡");
+        float dragged = low.anchorTop(GUI_H, cardH, MARGIN_Y);
+        assertEquals(GUI_H * 0.98f, dragged, EPS, "锚线就是玩家拖到的那条线，不夹不抬");
 
         var slots = StackLayout.stack(List.of(new StackLayout.Size(100, cardH)), GUI_W, GUI_H,
                 low, MARGIN, MARGIN_Y, 4f);
-        assertEquals(clampedTop, slots.get(0).y(), EPS, "排布与夹取必须用同一个锚点");
-        // 容量与排布同源这件事由 onlyWhatFitsStaysOnScreen 整段钉住，这里守"至少放得下一张"
-        assertTrue(StackLayout.fittingCount(clampedTop, cardH, 4f) >= 1);
+        assertEquals(dragged, slots.get(0).y(), EPS, "排布必须用同一条锚线");
+        // 放几张由容量说话：锚线拖得越<b>高</b>，上面越窄，容量越小（多的去排队）——
+        // 拖低反而容量更大，这正是"全屏随便拖"后玩家自己拿捏的取舍
+        assertTrue(StackLayout.fittingCount(dragged, cardH, 4f)
+                > StackLayout.fittingCount(GUI_H - MARGIN_Y - cardH, cardH, 4f));
     }
 
     @Test
