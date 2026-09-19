@@ -38,7 +38,7 @@
 `NvgScroll#scrollTo/reflow`）、换页清零。
 
 **验收纪律（本批起）**：改完必须 harness 真机截图给用户看图验收（前三批全是数值扫描，
-审美判断缺席正是 ⑤ 的由来）。本批截图：`D:\Claude_ds\_pc_shots7-*.png`（配置五页）+
+审美判断缺席正是 ⑤ 的由来）。本批截图：`D:/Claude_ds/_pc_shots/f7-*.png`（配置五页）+
 `f4-pickupcard-hud.png`（HUD 五张 100%）。**0.2.2 = 批三+批四**，等用户看图验收后发版。
 
 ## 一句话现状
