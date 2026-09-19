@@ -3,6 +3,64 @@
 本文件记录版本变更。发版时在 `RELEASE_NOTES.md` 写版本段（中文在前、英文在段尾），
 商店文案取段尾的英文块。
 
+## 0.2.2
+
+这一版打包了 09-19 的两批反馈（第三批 9 条 + 第四批 5 条）。核心是把卡堆搬家这件事
+一次做对：**卡片现在贴着物品栏上缘那条固定底线出现、旧的向上顶**——常见分辨率
+（854×480 窗口的 427×240 画布）从此真能同时放满 5 张原尺寸的卡。
+
+### 位置与堆叠（第四批）
+
+- **底锚回归**：默认锚线 = HUD 带上方（让开动作栏提示语那一整条）。新卡永远出现在
+  这条线上、旧的被顶上去（340ms 平滑）。从前默认锚在准星下方，常见画布上锚点以下
+  只剩 33px，5 张卡要 116px —— 自动缩放被迫永远激活，放不下的卡还会被**硬切消失**。
+- **放不下改排队，不再丢卡**：几何上放不下的拾取退回队列排头（先回先上），位子一空
+  第一个回来；不会再有"捡了东西屏幕上却无声蒸发"。
+- **缩放与卡宽加了过渡**：自动缩放从前按张数一档一档跳（100%→75%→60%），退场播完
+  那一刻整摞卡瞬间放大一圈 —— 就是"动画结束时的图标回弹"。现在三样（位置、缩放、
+  卡宽）走同一条 340ms 曲线。
+- **切换"右缘对齐"不再瞬移**：自动锚线按对齐档各自解析（左缘档=竖条成线的老公式，
+  右缘档=贴右边距），从前右缘档错拿左缘的数，切一档卡就跳到屏幕中左。
+
+### 配置界面（第四批）
+
+- **固定行距 + 小节头**：行距不再随页内行数变（从前换页时行会各自漂）；页内按
+  「显示什么」「形状」「颜色」等分组。
+- **每页第一行「恢复本页默认」**：改动立即生效的后悔药。位置页不重置锚点
+  （那是编辑场「回到默认」的事）；过滤页=清空三张名单。
+- **颜色改色块**：点色块在色板里循环，第一档永远是「跟随主题」；手打 hex 仍可写
+  TOML。填错的值会明说"无效"，不再安静地画成主题色。
+- **预览按页分工**：非动画页画一张静止完整卡（点预览/换样例重播一次入场，贴面板底），
+  动画页保留三张真卡的自动舞台；「来一张」必出新卡（从前同款会被合并吞掉，像点了
+  没反应）。
+- 其余：滚动位置在删规则后不再跳回顶部；循环按钮的悬停说明写全档位顺序；长名字
+  在预览面板里按面板宽度截断（从前会戳出卡壳）。
+
+### 动画与术语（第三批）
+
+- **消失方式三选**：淡出（原地变透明）/ 火车退回（内容平移回竖条后）/ 拉幕收拢
+  （可见范围从右往左收），与入场方式自由组合，三种都叠加透明度下降。
+- **右缘对齐**回归：右缘齐、左缘随卡宽参差（HTML 草稿的「右边缘对齐」预设）。
+- **微光呼吸**：经验卡/白名单卡的微光按正弦往复（1.6s 周期，每张卡错开相位），
+  可在主题里关。
+- **图标末帧闪修复**：淡出最后一帧图标闪回全亮 —— 根因是堆叠数/耐久条的绘制排在
+  队列里、透明色复位之后才提交。现在复位前先冲一次队列。
+- 界面术语换成草稿短词版：火车 / 拉幕、竖条左缘锚定 / 右缘对齐、图标内边距、
+  底色（上/下）；完整解释只进悬停提示。
+
+### English
+
+Packed the 09-19 feedback (two batches) into one release. Cards now anchor to a fixed
+line right above the hotbar and stack upward: on the common 427x240 canvas all five
+cards finally fit at 100%. Overflow queues instead of vanishing; auto scale and card
+width glide through a 340ms transition (fixes the end-of-animation icon rebound);
+switching right-edge alignment no longer teleports the column. Config screen: fixed
+20px rhythm with section headers, a per-page "restore defaults" row, color swatches
+with "follow theme" as the first stop, scroll position kept across list edits, and a
+per-page preview (a static full card elsewhere, the live stage on the animation page).
+Exits get three modes (fade / train-back / wipe) freely combinable with entrances,
+rarity glow breathes, and the last-frame icon flash is fixed.
+
 ## 0.2.1
 
 首个**自绘**版本（0.2.0 只在开发中迭代过，没发布）。**不再需要 ApricityUI 前置** ——

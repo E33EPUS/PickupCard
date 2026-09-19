@@ -6,6 +6,33 @@
 - 段标题必须是 `## vX.Y.Z`（带 v），与 git tag 一致
 -->
 
+## v0.2.2
+
+**卡片搬家了：新卡现在贴着物品栏上缘出现，旧的向上顶。** 常见分辨率终于放得下
+同屏上限的张数 —— 854×480 窗口（最常见的 427×240 画布）实测 5 张全部原尺寸在屏，
+放不下的拾取改排队等位子，不再无声消失。"动画结束图标回弹"（退场播完整摞卡突然
+放大一圈）也根治了：缩放和卡宽现在有 340ms 的过渡。
+
+配置界面这一版大整了一次排版：行距恒定、页内分小节、每页有「恢复本页默认」、
+颜色改成色块点选（第一档是「跟随主题」）、预览回到"非动画页一张静止完整卡、
+动画页自动演"的分工。消失方式有了三档（淡出 / 火车退回 / 拉幕收拢），可以和
+入场方式自由组合；经验卡的微光会呼吸了；淡出最后一帧图标闪回的毛病修了。
+
+纯客户端，服务端不用装；不依赖 ApricityUI。从 0.2.1 直接覆盖即可，
+配置文件兼容（旧的贴边/竖条位置键会被忽略，锚点在配置界面里拖）。
+
+---
+
+Cards now stack upward from a fixed line just above the hotbar. On the common
+427x240 canvas all five cards fit at full size; pickups that do not fit queue up
+instead of vanishing, and the end-of-animation scale pop is gone (340ms transitions
+on scale and card width). The config screen got a layout pass: constant row rhythm,
+section headers, a per-page "restore defaults" button, color swatches with
+"follow theme" first, and a per-page preview (static card elsewhere, live stage on
+the animation page). Exits now have three modes freely combinable with entrances,
+the rarity glow breathes, and the last-frame icon flash is fixed. Client-side only,
+no hard dependencies; drop-in upgrade from 0.2.1.
+
 ## v0.2.1
 
 首个自绘版本：**不再需要 ApricityUI**，零必需依赖，纯客户端 —— 服务端不用装。
