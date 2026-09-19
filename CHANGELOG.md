@@ -3,33 +3,22 @@
 本文件记录版本变更。发版时在 `RELEASE_NOTES.md` 写版本段（中文在前、英文在段尾），
 商店文案取段尾的英文块。
 
-## 0.2.3
-
-0.2.2 发出去当晚用户真机验收打回的五处，全部照单修：
-
-- **换页动画删除**。配置界面切页不再淡入/上滑 —— 用户原话"不要动画了"。
-  界面留下的动画只剩悬停高亮与标签强调条两种。
-- **对齐修了三处**：标签文字从前比按钮/悬停带低 1 逻辑px（缩放 3 下肉眼可见，
-  悬停带因此"套不正"）；小节头的强调刺比自己的字低 4px；开关的"开/关"两字
-  顶在最左边（宽控件上像掉队），现在在轨道左侧的自由区里居中。
-- **预览的静止卡在面板里居中**，不再贴在又高又空的面板底角；非动画页也不再
-  重播入场动画 —— 点了立刻换成摆好的卡，动画只属于动画页。
-- **拖拽编辑场全屏幕随便拖**：删掉了"离右缘 26px / HUD 带上方"那圈自造限制
-  （从前屏幕底部一整条拖进去没反应），拖到哪儿就是哪儿；游戏侧也不再自动抬锚点。
-- **编辑场的示例与区域框跟着「水平对齐」档走**：右缘对齐时锚线在示例的右缘、
-  框的右缘（从前永远按左缘画，选右缘对齐看到的和游戏里差一张卡宽）。
-
-### English
-
-Five acceptance rejections on 0.2.2, all fixed: the page-switch animation is removed
-(instant tab change); row labels no longer sit 1px below the control text (hover band
-now lines up), section-header ticks align with their own text, toggle labels center
-beside the track; the static preview card is centered in its panel and never replays
-an entrance; the drag editor allows full-screen placement with no dead zones and no
-auto-raising; and the editor's sample stack plus region brackets follow the selected
-horizontal alignment.
-
 ## 0.2.2
+
+> **注意：这一段的 jar 被就地替换过一次（2026-09-19 深夜）。** 用户要求不改版本号，
+> 五处验收修复（见下）直接进了同名 jar：旧产物 `sha256 c9952758…`，现行产物以
+> `pickupcard-Forge-1.20.1-0.2.2.jar` 当时的 sha256 为准。判据：包里
+> `PickupCardConfigScreen` 反编译后**没有** `pageAnim` 字段 = 替换后的版本。
+
+这一版打包了 09-19 的两批反馈（第三批 9 条 + 第四批 5 条）+ 当晚验收的五处修复：
+
+- **换页动画删除**：配置界面切页不再淡入/上滑，瞬间换内容（用户拍板"不要动画了"）。
+- **行对齐三处**：标签文字与按钮/悬停带共用一条中心线（从前低 1px，悬停带"套不正"）；
+  小节头的强调刺与自己的字对齐；开关的"开/关"在轨道左侧居中。
+- **预览静止卡在面板里居中**（从前贴在空面板底角），且非动画页永不播入场动画。
+- **拖拽编辑场全屏幕随便拖**：删掉自造的限制圈（从前屏幕底部/右缘一整条拖不动），
+  游戏侧也不再自动抬锚点——拖到哪儿就是哪儿。
+- **编辑场的示例与区域框跟着「水平对齐」档走**（从前右缘对齐也按左缘画，差一整卡宽）。
 
 这一版打包了 09-19 的两批反馈（第三批 9 条 + 第四批 5 条）。核心是把卡堆搬家这件事
 一次做对：**卡片现在贴着物品栏上缘那条固定底线出现、旧的向上顶**——常见分辨率

@@ -6,19 +6,6 @@
 - 段标题必须是 `## vX.Y.Z`（带 v），与 git tag 一致
 -->
 
-## v0.2.3
-
-0.2.2 验收打回五连修：**切页不再有动画**；配置行文字与悬停带、小节头刺全部对齐；
-预览静止卡在面板里居中、点它不再播动画；**位置编辑场全屏幕随便拖**（拖到哪儿就是
-哪儿，不再有拖不动的边角），示例堆和区域框跟着「水平对齐」走。
-
----
-
-Five quick fixes from 0.2.2 acceptance: no more page-switch animation; config rows,
-hover bands and header ticks all line up; the static preview card is centered and
-plays no animation; the anchor editor drags anywhere on screen with alignment-aware
-samples and region brackets.
-
 ## v0.2.2
 
 **卡片搬家了：新卡现在贴着物品栏上缘出现，旧的向上顶。** 常见分辨率终于放得下
