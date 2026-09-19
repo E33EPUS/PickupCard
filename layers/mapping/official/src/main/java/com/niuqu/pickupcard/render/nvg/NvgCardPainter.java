@@ -377,7 +377,20 @@ public final class NvgCardPainter {
             // renderItem 内部自己那次 flush 会把它们一起冲出去 —— 那样它们就会跟着这张卡
             // 一起淡（受伤的是别人的字）。先把队列清空，这次设色就只落在这一张卡的图标上。
             gui.flush();
-            RenderSystem.setShaderColor(1f, 1f, 1f, alpha);
+            // 【为什么 RGB 也要压，而不是只压 alpha】实体渲染层（entitySolid/entityCutout ——
+            // 方块物品和大量 mod 物品落在这两档）是 NO_BLEND：帧缓冲不拿 fragment 的 alpha
+            // 去混合，`setShaderColor(1,1,1,alpha)` 等于没压 —— 图标全程满亮，摘卡那一刻
+            // 才凭空消失（用户报的"最后一帧图标回弹"；亮色方块物品才显形，深色贴图看不出来，
+            // 2026-09-19 真机逐帧测量钉死：外壳 74.6→65.2 在淡，图标 70.2→76.9 反而在升）。
+            // 把 RGB 一起向卡面底色靠拢，不依赖混合，两种渲染层读起来都是"跟着卡一起淡"。
+            // 平贴图物品走 entityTranslucentCull（有混合），本来就对，这个改法对它同样成立。
+            float k = 1f - com.niuqu.pickupcard.style.Easing.clamp01(alpha);   // 0=原样 → 1=融进卡面
+            int fill = avgCardFill(style);
+            RenderSystem.setShaderColor(
+                    1f + (((fill >> 16) & 0xFF) / 255f - 1f) * k,
+                    1f + (((fill >> 8) & 0xFF) / 255f - 1f) * k,
+                    1f + ((fill & 0xFF) / 255f - 1f) * k,
+                    1f);
         }
         if (iconVisible) {
             float scale = style.iconSize() / CardMetrics.ICON_PX;
@@ -603,6 +616,15 @@ public final class NvgCardPainter {
             return argb;
         }
         return withAlpha(argb, Math.round(((argb >>> 24) & 0xFF) * Easing.clamp01(alpha)));
+    }
+
+    /** 卡面渐变（上/下）的平均色 —— 图标淡出时向它靠拢，浅色/深色主题都成立。 */
+    private static int avgCardFill(StyleModel style) {
+        int top = style.fillTop(), bottom = style.fillBottom();
+        int r = ((top >> 16 & 0xFF) + (bottom >> 16 & 0xFF)) / 2;
+        int g = ((top >> 8 & 0xFF) + (bottom >> 8 & 0xFF)) / 2;
+        int b = ((top & 0xFF) + (bottom & 0xFF)) / 2;
+        return 0xFF000000 | (r << 16) | (g << 8) | b;
     }
 
     /**

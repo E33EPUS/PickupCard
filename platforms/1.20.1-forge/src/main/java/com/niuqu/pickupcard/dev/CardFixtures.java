@@ -57,6 +57,11 @@ public final class CardFixtures {
         // 【必须排掉空气】注册表里第一个 COMMON 就是 minecraft:air，照单全收会得到
         // 一张空栈样例——它不报错、只是安静地展示成空名字，是最难发现的那种坏样例。
         Set<Item> used = new HashSet<>();
+        // 【为什么命令方块必须第一】它是"实体渲染层物品"（entitySolid/entityCutout，
+        // NO_BLEND）的代表 —— 这一类图标的淡出靠 RGB 向卡面靠拢而不是 alpha 混合
+        // （见 NvgCardPainter 的淡出注释）。底锚下最老的卡在堆顶、也最先到点退场，
+        // 退场连拍拍到的就是它：这类物品的淡出一回潮，连拍立刻能看见。
+        list.add(new Fixture("command-block", new ItemStack(Items.COMMAND_BLOCK), 1));
         for (Rarity rarity : Rarity.values()) {
             Item item = itemOf(rarity, used);
             used.add(item);
